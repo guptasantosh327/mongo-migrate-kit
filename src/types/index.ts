@@ -1,0 +1,150 @@
+import type { ClientSession, Db, MongoClient } from 'mongodb';
+import type { Mongoose } from 'mongoose';
+
+// ─── Migration File Contract ───────────────────────────────────────────────────
+
+/** Context object passed into every migration's up() and down() function */
+export interface MigrationContext {
+  /** Native MongoDB Db instance */
+  db: Db;
+  /** Native MongoClient instance — use for sessions/transactions */
+  client: MongoClient;
+  /** Mongoose instance — only present if passed in config */
+  mongoose?: Mongoose;
+  /**
+   * Active session, present only when this migration runs inside a transaction.
+   * Pass it to your operations (e.g. `{ session }`) so they join the transaction.
+   */
+  session?: ClientSession;
+}
+
+/** Shape of an imported migration file module */
+export interface MigrationModule {
+  up: (ctx: MigrationContext) => Promise<void>;
+  down: (ctx: MigrationContext) => Promise<void>;
+  /** If true, wraps this migration in a MongoDB session + transaction */
+  useTransaction?: boolean;
+  /** Optional description shown in status table */
+  description?: string;
+}
+
+// ─── Changelog ────────────────────────────────────────────────────────────────
+
+export type MigrationStatus = 'applied' | 'reverted';
+
+/** A single record in the _mmk_migrations changelog collection */
+export interface MigrationRecord {
+  /** Migration filename e.g. 20240526143021-add-users-index.ts */
+  name: string;
+  /** Sequential batch number. All migrations run together share the same batch */
+  batch: number;
+  status: MigrationStatus;
+  appliedAt: Date;
+  revertedAt?: Date;
+  /** Execution time in milliseconds */
+  duration: number;
+  /** SHA-256 hash of the file at time of execution */
+  checksum: string;
+  /** value of process.env.NODE_ENV at time of execution */
+  environment: string;
+  /** os.userInfo().username at time of execution */
+  executedBy: string;
+  /** Optional description from migration file */
+  description?: string;
+}
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+export interface MigrationHooks {
+  /** Runs once before any migration in the batch starts */
+  beforeAll?: (ctx: MigrationContext) => Promise<void>;
+  /** Runs once after all migrations in the batch complete */
+  afterAll?: (ctx: MigrationContext) => Promise<void>;
+  /** Runs before each individual migration */
+  beforeEach?: (name: string, ctx: MigrationContext) => Promise<void>;
+  /** Runs after each individual migration completes successfully */
+  afterEach?: (name: string, duration: number, ctx: MigrationContext) => Promise<void>;
+  /** Runs when a migration throws — receives the error before it propagates */
+  onError?: (name: string, error: Error, ctx: MigrationContext) => Promise<void>;
+}
+
+export interface MmkConfig {
+  /** MongoDB connection URI */
+  uri: string;
+  /** Database name */
+  dbName: string;
+  /** Path to migrations directory. Default: './migrations' */
+  migrationsDir: string;
+  /** Collection name for migration records. Default: '_mmk_migrations' */
+  migrationsCollection: string;
+  /** Collection name for distributed lock. Default: '_mmk_locks' */
+  lockCollection: string;
+  /** How long (seconds) a lock is considered stale. Default: 60 */
+  lockTTLSeconds: number;
+  /**
+   * If true, abort when a migration file's checksum differs from what was applied.
+   * If false, warn but continue. Default: false
+   */
+  strict: boolean;
+  /** Wrap all migrations in transactions globally. Can be overridden per file. Default: false */
+  useTransaction: boolean;
+  /** File extensions to scan. Default: ['.ts', '.js'] */
+  fileExtensions: string[];
+  /** Use sequential numbering (0001-) instead of timestamps. Default: false */
+  sequential: boolean;
+  /** Path to a custom migration template file */
+  templatePath?: string;
+  /** Mongoose instance — required only if your migrations use Mongoose models */
+  mongoose?: Mongoose;
+  hooks?: MigrationHooks;
+  /** Custom logger — set to null to silence all output (useful in tests) */
+  logger?: MmkLogger | null;
+}
+
+// ─── Logger ───────────────────────────────────────────────────────────────────
+
+export interface MmkLogger {
+  info: (msg: string) => void;
+  success: (msg: string) => void;
+  warn: (msg: string) => void;
+  error: (msg: string) => void;
+  dim: (msg: string) => void;
+}
+
+// ─── Results ──────────────────────────────────────────────────────────────────
+
+export type RunResultStatus = 'applied' | 'reverted' | 'skipped' | 'error';
+
+export interface RunResult {
+  file: string;
+  status: RunResultStatus;
+  duration?: number;
+  batch?: number;
+  reason?: string;
+  error?: string;
+}
+
+export interface StatusRow {
+  file: string;
+  status: 'applied' | 'pending';
+  batch: number | null;
+  appliedAt: Date | null;
+  duration: number | null;
+  /** null = never applied, true = match, false = mismatch */
+  checksumOk: boolean | null;
+  description?: string;
+}
+
+// ─── Error Codes ──────────────────────────────────────────────────────────────
+
+export type MmkErrorCode =
+  | 'LOCK_ALREADY_HELD'
+  | 'LOCK_RELEASE_FAILED'
+  | 'CHECKSUM_MISMATCH'
+  | 'MIGRATION_FILE_NOT_FOUND'
+  | 'MIGRATION_INVALID_EXPORT'
+  | 'MIGRATION_EXECUTION_FAILED'
+  | 'CONFIG_INVALID'
+  | 'CONNECTION_FAILED'
+  | 'ALREADY_APPLIED'
+  | 'NOT_APPLIED';

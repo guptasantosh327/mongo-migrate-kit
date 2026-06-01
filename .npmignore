@@ -1,0 +1,15 @@
+src
+bin
+tests
+coverage
+.github
+.vscode
+biome.json
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+CLAUDE.md
+.calude
+.env
+.env.*
+*.tsbuildinfo
