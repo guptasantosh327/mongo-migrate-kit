@@ -1,3 +1,4 @@
+import { createInterface } from 'node:readline/promises';
 import { MigratorKit } from '../core/migrator.js';
 import { MmkError } from '../errors/index.js';
 import type { MmkConfig, StatusRow } from '../types/index.js';
@@ -45,6 +46,20 @@ export async function withMigrator(
     process.exitCode = 1;
   } finally {
     await migrator.disconnect();
+  }
+}
+
+/**
+ * Ask a yes/no question on the terminal. Resolves `true` only when the user
+ * answers `y` or `yes` (case-insensitive); any other input is treated as no.
+ */
+export async function confirm(question: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = await rl.question(question);
+    return /^y(es)?$/i.test(answer.trim());
+  } finally {
+    rl.close();
   }
 }
 

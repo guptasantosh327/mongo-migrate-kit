@@ -34,6 +34,12 @@ import { runMigration } from './runner.js';
 export interface UpOptions {
   /** Skip lock acquisition (dev only) */
   noLock?: boolean;
+  /**
+   * Re-run a migration even if it is already applied. Only meaningful together
+   * with a specific filename — a standalone `up` only ever targets pending
+   * files, so `force` has no applied target to re-run.
+   */
+  force?: boolean;
 }
 
 /** Options for {@link MigratorKit.down} */
@@ -177,11 +183,12 @@ export class MigratorKit {
     return runWithLock(
       lock,
       { logger: this.logger, ...(options.noLock ? { noLock: true } : {}) },
-      () => this.runUp(filename),
+      () => this.runUp(filename, options),
     );
   }
 
-  private async runUp(filename?: string): Promise<RunResult[]> {
+  private async runUp(filename?: string, options: UpOptions = {}): Promise<RunResult[]> {
+    const force = options.force ?? false;
     const config = this.config as MmkConfig;
     const db = this.requireDb();
     const changelog = this.requireChangelog();
@@ -216,21 +223,25 @@ export class MigratorKit {
       const checksum = computeChecksum(filepath);
 
       if (appliedNames.has(name)) {
-        const existing = await changelog.getByName(db, name);
-        const mismatch = existing !== null && existing.checksum !== checksum;
-        if (mismatch && config.strict) {
-          throw new ChecksumMismatchError(`Checksum mismatch for ${name}`, {
-            name,
-            expected: existing?.checksum,
-            actual: checksum,
-          });
+        if (!force) {
+          const existing = await changelog.getByName(db, name);
+          const mismatch = existing !== null && existing.checksum !== checksum;
+          if (mismatch && config.strict) {
+            throw new ChecksumMismatchError(`Checksum mismatch for ${name}`, {
+              name,
+              expected: existing?.checksum,
+              actual: checksum,
+            });
+          }
+          if (mismatch) {
+            logger.warn(`⚠ Warning  Checksum mismatch: ${name}`);
+          }
+          logger.dim(`⏭ Skipped  ${name}`);
+          results.push({ file: name, status: 'skipped', reason: 'Already applied' });
+          continue;
         }
-        if (mismatch) {
-          logger.warn(`⚠ Warning  Checksum mismatch: ${name}`);
-        }
-        logger.dim(`⏭ Skipped  ${name}`);
-        results.push({ file: name, status: 'skipped', reason: 'Already applied' });
-        continue;
+        // force: fall through and re-run, ignoring applied state and checksum
+        logger.warn(`⚠ Forcing   re-run of already-applied ${name}`);
       }
 
       const migration = await loadMigrationFile(filepath);
