@@ -70,6 +70,31 @@ describe('MigratorKit.up (integration)', () => {
     expect(await mongo.db.collection('things').countDocuments()).toBe(1);
   });
 
+  it('should re-run an already-applied migration when force is true', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await migrator.up();
+    expect(await mongo.db.collection('things').countDocuments()).toBe(1);
+
+    const results = await migrator.up('0001-a.ts', { force: true });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.status).toBe('applied');
+    // up() inserts again, so the marker doc count grows — proof it re-ran
+    expect(await mongo.db.collection('things').countDocuments()).toBe(2);
+  });
+
+  it('should re-run with force (not skip) even when the file checksum changed', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await migrator.up();
+    project.tamper('0001-a.ts');
+
+    // strict=false would normally skip an applied file with a changed checksum;
+    // force overrides that and re-applies it instead.
+    const results = await migrator.up('0001-a.ts', { force: true });
+    expect(results[0]?.status).toBe('applied');
+  });
+
   it('should warn and skip on checksum mismatch when strict=false', async () => {
     setup();
     project.write('0001-a.ts', insertMigration('things', 'a'));

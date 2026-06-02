@@ -17,7 +17,12 @@ interface CliResult {
 }
 
 /** Run the CLI under tsx as a child process and capture its result */
-function runCli(args: string[], env: Record<string, string> = {}, cwd = repoRoot): Promise<CliResult> {
+function runCli(
+  args: string[],
+  env: Record<string, string> = {},
+  cwd = repoRoot,
+  input?: string,
+): Promise<CliResult> {
   return new Promise((resolve, reject) => {
     const child = spawn('npx', ['tsx', binPath, ...args], {
       cwd,
@@ -33,6 +38,10 @@ function runCli(args: string[], env: Record<string, string> = {}, cwd = repoRoot
     });
     child.on('error', reject);
     child.on('close', (code) => resolve({ code: code ?? 0, stdout, stderr }));
+    if (input !== undefined) {
+      child.stdin.write(input);
+    }
+    child.stdin.end();
   });
 }
 
@@ -74,6 +83,36 @@ describe('mmk CLI (integration)', () => {
     project.write('0001-bad.ts', failingMigration());
     const result = await runCli(baseArgs(['up']));
     expect(result.code).toBe(1);
+  });
+
+  it('should re-run an applied migration with up <file> --force after a yes confirmation', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await runCli(baseArgs(['up']));
+    expect(await mongo.db.collection('things').countDocuments()).toBe(1);
+
+    const result = await runCli(baseArgs(['up', '0001-a.ts', '--force']), {}, repoRoot, 'y\n');
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('Applied');
+    expect(await mongo.db.collection('things').countDocuments()).toBe(2);
+  });
+
+  it('should abort up <file> --force when the confirmation is declined', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await runCli(baseArgs(['up']));
+
+    const result = await runCli(baseArgs(['up', '0001-a.ts', '--force']), {}, repoRoot, 'n\n');
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('Aborted');
+    expect(await mongo.db.collection('things').countDocuments()).toBe(1);
+  });
+
+  it('should reject a standalone up --force with no file and exit 1', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    const result = await runCli(baseArgs(['up', '--force']), {}, repoRoot, '');
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('--force requires a specific migration file');
+    // nothing applied
+    expect(await mongo.db.collection('_mmk_migrations').countDocuments()).toBe(0);
   });
 
   it('should render a status table', async () => {
