@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -17,10 +17,10 @@ interface CliResult {
 }
 
 /** Run the CLI under tsx as a child process and capture its result */
-function runCli(args: string[], env: Record<string, string> = {}): Promise<CliResult> {
+function runCli(args: string[], env: Record<string, string> = {}, cwd = repoRoot): Promise<CliResult> {
   return new Promise((resolve, reject) => {
     const child = spawn('npx', ['tsx', binPath, ...args], {
-      cwd: repoRoot,
+      cwd,
       env: { ...process.env, ...env },
     });
     let stdout = '';
@@ -94,11 +94,76 @@ describe('mmk CLI (integration)', () => {
     expect(await mongo.db.collection('_mmk_migrations').countDocuments()).toBe(0);
   });
 
-  it('should generate a correctly named file with create', async () => {
-    const result = await runCli(baseArgs(['create', 'add users index']));
+  it('should create a mmk.config.js by default with init', async () => {
+    const result = await runCli(['init', '--db', 'shop'], {}, project.dir);
     expect(result.code).toBe(0);
-    const created = readdirSync(project.dir).filter((f) => f.endsWith('add-users-index.ts'));
+    const configPath = path.join(project.dir, 'mmk.config.js');
+    expect(existsSync(configPath)).toBe(true);
+    expect(existsSync(path.join(project.dir, 'mmk.config.ts'))).toBe(false);
+    const contents = readFileSync(configPath, 'utf8');
+    expect(contents).toContain("dbName: 'shop'");
+    expect(contents).toContain("createExtension: 'js'");
+  });
+
+  it('should create a mmk.config.ts with createExtension ts when init --ts is passed', async () => {
+    const result = await runCli(['init', '--ts'], {}, project.dir);
+    expect(result.code).toBe(0);
+    const tsPath = path.join(project.dir, 'mmk.config.ts');
+    expect(existsSync(tsPath)).toBe(true);
+    expect(existsSync(path.join(project.dir, 'mmk.config.js'))).toBe(false);
+    expect(readFileSync(tsPath, 'utf8')).toContain("createExtension: 'ts'");
+  });
+
+  it('should exit 1 when init finds an existing config without --force', async () => {
+    await runCli(['init'], {}, project.dir);
+    const result = await runCli(['init'], {}, project.dir);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('CONFIG_FILE_EXISTS');
+  });
+
+  it('should generate a correctly named file and default to .js with no config or flag', async () => {
+    // Run from a clean dir (no config file) so the built-in default applies.
+    const result = await runCli(['create', 'add users index', '--dir', project.dir], {}, project.dir);
+    expect(result.code).toBe(0);
+    const created = readdirSync(project.dir).filter((f) => f.endsWith('add-users-index.js'));
     expect(created).toHaveLength(1);
     expect(existsSync(path.join(project.dir, created[0] as string))).toBe(true);
+  });
+
+  it('should let --ts override the default when no config is present', async () => {
+    const result = await runCli(
+      ['create', 'forced ts', '--ts', '--dir', project.dir],
+      {},
+      project.dir,
+    );
+    expect(result.code).toBe(0);
+    expect(readdirSync(project.dir).filter((f) => f.endsWith('forced-ts.ts'))).toHaveLength(1);
+  });
+
+  it('should default create to the file type set in the config (createExtension)', async () => {
+    // createExtension 'ts' differs from the built-in 'js' default, so a .ts file
+    // proves the value came from the config. --dir keeps the output location
+    // deterministic instead of relying on the config's migrationsDir.
+    writeFileSync(
+      path.join(project.dir, 'mmk.config.json'),
+      JSON.stringify({ createExtension: 'ts' }),
+    );
+    const result = await runCli(['create', 'from config', '--dir', project.dir], {}, project.dir);
+    expect(result.code).toBe(0);
+    expect(readdirSync(project.dir).filter((f) => f.endsWith('from-config.ts'))).toHaveLength(1);
+  });
+
+  it('should let --ts override a js createExtension from config', async () => {
+    writeFileSync(
+      path.join(project.dir, 'mmk.config.json'),
+      JSON.stringify({ createExtension: 'js' }),
+    );
+    const result = await runCli(
+      ['create', 'forced ts', '--ts', '--dir', project.dir],
+      {},
+      project.dir,
+    );
+    expect(result.code).toBe(0);
+    expect(readdirSync(project.dir).filter((f) => f.endsWith('forced-ts.ts'))).toHaveLength(1);
   });
 });

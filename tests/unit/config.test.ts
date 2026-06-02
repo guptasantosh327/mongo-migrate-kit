@@ -15,6 +15,7 @@ const MMK_ENV_KEYS = [
   'MMK_STRICT',
   'MMK_USE_TRANSACTION',
   'MMK_SEQUENTIAL',
+  'MMK_CREATE_EXTENSION',
 ];
 
 let tmp: string;
@@ -52,7 +53,26 @@ describe('loadConfig', () => {
     expect(config.strict).toBe(false);
     expect(config.useTransaction).toBe(false);
     expect(config.fileExtensions).toEqual(['.ts', '.js']);
+    expect(config.createExtension).toBe('js');
     expect(config.sequential).toBe(false);
+  });
+
+  it('should let MMK_CREATE_EXTENSION override the default', async () => {
+    process.env.MMK_URI = 'mongodb://env-host:27017';
+    process.env.MMK_DB = 'env-db';
+    process.env.MMK_CREATE_EXTENSION = 'ts';
+    const config = await loadConfig({ cwd: tmp });
+    expect(config.createExtension).toBe('ts');
+  });
+
+  it('should throw ConfigInvalidError on an invalid createExtension', async () => {
+    await expect(
+      loadConfig({
+        cwd: tmp,
+        // biome-ignore lint/suspicious/noExplicitAny: testing an invalid value
+        flags: { uri: 'mongodb://x:27017', dbName: 'x', createExtension: 'py' as any },
+      }),
+    ).rejects.toBeInstanceOf(ConfigInvalidError);
   });
 
   it('should work entirely from env vars with no config file', async () => {
