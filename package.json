@@ -1,10 +1,18 @@
 {
   "name": "mongo-migrate-kit",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Production-grade MongoDB migration toolkit for Node.js",
   "license": "MIT",
   "author": "guptasantosh327@gmail.com",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/guptasantosh327/mongo-migrate-kit.git"
+  },
+  "homepage": "https://github.com/guptasantosh327/mongo-migrate-kit#readme",
+  "bugs": {
+    "url": "https://github.com/guptasantosh327/mongo-migrate-kit/issues"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
@@ -39,6 +47,7 @@
     "coverage": "vitest run --coverage",
     "lint": "biome check src/",
     "format": "biome format --write src/",
+    "prepublishOnly": "npm run build",
     "release": "bumpp && npm publish"
   },
   "keywords": [

@@ -19,7 +19,7 @@ export function buildProgram(): Command {
     .option('--db <name>', 'Database name (overrides MMK_DB)')
     .option('--dir <path>', 'Migrations directory (overrides MMK_MIGRATIONS_DIR)')
     .option('--config <path>', 'Path to a config file (overrides auto-discovery)')
-    .version('0.1.0');
+    .version('1.0.0');
 
   registerInit(program);
   registerUp(program);
