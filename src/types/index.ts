@@ -68,6 +68,9 @@ export interface MigrationHooks {
   onError?: (name: string, error: Error, ctx: MigrationContext) => Promise<void>;
 }
 
+/** File type a created migration is written as */
+export type MigrationExtension = 'ts' | 'js';
+
 export interface MmkConfig {
   /** MongoDB connection URI */
   uri: string;
@@ -90,6 +93,11 @@ export interface MmkConfig {
   useTransaction: boolean;
   /** File extensions to scan. Default: ['.ts', '.js'] */
   fileExtensions: string[];
+  /**
+   * File type `mmk create` generates by default. Overridden per run by the
+   * `--js` / `--ts` flags. Default: 'js'
+   */
+  createExtension: MigrationExtension;
   /** Use sequential numbering (0001-) instead of timestamps. Default: false */
   sequential: boolean;
   /** Path to a custom migration template file */
@@ -145,6 +153,7 @@ export type MmkErrorCode =
   | 'MIGRATION_INVALID_EXPORT'
   | 'MIGRATION_EXECUTION_FAILED'
   | 'CONFIG_INVALID'
+  | 'CONFIG_FILE_EXISTS'
   | 'CONNECTION_FAILED'
   | 'ALREADY_APPLIED'
   | 'NOT_APPLIED';

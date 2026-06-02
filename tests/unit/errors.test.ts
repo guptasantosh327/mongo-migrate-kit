@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AlreadyAppliedError,
   ChecksumMismatchError,
+  ConfigFileExistsError,
   ConfigInvalidError,
   ConnectionFailedError,
   LockAlreadyHeldError,
@@ -64,6 +65,7 @@ describe('domain error classes', () => {
       name: 'MigrationExecutionFailedError',
     },
     { Ctor: ConfigInvalidError, code: 'CONFIG_INVALID', name: 'ConfigInvalidError' },
+    { Ctor: ConfigFileExistsError, code: 'CONFIG_FILE_EXISTS', name: 'ConfigFileExistsError' },
     { Ctor: ConnectionFailedError, code: 'CONNECTION_FAILED', name: 'ConnectionFailedError' },
     { Ctor: AlreadyAppliedError, code: 'ALREADY_APPLIED', name: 'AlreadyAppliedError' },
     { Ctor: NotAppliedError, code: 'NOT_APPLIED', name: 'NotAppliedError' },
