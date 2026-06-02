@@ -16,6 +16,6 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true
   },
-  "include": ["src", "bin"],
+  "include": ["src", "bin", "mmk.config.js"],
   "exclude": ["node_modules", "dist", "tests"]
 }

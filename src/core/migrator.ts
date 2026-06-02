@@ -18,7 +18,12 @@ import type {
 import { computeChecksum } from '../utils/checksum.js';
 import { loadMigrationFile } from '../utils/loader.js';
 import { resolveLogger } from '../utils/logger.js';
-import { scaffoldMigration } from '../utils/template.js';
+import {
+  type ConfigFormat,
+  type ConfigValues,
+  createConfigFile,
+  createMigrationFile,
+} from '../utils/template.js';
 import { Changelog } from './changelog.js';
 import { loadConfig } from './config.js';
 import { buildContext } from './context.js';
@@ -45,6 +50,14 @@ export interface CreateOptions {
   template?: string;
   /** Generate a `.js` file instead of `.ts` */
   js?: boolean;
+}
+
+/** Options for {@link MigratorKit.init} */
+export interface InitOptions {
+  /** Config file format. Default: 'js' */
+  format?: ConfigFormat;
+  /** Overwrite an existing config file */
+  force?: boolean;
 }
 
 /**
@@ -452,7 +465,7 @@ export class MigratorKit {
     };
   }
 
-  /** Scaffold a new migration file and return its absolute path */
+  /** Create a new migration file and return its absolute path */
   async create(name: string, options: CreateOptions = {}): Promise<string> {
     const config = await this.ensureConfig(false);
     const dir = this.migrationsPath();
@@ -460,12 +473,30 @@ export class MigratorKit {
       mkdirSync(dir, { recursive: true });
     }
     const templatePath = options.template ?? config.templatePath;
-    const filepath = scaffoldMigration({
+    const js = options.js ?? config.createExtension === 'js';
+    const filepath = createMigrationFile({
       dir,
       name,
       sequential: config.sequential,
-      js: options.js ?? false,
+      js,
       ...(templatePath ? { templatePath } : {}),
+    });
+    this.logger.success(`✔ Created  ${path.basename(filepath)}`);
+    return filepath;
+  }
+
+  /** Create an mmk config file in the working directory and return its path */
+  async init(options: InitOptions = {}): Promise<string> {
+    const values: ConfigValues = {};
+    if (this.partialConfig.uri) values.uri = this.partialConfig.uri;
+    if (this.partialConfig.dbName) values.dbName = this.partialConfig.dbName;
+    if (this.partialConfig.migrationsDir) values.migrationsDir = this.partialConfig.migrationsDir;
+
+    const filepath = createConfigFile({
+      dir: process.cwd(),
+      format: options.format ?? 'js',
+      force: options.force ?? false,
+      values,
     });
     this.logger.success(`✔ Created  ${path.basename(filepath)}`);
     return filepath;
