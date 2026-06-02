@@ -23,6 +23,7 @@ npm install mongoose           # optional
 | No `redo` | `mmk redo` / `mmk redo <file>` |
 | No dry-run | `mmk dry-run up` previews without touching the DB |
 | Config file mandatory | Works entirely from env vars — zero files required |
+| No config generator | `mmk init` creates a ready-to-edit `mmk.config.{js,ts,json}` |
 | No concurrency lock | MongoDB-native lock in `_mmk_locks` |
 | No tamper detection | SHA-256 checksum verified, surfaced in `status` |
 | No lifecycle hooks | `beforeAll` / `afterAll` / `beforeEach` / `afterEach` / `onError` |
@@ -32,12 +33,11 @@ npm install mongoose           # optional
 ## Quick start
 
 ```bash
-# 1. Configure (env vars are enough — no config file needed)
-export MMK_URI="mongodb://localhost:27017"
-export MMK_DB="my_app"
-export MMK_MIGRATIONS_DIR="./migrations"
+# 1. Generate a config file in the current directory (pre-filled from the flags)
+mmk init --uri mongodb://localhost:27017 --db my_app
+#    → writes mmk.config.js  (use --ts or --json for other formats)
 
-# 2. Scaffold a migration
+# 2. Create a migration
 mmk create "add users email index"
 
 # 3. Edit the generated file, then run it
@@ -47,12 +47,20 @@ mmk up
 mmk status
 ```
 
+Prefer zero files? Skip `mmk init` and configure entirely from env vars instead:
+
+```bash
+export MMK_URI="mongodb://localhost:27017"
+export MMK_DB="my_app"
+export MMK_MIGRATIONS_DIR="./migrations"
+```
+
 ## Writing a migration
 
 A migration exports async `up` and `down` functions. Three formats are supported:
 
 ```ts
-// TypeScript (recommended)
+// TypeScript — opt in with `mmk create --ts`; full type-safety, runs via tsx
 import type { MigrationContext } from 'mongo-migrate-kit';
 
 export const description = 'Add unique index on users.email';
@@ -68,7 +76,7 @@ export async function down({ db }: MigrationContext): Promise<void> {
 ```
 
 ```js
-// JavaScript ESM
+// JavaScript ESM — the default (zero build/runtime setup)
 export async function up({ db }) { /* ... */ }
 export async function down({ db }) { /* ... */ }
 ```
@@ -94,6 +102,11 @@ export async function up({ db, session }: MigrationContext): Promise<void> {
 ## CLI
 
 ```bash
+mmk init                            # Create mmk.config.js in the cwd (default)
+mmk init --ts                       # Create mmk.config.ts instead
+mmk init --json                     # Create mmk.config.json instead
+mmk init --force                    # Overwrite an existing config file
+
 mmk up [file]                       # Run all pending, or one file
 mmk up [file] --no-lock             # Skip the concurrency lock (dev only)
 mmk up [file] --strict              # Abort on checksum mismatch
@@ -110,8 +123,9 @@ mmk list --applied                  # Only applied
 mmk dry-run up [file]               # Preview an up
 mmk dry-run down [file]             # Preview a down
 
-mmk create <name>                   # Scaffold a new .ts migration
-mmk create <name> --js              # Scaffold a .js migration
+mmk create <name>                   # Create a migration (flag → config → default .js)
+mmk create <name> --js              # Force a .js migration
+mmk create <name> --ts              # Force a .ts migration
 mmk create <name> --template <path> # Use a custom template
 ```
 
@@ -122,7 +136,14 @@ Global flags (any command): `--uri <uri>`, `--db <name>`, `--dir <path>`, `--con
 Resolution order (highest wins): **CLI flags → environment variables → config file → defaults**.
 
 A config file is optional. If present, it is auto-discovered in the cwd in this order:
-`mmk.config.ts`, `mmk.config.js`, `mmk.config.json`.
+`mmk.config.ts`, `mmk.config.js`, `mmk.config.json`. Run `mmk init` to generate one (the
+`--uri`, `--db`, and `--dir` global flags pre-fill it); pass `--js`/`--json` to pick a format
+and `--force` to overwrite an existing file.
+
+The generated file documents **every** option with inline comments, so settings that are easy
+to forget live in one place rather than being repeated as CLI flags. For example,
+`createExtension` controls the file type `mmk create` produces: it reads the flag first
+(`--js`/`--ts`), then this config value, and falls back to `js` when neither is present.
 
 | Env var | Config key | Default |
 |---|---|---|
@@ -135,6 +156,7 @@ A config file is optional. If present, it is auto-discovered in the cwd in this 
 | `MMK_STRICT` | `strict` | `false` |
 | `MMK_USE_TRANSACTION` | `useTransaction` | `false` |
 | `MMK_SEQUENTIAL` | `sequential` | `false` |
+| `MMK_CREATE_EXTENSION` | `createExtension` | `js` |
 
 ```ts
 // mmk.config.ts — supports hooks, a custom logger, and a Mongoose instance

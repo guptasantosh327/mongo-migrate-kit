@@ -3,13 +3,16 @@ export { MigratorKit } from './core/migrator.js';
 export type {
   CreateOptions,
   DownOptions,
+  InitOptions,
   MigratorKitOptions,
   UpOptions,
 } from './core/migrator.js';
+export type { ConfigFormat } from './utils/template.js';
 
 // Types
 export type {
   MigrationContext,
+  MigrationExtension,
   MigrationHooks,
   MigrationModule,
   MigrationRecord,
@@ -26,6 +29,7 @@ export type {
 export {
   AlreadyAppliedError,
   ChecksumMismatchError,
+  ConfigFileExistsError,
   ConfigInvalidError,
   ConnectionFailedError,
   LockAlreadyHeldError,

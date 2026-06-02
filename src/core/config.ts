@@ -16,6 +16,7 @@ export const DEFAULT_CONFIG: Pick<
   | 'strict'
   | 'useTransaction'
   | 'fileExtensions'
+  | 'createExtension'
   | 'sequential'
 > = {
   migrationsDir: './migrations',
@@ -25,6 +26,7 @@ export const DEFAULT_CONFIG: Pick<
   strict: false,
   useTransaction: false,
   fileExtensions: ['.ts', '.js'],
+  createExtension: 'js',
   sequential: false,
 };
 
@@ -56,6 +58,7 @@ const configSchema = z.object({
   strict: z.boolean(),
   useTransaction: z.boolean(),
   fileExtensions: z.array(z.string().min(1)).min(1),
+  createExtension: z.enum(['ts', 'js']),
   sequential: z.boolean(),
   templatePath: z.string().min(1).optional(),
   mongoose: z.unknown().optional(),
@@ -95,6 +98,9 @@ function readEnvConfig(): Partial<MmkConfig> {
     result.useTransaction = parseBoolean(env.MMK_USE_TRANSACTION);
   }
   if (env.MMK_SEQUENTIAL !== undefined) result.sequential = parseBoolean(env.MMK_SEQUENTIAL);
+  if (env.MMK_CREATE_EXTENSION === 'ts' || env.MMK_CREATE_EXTENSION === 'js') {
+    result.createExtension = env.MMK_CREATE_EXTENSION;
+  }
   return result;
 }
 

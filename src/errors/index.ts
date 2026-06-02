@@ -72,6 +72,14 @@ export class ConfigInvalidError extends MmkError {
   }
 }
 
+/** Thrown when creating a config file that already exists without `--force` */
+export class ConfigFileExistsError extends MmkError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super('CONFIG_FILE_EXISTS', message, context);
+    this.name = 'ConfigFileExistsError';
+  }
+}
+
 /** Thrown when connecting to MongoDB fails */
 export class ConnectionFailedError extends MmkError {
   constructor(message: string, context?: Record<string, unknown>) {
