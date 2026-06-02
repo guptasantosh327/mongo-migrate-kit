@@ -109,6 +109,19 @@ export interface MmkConfig {
   logger?: MmkLogger | null;
 }
 
+/**
+ * What a config file (`mmk.config.{ts,js}`) may export: either a config object
+ * or a (sync or async) factory that returns one. The factory form is resolved
+ * at load time, so you can fetch values — e.g. a connection `uri` from AWS
+ * Secrets Manager or Google Secret Manager — without ever writing them to disk.
+ *
+ * The fetched value lives in memory for that command only; the config file
+ * itself is never rewritten. JSON config files cannot use the factory form.
+ */
+export type MmkConfigInput =
+  | Partial<MmkConfig>
+  | (() => Partial<MmkConfig> | Promise<Partial<MmkConfig>>);
+
 // ─── Logger ───────────────────────────────────────────────────────────────────
 
 export interface MmkLogger {

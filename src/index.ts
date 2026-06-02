@@ -18,6 +18,7 @@ export type {
   MigrationRecord,
   MigrationStatus,
   MmkConfig,
+  MmkConfigInput,
   MmkErrorCode,
   MmkLogger,
   RunResult,

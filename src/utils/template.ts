@@ -1,7 +1,11 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { format } from 'date-fns';
-import { ConfigFileExistsError, MigrationFileNotFoundError } from '../errors/index.js';
+import {
+  ConfigFileExistsError,
+  ConfigInvalidError,
+  MigrationFileNotFoundError,
+} from '../errors/index.js';
 import type { MigrationExtension } from '../types/index.js';
 
 /** Convert an arbitrary migration name into a kebab-case slug */
@@ -141,6 +145,7 @@ function configFields(values: ConfigValues): {
 function configBody(values: ConfigValues, createExtension: MigrationExtension): string {
   const { uri, dbName, migrationsDir } = configFields(values);
   return `  // ── Connection ──────────────────────────────────────────────
+  // To load these from a secret manager instead, run: mmk init --secret-provider
   uri: '${uri}',
   dbName: '${dbName}',
 
@@ -236,8 +241,166 @@ export function defaultConfigJson(values: ConfigValues = {}): string {
   return `${JSON.stringify(config, null, 2)}\n`;
 }
 
-/** Return the config file contents for the requested format */
-export function configTemplateContent(format: ConfigFormat, values: ConfigValues = {}): string {
+/**
+ * Shared documentation block for the secret-provider templates. Explains the
+ * factory-function form and — crucially — that the example uses AWS but ANY
+ * provider works by editing `loadMongoSecret()`.
+ */
+const SECRET_PROVIDER_GUIDE = `/**
+ * mongo-migrate-kit configuration — loads the connection from a secret manager.
+ *
+ * This config exports an async FUNCTION (not a plain object), so the MongoDB
+ * connection is fetched at runtime on every \`mmk\` command. The value stays in
+ * memory and is never written to disk, so this file is safe to commit.
+ *
+ * Precedence (highest first): CLI flags > MMK_* env vars > this file > defaults.
+ *
+ * ── Provider-agnostic ────────────────────────────────────────────────────────
+ * The example below uses AWS Secrets Manager, but ANY source works — change
+ * only the body of loadMongoSecret() to use Google Secret Manager, HashiCorp
+ * Vault, Azure Key Vault, your own HTTP API, etc. It just has to return an
+ * object containing at least { uri, dbName }. For example, Google:
+ *
+ *   import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+ *   const client = new SecretManagerServiceClient();
+ *   const [version] = await client.accessSecretVersion({
+ *     name: 'projects/PROJECT/secrets/mongo/versions/latest',
+ *   });
+ *   return JSON.parse(version.payload.data.toString());
+ */`;
+
+/**
+ * The migration-tool options shared by both secret-provider templates, indented
+ * to sit inside the returned object of the async factory (4 spaces).
+ */
+function secretConfigOptions(createExtension: MigrationExtension, migrationsDir: string): string {
+  return `    // ── Migration files ─────────────────────────────────────
+    migrationsDir: '${migrationsDir}',
+    fileExtensions: ['.ts', '.js'],
+    createExtension: '${createExtension}',
+    sequential: false,
+
+    // ── Bookkeeping collections ─────────────────────────────
+    migrationsCollection: '_mmk_migrations',
+    lockCollection: '_mmk_locks',
+    lockTTLSeconds: 60,
+
+    // ── Behavior ────────────────────────────────────────────
+    strict: false,
+    useTransaction: false,`;
+}
+
+/** Secret-provider JavaScript (ESM) config template */
+export function secretConfigJs(values: ConfigValues = {}): string {
+  const { migrationsDir } = configFields(values);
+  return `${SECRET_PROVIDER_GUIDE}
+
+// Install the SDK for your provider, e.g.:
+//   npm install @aws-sdk/client-secrets-manager
+import {
+  SecretsManagerClient,
+  GetSecretValueCommand,
+} from '@aws-sdk/client-secrets-manager';
+
+/**
+ * Fetch the connection details from your secret manager. Swap the body for
+ * GCP / Vault / Azure / anything — it just has to return { uri, dbName }.
+ */
+async function loadMongoSecret() {
+  // Secret name/ARN. Read from an env var so it can differ per environment.
+  const secretId = process.env.MONGO_SECRET_ID ?? 'prod/myapp/mongo';
+
+  // Region & credentials come from the environment (AWS_REGION,
+  // AWS_ACCESS_KEY_ID/SECRET, or an attached IAM role).
+  const client = new SecretsManagerClient({});
+  const res = await client.send(new GetSecretValueCommand({ SecretId: secretId }));
+
+  if (!res.SecretString) {
+    throw new Error(\`Secret "\${secretId}" has no SecretString\`);
+  }
+  // Stored value is JSON, e.g. { "uri": "mongodb+srv://...", "dbName": "myapp" }
+  return JSON.parse(res.SecretString);
+}
+
+/** @type {() => Promise<Partial<import('mongo-migrate-kit').MmkConfig>>} */
+export default async () => {
+  const secret = await loadMongoSecret();
+
+  return {
+    // ── Connection (from your secret) ───────────────────────
+    uri: secret.uri,
+    dbName: secret.dbName,
+
+${secretConfigOptions('js', migrationsDir)}
+  };
+};
+`;
+}
+
+/** Secret-provider TypeScript config template */
+export function secretConfigTs(values: ConfigValues = {}): string {
+  const { migrationsDir } = configFields(values);
+  return `${SECRET_PROVIDER_GUIDE}
+import type { MmkConfig } from 'mongo-migrate-kit';
+// Install the SDK for your provider, e.g.:
+//   npm install @aws-sdk/client-secrets-manager
+import {
+  SecretsManagerClient,
+  GetSecretValueCommand,
+} from '@aws-sdk/client-secrets-manager';
+
+/**
+ * Fetch the connection details from your secret manager. Swap the body for
+ * GCP / Vault / Azure / anything — it just has to return { uri, dbName }.
+ */
+async function loadMongoSecret(): Promise<{ uri: string; dbName: string }> {
+  // Secret name/ARN. Read from an env var so it can differ per environment.
+  const secretId = process.env.MONGO_SECRET_ID ?? 'prod/myapp/mongo';
+
+  // Region & credentials come from the environment (AWS_REGION,
+  // AWS_ACCESS_KEY_ID/SECRET, or an attached IAM role).
+  const client = new SecretsManagerClient({});
+  const res = await client.send(new GetSecretValueCommand({ SecretId: secretId }));
+
+  if (!res.SecretString) {
+    throw new Error(\`Secret "\${secretId}" has no SecretString\`);
+  }
+  // Stored value is JSON, e.g. { "uri": "mongodb+srv://...", "dbName": "myapp" }
+  return JSON.parse(res.SecretString);
+}
+
+export default async (): Promise<Partial<MmkConfig>> => {
+  const secret = await loadMongoSecret();
+
+  return {
+    // ── Connection (from your secret) ───────────────────────
+    uri: secret.uri,
+    dbName: secret.dbName,
+
+${secretConfigOptions('ts', migrationsDir)}
+  };
+};
+`;
+}
+
+/**
+ * Return the config file contents for the requested format. When
+ * `secretProvider` is true a runtime secret-loading template is emitted instead
+ * of the static object form — only valid for `js`/`ts` (JSON cannot hold code).
+ */
+export function configTemplateContent(
+  format: ConfigFormat,
+  values: ConfigValues = {},
+  secretProvider = false,
+): string {
+  if (secretProvider) {
+    if (format === 'json') {
+      throw new ConfigInvalidError('Secret-provider configs are only available for js/ts', {
+        format,
+      });
+    }
+    return format === 'ts' ? secretConfigTs(values) : secretConfigJs(values);
+  }
   if (format === 'js') {
     return defaultConfigJs(values);
   }
@@ -257,6 +420,8 @@ export interface CreateConfigFileOptions {
   force: boolean;
   /** Pre-fill values merged over the defaults */
   values?: ConfigValues;
+  /** Emit a runtime secret-loading template instead of a static object (js/ts only) */
+  secretProvider?: boolean;
 }
 
 /**
@@ -268,6 +433,11 @@ export function createConfigFile(options: CreateConfigFileOptions): string {
   if (existsSync(filepath) && !options.force) {
     throw new ConfigFileExistsError('Config file already exists', { path: filepath });
   }
-  writeFileSync(filepath, configTemplateContent(options.format, options.values ?? {}), 'utf8');
+  const content = configTemplateContent(
+    options.format,
+    options.values ?? {},
+    options.secretProvider ?? false,
+  );
+  writeFileSync(filepath, content, 'utf8');
   return filepath;
 }
