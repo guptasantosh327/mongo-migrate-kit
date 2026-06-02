@@ -166,6 +166,49 @@ describe('loadConfig', () => {
     expect(config.sequential).toBe(false);
   });
 
+  it('should resolve a synchronous function (factory) config file', async () => {
+    writeFileSync(
+      path.join(tmp, 'mmk.config.js'),
+      "module.exports = () => ({ uri: 'mongodb://fn-host:27017', dbName: 'fn-db' });\n",
+    );
+    const config = await loadConfig({ cwd: tmp });
+    expect(config.uri).toBe('mongodb://fn-host:27017');
+    expect(config.dbName).toBe('fn-db');
+  });
+
+  it('should resolve an async function config file (e.g. a secret fetch)', async () => {
+    writeFileSync(
+      path.join(tmp, 'mmk.config.js'),
+      `module.exports = async () => {
+  await new Promise((resolve) => setTimeout(resolve, 1));
+  return { uri: 'mongodb://secret-host:27017', dbName: 'secret-db', strict: true };
+};
+`,
+    );
+    const config = await loadConfig({ cwd: tmp });
+    expect(config.uri).toBe('mongodb://secret-host:27017');
+    expect(config.strict).toBe(true);
+  });
+
+  it('should let env vars override a value returned by a function config', async () => {
+    writeFileSync(
+      path.join(tmp, 'mmk.config.js'),
+      "module.exports = () => ({ uri: 'mongodb://fn-host:27017', dbName: 'fn-db' });\n",
+    );
+    process.env.MMK_URI = 'mongodb://env-host:27017';
+    const config = await loadConfig({ cwd: tmp });
+    expect(config.uri).toBe('mongodb://env-host:27017');
+    expect(config.dbName).toBe('fn-db');
+  });
+
+  it('should wrap a throwing config factory in ConfigInvalidError', async () => {
+    writeFileSync(
+      path.join(tmp, 'mmk.config.js'),
+      "module.exports = async () => { throw new Error('secret fetch failed'); };\n",
+    );
+    await expect(loadConfig({ cwd: tmp })).rejects.toBeInstanceOf(ConfigInvalidError);
+  });
+
   it('should load env vars from a .env file via dotenv', async () => {
     writeFileSync(
       path.join(tmp, '.env'),

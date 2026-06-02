@@ -175,6 +175,50 @@ const config: Partial<MmkConfig> = {
 export default config;
 ```
 
+### Loading secrets (AWS / Google / Vault / …)
+
+A `.ts`/`.js` config file may export a **function** instead of an object — sync or
+async. mongo-migrate-kit calls it once per command and uses what it returns, so you can
+fetch the connection URI from a secret manager at runtime. The secret is **never written
+to disk**, and a rotated value is picked up on the next run automatically.
+
+mongo-migrate-kit ships **no** cloud SDKs — you bring the one you already use, so any
+provider works (AWS, Google, HashiCorp Vault, Azure Key Vault, your own service).
+
+```js
+// mmk.config.js — AWS Secrets Manager
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+
+export default async () => {
+  const sm = new SecretsManagerClient({ region: 'us-east-1' });
+  const res = await sm.send(new GetSecretValueCommand({ SecretId: 'prod/mongo' }));
+  const { uri, dbName } = JSON.parse(res.SecretString ?? '{}');
+  return { uri, dbName };
+};
+```
+
+```js
+// mmk.config.js — Google Secret Manager
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+
+export default async () => {
+  const client = new SecretManagerServiceClient();
+  const [version] = await client.accessSecretVersion({
+    name: 'projects/my-project/secrets/mongo-uri/versions/latest',
+  });
+  return { uri: version.payload.data.toString(), dbName: 'my_app' };
+};
+```
+
+The returned object is merged at the **config-file tier** of precedence, so an env var or
+CLI flag (e.g. `MMK_URI`, `--uri`) still overrides it — handy for local development. If the
+function throws (bad credentials, secret not found, network), it surfaces as a
+`ConfigInvalidError` with the cause attached. JSON config files cannot use the function form.
+
+> Note: `mmk create` / `mmk init` also load the config file, so a factory that contacts a
+> secret manager runs for those commands too even though they never connect. Guard with an
+> early return on an env flag if you want to skip the call in that case.
+
 ## Programmatic API
 
 ```ts

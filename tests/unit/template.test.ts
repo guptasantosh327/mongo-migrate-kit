@@ -2,7 +2,11 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ConfigFileExistsError, MigrationFileNotFoundError } from '../../src/errors/index.js';
+import {
+  ConfigFileExistsError,
+  ConfigInvalidError,
+  MigrationFileNotFoundError,
+} from '../../src/errors/index.js';
 import {
   buildPrefix,
   configTemplateContent,
@@ -15,6 +19,8 @@ import {
   defaultTemplateTs,
   nextSequenceIndex,
   resolveTemplateContent,
+  secretConfigJs,
+  secretConfigTs,
   slugify,
 } from '../../src/utils/template.js';
 
@@ -155,6 +161,46 @@ describe('config templates', () => {
 
   it('should include createExtension in the JSON template', () => {
     expect(JSON.parse(defaultConfigJson()).createExtension).toBe('js');
+  });
+});
+
+describe('secret-provider config templates', () => {
+  it('should emit an async factory that fetches from a secret manager (JS)', () => {
+    const tpl = secretConfigJs();
+    expect(tpl).toContain('async function loadMongoSecret');
+    expect(tpl).toContain('export default async () =>');
+    expect(tpl).toContain('@aws-sdk/client-secrets-manager');
+    expect(tpl).toContain('uri: secret.uri');
+    expect(tpl).toContain("createExtension: 'js'");
+  });
+
+  it('should be provider-agnostic — document swapping AWS for another provider', () => {
+    const tpl = secretConfigJs();
+    expect(tpl).toContain('Provider-agnostic');
+    expect(tpl).toContain('@google-cloud/secret-manager');
+  });
+
+  it('should emit a typed async factory for TS with the MmkConfig type', () => {
+    const tpl = secretConfigTs();
+    expect(tpl).toContain("import type { MmkConfig } from 'mongo-migrate-kit'");
+    expect(tpl).toContain('async function loadMongoSecret(): Promise<{ uri: string');
+    expect(tpl).toContain('Promise<Partial<MmkConfig>>');
+    expect(tpl).toContain("createExtension: 'ts'");
+  });
+
+  it('should seed migrationsDir from provided values', () => {
+    expect(secretConfigJs({ migrationsDir: './db/migrations' })).toContain(
+      "migrationsDir: './db/migrations'",
+    );
+  });
+
+  it('should dispatch to the secret template via configTemplateContent', () => {
+    expect(configTemplateContent('js', {}, true)).toContain('loadMongoSecret');
+    expect(configTemplateContent('ts', {}, true)).toContain('loadMongoSecret');
+  });
+
+  it('should throw ConfigInvalidError when secret-provider is requested for json', () => {
+    expect(() => configTemplateContent('json', {}, true)).toThrow(ConfigInvalidError);
   });
 });
 

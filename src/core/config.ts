@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import * as dotenv from 'dotenv';
 import { z } from 'zod';
 import { ConfigInvalidError } from '../errors/index.js';
-import type { MmkConfig } from '../types/index.js';
+import type { MmkConfig, MmkConfigInput } from '../types/index.js';
 
 /** Default values applied when no flag, env var, or config-file value is present */
 export const DEFAULT_CONFIG: Pick<
@@ -115,16 +115,35 @@ function discoverConfigFile(cwd: string): string | null {
   return null;
 }
 
-/** Load and return the config object exported by a config file */
+/**
+ * Load and return the config object exported by a config file.
+ *
+ * A `.ts`/`.js` config may export either a plain object or a (sync or async)
+ * factory function — the factory is invoked and awaited here, which is what
+ * lets users fetch values from a secret manager. A factory that throws is
+ * surfaced as a {@link ConfigInvalidError}. JSON configs are always objects.
+ */
 async function loadConfigFile(filepath: string): Promise<Partial<MmkConfig>> {
   if (filepath.endsWith('.json')) {
     const raw = readFileSync(filepath, 'utf8');
     return JSON.parse(raw) as Partial<MmkConfig>;
   }
   const mod = (await import(pathToFileURL(filepath).href)) as {
-    default?: Partial<MmkConfig>;
-  } & Partial<MmkConfig>;
-  return mod.default ?? mod;
+    default?: MmkConfigInput;
+  } & Record<string, unknown>;
+  const exported = (mod.default ?? mod) as MmkConfigInput;
+
+  if (typeof exported === 'function') {
+    try {
+      return await exported();
+    } catch (error) {
+      throw new ConfigInvalidError('Config factory function failed to resolve', {
+        path: filepath,
+        cause: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return exported;
 }
 
 /**

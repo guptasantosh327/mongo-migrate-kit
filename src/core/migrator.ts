@@ -64,6 +64,12 @@ export interface InitOptions {
   format?: ConfigFormat;
   /** Overwrite an existing config file */
   force?: boolean;
+  /**
+   * Generate a runtime secret-loading config (an async factory that fetches the
+   * connection from a secret manager) instead of a static object. Only valid
+   * for `js`/`ts` formats.
+   */
+  secretProvider?: boolean;
 }
 
 /**
@@ -508,6 +514,7 @@ export class MigratorKit {
       format: options.format ?? 'js',
       force: options.force ?? false,
       values,
+      ...(options.secretProvider ? { secretProvider: true } : {}),
     });
     this.logger.success(`✔ Created  ${path.basename(filepath)}`);
     return filepath;

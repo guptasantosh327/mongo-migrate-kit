@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -115,6 +115,29 @@ describe('mmk CLI (integration)', () => {
     expect(await mongo.db.collection('_mmk_migrations').countDocuments()).toBe(0);
   });
 
+  it('should resolve an async function config file (simulating a fetched secret)', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    // Config lives in its own cwd (as in a real project); the migrations dir is
+    // a separate folder. The factory "fetches" the connection details at run
+    // time, the way an AWS/GCP Secrets Manager recipe would. No --uri/--db
+    // flags here, so the values can only come from the resolved function.
+    const cwdDir = path.join(project.dir, 'app');
+    mkdirSync(cwdDir);
+    const factory = [
+      'export default async () => ({',
+      `  uri: ${JSON.stringify(mongo.uri)},`,
+      `  dbName: ${JSON.stringify(DB)},`,
+      `  migrationsDir: ${JSON.stringify(project.dir)},`,
+      '});',
+      '',
+    ].join('\n');
+    writeFileSync(path.join(cwdDir, 'mmk.config.js'), factory);
+    const result = await runCli(['up'], {}, cwdDir);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('Applied');
+    expect(await mongo.db.collection('things').countDocuments()).toBe(1);
+  });
+
   it('should render a status table', async () => {
     project.write('0001-a.ts', insertMigration('things', 'a'));
     await runCli(baseArgs(['up']));
@@ -151,6 +174,32 @@ describe('mmk CLI (integration)', () => {
     expect(existsSync(tsPath)).toBe(true);
     expect(existsSync(path.join(project.dir, 'mmk.config.js'))).toBe(false);
     expect(readFileSync(tsPath, 'utf8')).toContain("createExtension: 'ts'");
+  });
+
+  it('should generate a secret-provider mmk.config.js with init --secret-provider', async () => {
+    const result = await runCli(['init', '--secret-provider'], {}, project.dir);
+    expect(result.code).toBe(0);
+    const contents = readFileSync(path.join(project.dir, 'mmk.config.js'), 'utf8');
+    expect(contents).toContain('async function loadMongoSecret');
+    expect(contents).toContain('export default async () =>');
+    expect(contents).toContain('@aws-sdk/client-secrets-manager');
+    // provider-agnostic guidance is present
+    expect(contents).toContain('Provider-agnostic');
+  });
+
+  it('should generate a secret-provider mmk.config.ts with init --ts --secret-provider', async () => {
+    const result = await runCli(['init', '--ts', '--secret-provider'], {}, project.dir);
+    expect(result.code).toBe(0);
+    const contents = readFileSync(path.join(project.dir, 'mmk.config.ts'), 'utf8');
+    expect(contents).toContain('async function loadMongoSecret');
+    expect(contents).toContain("import type { MmkConfig } from 'mongo-migrate-kit'");
+  });
+
+  it('should reject init --json --secret-provider and exit 1', async () => {
+    const result = await runCli(['init', '--json', '--secret-provider'], {}, project.dir);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('secret-provider');
+    expect(existsSync(path.join(project.dir, 'mmk.config.json'))).toBe(false);
   });
 
   it('should exit 1 when init finds an existing config without --force', async () => {
