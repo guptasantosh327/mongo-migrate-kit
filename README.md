@@ -72,8 +72,8 @@ npm install mongodb          # required peer dependency
 ```
 
 ```bash
-# 1 · scaffold a documented config (pre-filled from the flags)
-npx mmk init --uri mongodb://localhost:27017 --db my_app
+# 1 · create a configuration file mmk.config.*. (pass --ts if need ts file)
+npx mmk init
 
 # 2 · create your first migration
 npx mmk create "add users email index"
@@ -130,6 +130,7 @@ mmk init --ts                # mmk.config.ts
 mmk init --json              # mmk.config.json
 mmk init --secret-provider   # async config that loads the URI from a secret manager (js/ts only)
 mmk init --force             # overwrite an existing config file
+mmk init --uri mongodb://localhost:27017 --db my_app # prefilled the mmk.config.* file with uri and db details
 
 # create — generate a migration file
 mmk create <name>            # file type follows config `createExtension` (default .js)
