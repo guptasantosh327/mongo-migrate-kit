@@ -1,70 +1,95 @@
+<div align="center">
+
+<img src="assets/assets/transparent_logos_png.png" alt="mongo-migrate-kit" width="360" />
+
 # mongo-migrate-kit
 
-> Production-grade MongoDB migration toolkit for Node.js
+**Elegant, fast, TypeScript-first MongoDB migrations for Node.js.**
 
-`mongo-migrate-kit` (CLI: `mmk`) is a strict-TypeScript migration runner for MongoDB with
-first-class `.ts` **and** `.js` support, a MongoDB-native concurrency lock, SHA-256 tamper
-detection, opt-in transactions, lifecycle hooks, dry-run previews, and a full audit trail that
-is **never** deleted.
+_A modern, drop-in replacement for `migrate-mongo` etc._
 
-```bash
-npm install mongo-migrate-kit
-# peer deps you provide:
-npm install mongodb            # required
-npm install mongoose           # optional
-```
+[![npm version](https://img.shields.io/npm/v/mongo-migrate-kit.svg?color=00A14B)](https://www.npmjs.com/package/mongo-migrate-kit)
+[![license](https://img.shields.io/npm/l/mongo-migrate-kit.svg?color=00A14B)](./LICENSE)
+[![node](https://img.shields.io/node/v/mongo-migrate-kit.svg?color=00A14B)](https://nodejs.org)
+[![types](https://img.shields.io/npm/types/mongo-migrate-kit.svg?color=00A14B)](https://www.typescriptlang.org/)
 
-## Why
+Single-file runs · per-batch rollback · dry-run previews · transactions · lifecycle hooks ·
+SHA-256 tamper detection · MongoDB-native locking · an append-only audit trail — all behind one
+small `mmk` CLI and a fully-typed API.
 
-| Gap in other tools | How `mongo-migrate-kit` solves it |
-|---|---|
-| Can't run a single file | `mmk up <file>` / `mmk down <file>` |
-| `down` only rolls back the last one | `mmk down --batch 3` or `mmk down <file>` |
-| No `redo` | `mmk redo` / `mmk redo <file>` |
-| No dry-run | `mmk dry-run up` previews without touching the DB |
-| Config file mandatory | Works entirely from env vars — zero files required |
-| No config generator | `mmk init` creates a ready-to-edit `mmk.config.{js,ts,json}` |
-| No concurrency lock | MongoDB-native lock in `_mmk_locks` |
-| No tamper detection | SHA-256 checksum verified, surfaced in `status` |
-| No lifecycle hooks | `beforeAll` / `afterAll` / `beforeEach` / `afterEach` / `onError` |
-| No transactions | Opt-in per file: `export const useTransaction = true` |
-| No rich audit trail | Stores duration, checksum, env, user, batch — never deletes |
+</div>
+
+---
+
+## Why mongo-migrate-kit
+
+Built for teams who outgrew the basics. You keep everything you expect — `up`, `down`, `create`,
+`status` — and gain the features the older tools never added:
+
+- **Dry-run previews** — `mmk dry-run up` shows exactly what would run before anything touches the
+  database (something `migrate-mongo` users have [asked for since 2019](https://github.com/seppevs/migrate-mongo/issues/43)).
+- **Run one file at a time** — `mmk up <file>` / `mmk down <file>`, not just "all pending" or "the last one".
+- **Real rollbacks** — revert any batch (`--batch 3`), a single migration, or `redo` in one step —
+  instead of only the most recently applied migration.
+- **A cleaner, richer CLI** — eight focused commands with colorized output and a status table, versus
+  the bare `init`/`create`/`up`/`down`/`status` set.
+- **Safe by default** — an atomic MongoDB lock stops two deploys racing; SHA-256 checksums catch
+  edited migrations before they silently re-run.
+- **First-class TypeScript _and_ JavaScript** — `.ts` (via `tsx`), ESM, and CommonJS all just work,
+  with a fully-typed context and config — no `ts-node` plumbing.
+- **Zero config files required** — drive everything from env vars, or generate a documented config with `mmk init`.
+- **Audit-ready** — every run records duration, checksum, environment, user, and batch, and the
+  history is **never deleted** (a rollback updates the record, it doesn't remove it).
+
+### How it compares to `migrate-mongo`
+
+| Capability | `migrate-mongo` | `mongo-migrate-kit` |
+|---|:---:|:---:|
+| `up` / `down` / `create` / `status` | ✅ | ✅ |
+| Dry-run preview | ❌ | ✅ |
+| Run a single migration file | ❌ | ✅ |
+| Roll back a specific batch or file | ❌ *(last only)* | ✅ |
+| `redo` (down + up) | ❌ | ✅ |
+| SHA-256 checksum / tamper detection | ❌ | ✅ |
+| Lifecycle hooks | ❌ | ✅ |
+| First-class TypeScript | community setup | ✅ built-in |
+| History preserved on rollback | ❌ *(entry removed)* | ✅ *(never deleted)* |
+
+<sub>Reflects `migrate-mongo`'s documented CLI as of mid-2026. It has since added transaction access
+via a `client` argument; `mmk` exposes the same plus a declarative per-file `useTransaction` flag.</sub>
+
+> Coming from `migrate-mongo`? Your mental model carries over 1:1 — `up`, `down`, `create`, `status` —
+> you just gain dry-runs, single-file control, real rollbacks, hooks, and locking on top.
+
+---
 
 ## Quick start
 
 ```bash
-# 1. Generate a config file in the current directory (pre-filled from the flags)
-mmk init --uri mongodb://localhost:27017 --db my_app
-#    → writes mmk.config.js  (use --ts or --json for other formats)
-
-# 2. Create a migration
-mmk create "add users email index"
-
-# 3. Edit the generated file, then run it
-mmk up
-
-# 4. Inspect
-mmk status
+npm install mongo-migrate-kit
+npm install mongodb          # required peer dependency
 ```
-
-Prefer zero files? Skip `mmk init` and configure entirely from env vars instead:
 
 ```bash
-export MMK_URI="mongodb://localhost:27017"
-export MMK_DB="my_app"
-export MMK_MIGRATIONS_DIR="./migrations"
+# 1 · scaffold a documented config (pre-filled from the flags)
+npx mmk init --uri mongodb://localhost:27017 --db my_app
+
+# 2 · create your first migration
+npx mmk create "add users email index"
+
+# 3 · run everything pending
+npx mmk up
+
+# 4 · see where you stand
+npx mmk status
 ```
 
-## Writing a migration
-
-A migration exports async `up` and `down` functions. Three formats are supported:
+A migration is just an `up` and a `down`:
 
 ```ts
-// TypeScript — opt in with `mmk create --ts`; full type-safety, runs via tsx
 import type { MigrationContext } from 'mongo-migrate-kit';
 
 export const description = 'Add unique index on users.email';
-export const useTransaction = true; // optional, per-file
 
 export async function up({ db }: MigrationContext): Promise<void> {
   await db.collection('users').createIndex({ email: 1 }, { unique: true });
@@ -75,115 +100,126 @@ export async function down({ db }: MigrationContext): Promise<void> {
 }
 ```
 
-```js
-// JavaScript ESM — the default (zero build/runtime setup)
-export async function up({ db }) { /* ... */ }
-export async function down({ db }) { /* ... */ }
+> Prefer no files at all? Skip `mmk init` and export `MMK_URI` and `MMK_DB` — that is enough to run.
+
+---
+
+## Commands
+
+Every command accepts the global flags `--uri`, `--db`, `--dir`, and `--config`.
+
+| Command | What it does |
+|---|---|
+| `mmk init` | Create a documented `mmk.config.*` in the current directory |
+| `mmk create <name>` | Generate a timestamped migration file |
+| `mmk up [file]` | Run all pending migrations, or one named file |
+| `mmk down [file]` | Roll back the last batch, a chosen batch, or one file |
+| `mmk redo [file]` | Roll back then re-apply (the last migration, or one file) |
+| `mmk status` | Print the full migration status table |
+| `mmk list` | List migrations, filtered by status |
+| `mmk dry-run <up\|down> [file]` | Preview a run without touching the database |
+
+<details>
+<summary><b>Options for every command</b></summary>
+
+```bash
+# init — generate a config file
+mmk init                     # mmk.config.js (default)
+mmk init --ts                # mmk.config.ts
+mmk init --json              # mmk.config.json
+mmk init --secret-provider   # async config that loads the URI from a secret manager (js/ts only)
+mmk init --force             # overwrite an existing config file
+
+# create — generate a migration file
+mmk create <name>            # file type follows config `createExtension` (default .js)
+mmk create <name> --ts       # force a .ts file
+mmk create <name> --js       # force a .js file
+mmk create <name> --template <path>   # use a custom template
+
+# up — apply migrations
+mmk up                       # all pending
+mmk up <file>                # one specific file
+mmk up <file> --force        # re-run an ALREADY-applied file (asks for confirmation)
+mmk up --strict              # abort on any checksum mismatch
+mmk up --no-lock             # skip the concurrency lock (local dev only)
+
+# down — roll back
+mmk down                     # the last batch
+mmk down <file>              # one specific file
+mmk down --batch <n>         # a specific batch number
+
+# redo — down then up
+mmk redo                     # the most recently applied migration
+mmk redo <file>              # a specific file
+
+# list — filtered status
+mmk list --pending           # only pending
+mmk list --applied           # only applied
+
+# dry-run — preview, never writes
+mmk dry-run up [file]
+mmk dry-run down [file]
 ```
 
-```js
-// JavaScript CommonJS
-module.exports = {
-  async up({ db }) { /* ... */ },
-  async down({ db }) { /* ... */ },
-};
-```
+**Global flags** (available on all commands): `--uri <uri>`, `--db <name>`, `--dir <path>`, `--config <path>`.
 
-When a migration runs inside a transaction, pass the provided `session` to your operations:
+</details>
+
+---
+
+## Advanced features
+
+<details>
+<summary><b>Transactions</b> — wrap a migration in an all-or-nothing MongoDB transaction</summary>
+
+<br>
+
+Opt in per file with `export const useTransaction = true` (or globally via config). The runner opens a
+session, passes it through the context, and commits on success or aborts on any error. Pass the
+`session` to every operation so it joins the transaction:
 
 ```ts
 export const useTransaction = true;
+
 export async function up({ db, session }: MigrationContext): Promise<void> {
-  await db.collection('a').insertOne({ x: 1 }, { session });
-  await db.collection('b').insertOne({ y: 2 }, { session });
+  await db.collection('accounts').insertOne({ balance: 100 }, { session });
+  await db.collection('ledger').insertOne({ delta: 100 }, { session });
 }
 ```
 
-## CLI
+> Transactions require a replica set or sharded cluster — MongoDB's own requirement, not a library limit.
 
-```bash
-mmk init                            # Create mmk.config.js in the cwd (default)
-mmk init --ts                       # Create mmk.config.ts instead
-mmk init --json                     # Create mmk.config.json instead
-mmk init --force                    # Overwrite an existing config file
+</details>
 
-mmk up [file]                       # Run all pending, or one file
-mmk up [file] --no-lock             # Skip the concurrency lock (dev only)
-mmk up [file] --strict              # Abort on checksum mismatch
+<details>
+<summary><b>Lifecycle hooks</b> — run code around the batch and each migration</summary>
 
-mmk down [file]                     # Rollback the last batch, or one file
-mmk down --batch <n>                # Rollback a specific batch
+<br>
 
-mmk redo [file]                     # down + up: last applied, or a file
-
-mmk status                          # Full status table
-mmk list --pending                  # Only pending
-mmk list --applied                  # Only applied
-
-mmk dry-run up [file]               # Preview an up
-mmk dry-run down [file]             # Preview a down
-
-mmk create <name>                   # Create a migration (flag → config → default .js)
-mmk create <name> --js              # Force a .js migration
-mmk create <name> --ts              # Force a .ts migration
-mmk create <name> --template <path> # Use a custom template
-```
-
-Global flags (any command): `--uri <uri>`, `--db <name>`, `--dir <path>`, `--config <path>`.
-
-## Configuration
-
-Resolution order (highest wins): **CLI flags → environment variables → config file → defaults**.
-
-A config file is optional. If present, it is auto-discovered in the cwd in this order:
-`mmk.config.ts`, `mmk.config.js`, `mmk.config.json`. Run `mmk init` to generate one (the
-`--uri`, `--db`, and `--dir` global flags pre-fill it); pass `--js`/`--json` to pick a format
-and `--force` to overwrite an existing file.
-
-The generated file documents **every** option with inline comments, so settings that are easy
-to forget live in one place rather than being repeated as CLI flags. For example,
-`createExtension` controls the file type `mmk create` produces: it reads the flag first
-(`--js`/`--ts`), then this config value, and falls back to `js` when neither is present.
-
-| Env var | Config key | Default |
-|---|---|---|
-| `MMK_URI` | `uri` | — (required) |
-| `MMK_DB` | `dbName` | — (required) |
-| `MMK_MIGRATIONS_DIR` | `migrationsDir` | `./migrations` |
-| `MMK_COLLECTION` | `migrationsCollection` | `_mmk_migrations` |
-| `MMK_LOCK_COLLECTION` | `lockCollection` | `_mmk_locks` |
-| `MMK_LOCK_TTL` | `lockTTLSeconds` | `60` |
-| `MMK_STRICT` | `strict` | `false` |
-| `MMK_USE_TRANSACTION` | `useTransaction` | `false` |
-| `MMK_SEQUENTIAL` | `sequential` | `false` |
-| `MMK_CREATE_EXTENSION` | `createExtension` | `js` |
+Define hooks in your config file. Use them to seed data, emit metrics, or alert on failure:
 
 ```ts
-// mmk.config.ts — supports hooks, a custom logger, and a Mongoose instance
-import type { MmkConfig } from 'mongo-migrate-kit';
-
-const config: Partial<MmkConfig> = {
-  uri: process.env.MONGO_URL!,
-  dbName: 'my_app',
-  migrationsDir: './migrations',
-  hooks: {
-    beforeAll: async () => { /* ... */ },
-    onError: async (name, error) => { /* alert ... */ },
-  },
-};
-
-export default config;
+hooks: {
+  beforeAll:  async (ctx) => { /* once, before the batch */ },
+  afterAll:   async (ctx) => { /* once, after the batch */ },
+  beforeEach: async (name, ctx) => { /* before each file */ },
+  afterEach:  async (name, durationMs, ctx) => { /* after each file */ },
+  onError:    async (name, error, ctx) => { /* a file threw — alert, then it re-throws */ },
+}
 ```
 
-### Loading secrets (AWS / Google / Vault / …)
+</details>
 
-A `.ts`/`.js` config file may export a **function** instead of an object — sync or
-async. mongo-migrate-kit calls it once per command and uses what it returns, so you can
-fetch the connection URI from a secret manager at runtime. The secret is **never written
-to disk**, and a rotated value is picked up on the next run automatically.
+<details>
+<summary><b>Loading secrets at runtime</b> — AWS, Google, Vault, Azure, anything</summary>
 
-mongo-migrate-kit ships **no** cloud SDKs — you bring the one you already use, so any
-provider works (AWS, Google, HashiCorp Vault, Azure Key Vault, your own service).
+<br>
+
+A `.ts`/`.js` config may export a **function** (sync or async) instead of an object.
+`mmk` calls it once per command, so you can fetch the connection from a secret manager at run time.
+The secret is **never written to disk**, and a rotated value is picked up automatically on the next run.
+
+The library ships **no** cloud SDKs — you bring the one you already use, so any provider works:
 
 ```js
 // mmk.config.js — AWS Secrets Manager
@@ -193,33 +229,48 @@ export default async () => {
   const sm = new SecretsManagerClient({ region: 'us-east-1' });
   const res = await sm.send(new GetSecretValueCommand({ SecretId: 'prod/mongo' }));
   const { uri, dbName } = JSON.parse(res.SecretString ?? '{}');
-  return { uri, dbName };
+  return { uri, dbName };  // merged at the config-file tier — env vars / flags still override
 };
 ```
 
-```js
-// mmk.config.js — Google Secret Manager
-import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+Run `mmk init --secret-provider` to scaffold this form with an AWS example you can swap for any provider.
+If the function throws, it surfaces as a `ConfigInvalidError` with the cause attached.
 
-export default async () => {
-  const client = new SecretManagerServiceClient();
-  const [version] = await client.accessSecretVersion({
-    name: 'projects/my-project/secrets/mongo-uri/versions/latest',
-  });
-  return { uri: version.payload.data.toString(), dbName: 'my_app' };
-};
-```
+</details>
 
-The returned object is merged at the **config-file tier** of precedence, so an env var or
-CLI flag (e.g. `MMK_URI`, `--uri`) still overrides it — handy for local development. If the
-function throws (bad credentials, secret not found, network), it surfaces as a
-`ConfigInvalidError` with the cause attached. JSON config files cannot use the function form.
+<details>
+<summary><b>Concurrency lock &amp; checksums</b> — safe concurrent deploys, tamper detection</summary>
 
-> Note: `mmk create` / `mmk init` also load the config file, so a factory that contacts a
-> secret manager runs for those commands too even though they never connect. Guard with an
-> early return on an env flag if you want to skip the call in that case.
+<br>
 
-## Programmatic API
+**Lock.** Each run acquires an atomic lock document in `_mmk_locks`, so two deploys can never migrate
+at once. A lock older than `lockTTLSeconds` is treated as stale and reclaimed; the lock is always
+released in a `finally` block. `--no-lock` bypasses it for local development (and warns loudly).
+
+**Checksums.** Every applied migration stores a SHA-256 of its file. On later runs `mmk` compares the
+two and surfaces drift in `status`. With `strict: true` (or `--strict`) a mismatch aborts the run;
+otherwise it warns and skips. To intentionally re-run an edited, already-applied file, use
+`mmk up <file> --force`.
+
+</details>
+
+<details>
+<summary><b>Audit trail</b> — a complete, append-only history</summary>
+
+<br>
+
+Every record in `_mmk_migrations` stores `batch`, `status`, `appliedAt`, `revertedAt`, `duration`,
+`checksum`, `environment`, and `executedBy`. Rolling back **updates** a record's status to `reverted`
+and stamps `revertedAt` — it is **never deleted**, so the full history stays intact for compliance.
+
+</details>
+
+<details>
+<summary><b>Programmatic API</b> — drive migrations from your own code</summary>
+
+<br>
+
+Every CLI command is a method on `MigratorKit`:
 
 ```ts
 import { MigratorKit } from 'mongo-migrate-kit';
@@ -231,26 +282,105 @@ const migrator = new MigratorKit({
 });
 
 await migrator.connect();
-const results = await migrator.up();      // RunResult[]
-const rows = await migrator.status();     // StatusRow[]
+const applied = await migrator.up();       // RunResult[]
+const rows    = await migrator.status();   // StatusRow[]
 await migrator.disconnect();
 ```
 
-All errors extend `MmkError` and carry a typed `code` (e.g. `LOCK_ALREADY_HELD`,
-`CHECKSUM_MISMATCH`, `NOT_APPLIED`).
+All errors extend `MmkError` and carry a typed `code` (`LOCK_ALREADY_HELD`, `CHECKSUM_MISMATCH`,
+`NOT_APPLIED`, …), so `catch` blocks stay type-safe.
 
-## Concurrency lock
+</details>
 
-Runs acquire an atomic lock document in `_mmk_locks`. A lock older than `lockTTLSeconds`
-is considered stale and reclaimable. The lock is always released in a `finally` block.
-Use `--no-lock` only for local development.
+---
 
-## Audit trail
+## Configuration
 
-Every record in `_mmk_migrations` stores `batch`, `status`, `appliedAt`, `revertedAt`,
-`duration`, `checksum`, `environment`, and `executedBy`. Reverting a migration sets its
-status to `reverted` and stamps `revertedAt` — the record is never deleted.
+`mmk` resolves settings in this order (**highest wins**):
+
+> **CLI flags → environment variables → config file → built-in defaults**
+
+A config file is optional and auto-discovered in the working directory as `mmk.config.ts`,
+`mmk.config.js`, or `mmk.config.json`. Run `mmk init` to generate one — it ships fully commented,
+so every setting lives in one documented place:
+
+```js
+// mmk.config.js — generated by `mmk init`, every option explained
+/** @type {import('mongo-migrate-kit').MmkConfig} */
+export default {
+  // ── Connection (required) ───────────────────────────────────────────────
+  uri: 'mongodb://localhost:27017', // MongoDB connection string
+  dbName: 'my_app',                 // database to run migrations against
+
+  // ── Files ───────────────────────────────────────────────────────────────
+  migrationsDir: './migrations',    // where migration files live
+  fileExtensions: ['.ts', '.js'],   // which files count as migrations
+  createExtension: 'js',            // default type for `mmk create` ('js' | 'ts'); --js/--ts override
+  sequential: false,                // true → 0001-style numbering instead of timestamps
+  // templatePath: './migration.template.ts', // custom template for `mmk create`
+
+  // ── Bookkeeping collections ─────────────────────────────────────────────
+  migrationsCollection: '_mmk_migrations', // the append-only audit trail
+  lockCollection: '_mmk_locks',            // the concurrency lock
+  lockTTLSeconds: 60,                       // a lock older than this is reclaimable
+
+  // ── Safety ──────────────────────────────────────────────────────────────
+  strict: false,        // true → abort on a checksum mismatch (instead of warn + skip)
+  useTransaction: false, // true → wrap every migration in a transaction (override per file)
+
+  // ── Code-only options (omit in mmk.config.json) ─────────────────────────
+  // hooks: { beforeAll, afterAll, beforeEach, afterEach, onError },
+  // mongoose: myMongooseInstance, // pass if your migrations use Mongoose models
+  // logger: null,                 // null silences all output (handy in CI/tests)
+};
+```
+
+<details>
+<summary><b>Environment variables</b> — the zero-file way to configure everything</summary>
+
+<br>
+
+| Env var | Config key | Default |
+|---|---|---|
+| `MMK_URI` | `uri` | — *(required)* |
+| `MMK_DB` | `dbName` | — *(required)* |
+| `MMK_MIGRATIONS_DIR` | `migrationsDir` | `./migrations` |
+| `MMK_COLLECTION` | `migrationsCollection` | `_mmk_migrations` |
+| `MMK_LOCK_COLLECTION` | `lockCollection` | `_mmk_locks` |
+| `MMK_LOCK_TTL` | `lockTTLSeconds` | `60` |
+| `MMK_STRICT` | `strict` | `false` |
+| `MMK_USE_TRANSACTION` | `useTransaction` | `false` |
+| `MMK_SEQUENTIAL` | `sequential` | `false` |
+| `MMK_CREATE_EXTENSION` | `createExtension` | `js` |
+
+`.env` files are loaded automatically.
+
+</details>
+
+---
+
+## Migration file formats
+
+`mmk` loads TypeScript and both JavaScript module systems with no extra setup:
+
+```ts
+// TypeScript / ESM — named exports (runs through tsx)
+export async function up({ db }) { /* ... */ }
+export async function down({ db }) { /* ... */ }
+```
+
+```js
+// CommonJS — default export
+module.exports = {
+  async up({ db }) { /* ... */ },
+  async down({ db }) { /* ... */ },
+};
+```
+
+Optional per-file exports: `description` (shown in `status`) and `useTransaction`.
+
+---
 
 ## License
 
-MIT
+[MIT](./LICENSE) © guptasantosh327

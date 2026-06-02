@@ -14,7 +14,7 @@ export function buildProgram(): Command {
 
   program
     .name('mmk')
-    .description('Production-grade MongoDB migration toolkit')
+    .description('Elegant, fast, TypeScript-first MongoDB migrations for Node.js')
     .option('--uri <uri>', 'MongoDB connection URI (overrides MMK_URI)')
     .option('--db <name>', 'Database name (overrides MMK_DB)')
     .option('--dir <path>', 'Migrations directory (overrides MMK_MIGRATIONS_DIR)')

@@ -1,7 +1,7 @@
 {
   "name": "mongo-migrate-kit",
   "version": "1.0.0",
-  "description": "Production-grade MongoDB migration toolkit for Node.js",
+  "description": "Elegant, fast, TypeScript-first MongoDB migrations for Node.js",
   "license": "MIT",
   "author": "guptasantosh327@gmail.com",
   "type": "module",
@@ -52,12 +52,21 @@
   },
   "keywords": [
     "mongodb",
+    "mongo",
     "migration",
     "migrations",
+    "mongodb-migration",
+    "mongodb-migrations",
+    "database-migration",
+    "schema-migration",
+    "migrate-mongo",
     "mongoose",
-    "database",
+    "mongoose-migration",
+    "rollback",
+    "transactions",
     "cli",
-    "typescript"
+    "typescript",
+    "nosql"
   ],
   "dependencies": {
     "chalk": "^4.1.2",
