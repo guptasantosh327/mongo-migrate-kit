@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/assets/transparent_logos_png.png" alt="mongo-migrate-kit" width="360" />
+<img src="assets/monochrome_svg.png" alt="mongo-migrate-kit" width="360" />
 
 # mongo-migrate-kit
 
@@ -8,10 +8,11 @@
 
 _A modern, drop-in replacement for `migrate-mongo` etc._
 
-[![npm version](https://img.shields.io/npm/v/mongo-migrate-kit.svg?color=00A14B)](https://www.npmjs.com/package/mongo-migrate-kit)
-[![license](https://img.shields.io/npm/l/mongo-migrate-kit.svg?color=00A14B)](./LICENSE)
-[![node](https://img.shields.io/node/v/mongo-migrate-kit.svg?color=00A14B)](https://nodejs.org)
-[![types](https://img.shields.io/npm/types/mongo-migrate-kit.svg?color=00A14B)](https://www.typescriptlang.org/)
+[![npm](https://img.shields.io/badge/npm-v1.0.0-1E9E57?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/mongo-migrate-kit)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-1E9E57?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node](https://img.shields.io/badge/Node-%E2%89%A518-1E9E57?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![MongoDB](https://img.shields.io/badge/MongoDB-%E2%89%A55.0-1E9E57?style=flat-square&logo=mongodb&logoColor=white)](https://www.mongodb.com)
+[![License](https://img.shields.io/badge/License-MIT-1E9E57?style=flat-square)](./LICENSE)
 
 Single-file runs · per-batch rollback · dry-run previews · transactions · lifecycle hooks ·
 SHA-256 tamper detection · MongoDB-native locking · an append-only audit trail — all behind one
