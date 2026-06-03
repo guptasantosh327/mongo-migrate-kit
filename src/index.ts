@@ -3,6 +3,7 @@ export { MigratorKit } from './core/migrator.js';
 export type {
   CreateOptions,
   DownOptions,
+  ImportOptions,
   InitOptions,
   MigratorKitOptions,
   UpOptions,
@@ -11,10 +12,15 @@ export type { ConfigFormat } from './utils/template.js';
 
 // Types
 export type {
+  ImportChecksumSource,
+  ImportResult,
+  ImportRow,
+  MigrateMongoDoc,
   MigrationContext,
   MigrationExtension,
   MigrationHooks,
   MigrationModule,
+  MigrationOrigin,
   MigrationRecord,
   MigrationStatus,
   MmkConfig,
@@ -33,6 +39,8 @@ export {
   ConfigFileExistsError,
   ConfigInvalidError,
   ConnectionFailedError,
+  ImportTargetNotEmptyError,
+  IrreversibleMigrationError,
   LockAlreadyHeldError,
   LockReleaseFailedError,
   MigrationExecutionFailedError,

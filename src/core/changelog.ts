@@ -24,6 +24,20 @@ export class Changelog {
     await this.coll(db).createIndex({ name: 1 }, { unique: true });
   }
 
+  /** Count records currently in the changelog collection */
+  async count(db: Db): Promise<number> {
+    return this.coll(db).countDocuments();
+  }
+
+  /**
+   * Read every raw document from a foreign collection (e.g. a migrate-mongo
+   * `changelog`). Returns untyped docs since the source schema differs from
+   * ours — the caller is responsible for validating and mapping them.
+   */
+  async getForeignDocs(db: Db, collectionName: string): Promise<Record<string, unknown>[]> {
+    return db.collection(collectionName).find().toArray();
+  }
+
   /** Return every changelog record, sorted by name ascending */
   async getAll(db: Db): Promise<MigrationRecord[]> {
     return this.coll(db).find().sort({ name: 1 }).toArray();

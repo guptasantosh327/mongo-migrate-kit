@@ -103,3 +103,19 @@ export class NotAppliedError extends MmkError {
     this.name = 'NotAppliedError';
   }
 }
+
+/** Thrown when `mmk import` targets a non-empty changelog without `--force` */
+export class ImportTargetNotEmptyError extends MmkError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super('IMPORT_TARGET_NOT_EMPTY', message, context);
+    this.name = 'ImportTargetNotEmptyError';
+  }
+}
+
+/** Thrown when attempting to roll back a migrate-mongo-imported (forward-only) migration */
+export class IrreversibleMigrationError extends MmkError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super('MIGRATION_IRREVERSIBLE', message, context);
+    this.name = 'IrreversibleMigrationError';
+  }
+}

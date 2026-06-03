@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { registerCreate } from './commands/create.js';
 import { registerDown } from './commands/down.js';
 import { registerDryRun } from './commands/dry-run.js';
+import { registerImport } from './commands/import.js';
 import { registerInit } from './commands/init.js';
 import { registerList } from './commands/list.js';
 import { registerRedo } from './commands/redo.js';
@@ -22,6 +23,7 @@ export function buildProgram(): Command {
     .version('1.0.0');
 
   registerInit(program);
+  registerImport(program);
   registerUp(program);
   registerDown(program);
   registerRedo(program);

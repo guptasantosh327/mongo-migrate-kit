@@ -55,12 +55,25 @@ Built for teams who outgrew the basics. You keep everything you expect — `up`,
 | Lifecycle hooks | ❌ | ✅ |
 | First-class TypeScript | community setup | ✅ built-in |
 | History preserved on rollback | ❌ *(entry removed)* | ✅ *(never deleted)* |
+| Adopt an existing `migrate-mongo` changelog | — | ✅ `mmk import` |
 
 <sub>Reflects `migrate-mongo`'s documented CLI as of mid-2026. It has since added transaction access
 via a `client` argument; `mmk` exposes the same plus a declarative per-file `useTransaction` flag.</sub>
 
-> Coming from `migrate-mongo`? Your mental model carries over 1:1 — `up`, `down`, `create`, `status` —
-> you just gain dry-runs, single-file control, real rollbacks, hooks, and locking on top.
+> [!TIP]
+> ### 🔄 Already using `migrate-mongo`? Switch in under a minute.
+>
+> `mmk` adopts your existing `changelog` **as-is** — no re-running migrations, no data loss, no rewriting
+> files. Point it at the same database and bring your whole history over in one command:
+>
+> ```bash
+> mmk import     # one-time: adopt your migrate-mongo changelog (it's never modified)
+> mmk up         # applies only what's new — your past migrations are recognized as already applied
+> ```
+>
+> Your applied history is preserved and new migrations run normally. Your `up`/`down`/`create`/`status`
+> mental model carries over 1:1 — you just gain dry-runs, single-file control, real rollbacks, hooks,
+> and locking. → **[See how it works](#advanced-features)**
 
 ---
 
@@ -112,6 +125,7 @@ Every command accepts the global flags `--uri`, `--db`, `--dir`, and `--config`.
 | Command | What it does |
 |---|---|
 | `mmk init` | Create a documented `mmk.config.*` in the current directory |
+| `mmk import` | Adopt an existing `migrate-mongo` changelog (one-time, forward-only) |
 | `mmk create <name>` | Generate a timestamped migration file |
 | `mmk up [file]` | Run all pending migrations, or one named file |
 | `mmk down [file]` | Roll back the last batch, a chosen batch, or one file |
@@ -131,6 +145,15 @@ mmk init --json              # mmk.config.json
 mmk init --secret-provider   # async config that loads the URI from a secret manager (js/ts only)
 mmk init --force             # overwrite an existing config file
 mmk init --uri mongodb://localhost:27017 --db my_app # prefilled the mmk.config.* file with uri and db details
+
+# import — adopt an existing migrate-mongo changelog
+mmk import                   # read `changelog`, write the mmk changelog
+mmk import --from <name>     # read a differently-named source collection
+mmk import --to <name>       # write to a specific collection (default: config migrationsCollection)
+mmk import --dry-run         # preview the mapping, write nothing
+mmk import --trust-hash      # reuse migrate-mongo's fileHash instead of recomputing
+mmk import --force           # proceed even if the mmk changelog already has records
+mmk import --no-lock         # skip the concurrency lock (local dev only)
 
 # create — generate a migration file
 mmk create <name>            # file type follows config `createExtension` (default .js)
@@ -170,6 +193,65 @@ mmk dry-run down [file]
 ---
 
 ## Advanced features
+
+<details id="migrating-from-migrate-mongo">
+<summary><b>Migrating from <code>migrate-mongo</code></b> — adopt an existing changelog with <code>mmk import</code></summary>
+
+<br>
+
+`mmk import` reads your existing `migrate-mongo` changelog and records that history in the `mmk`
+changelog, so `mmk up` knows what is already applied and runs only what is new. It is a **one-time,
+forward-only** step.
+
+```bash
+# point mmk at the same database, then:
+mmk import --dry-run     # preview the mapping first (writes nothing)
+mmk import               # adopt the history
+mmk up                   # apply only the migrations added since
+```
+
+**What it does**
+
+- Reads the source collection (`changelog` by default; `--from` to override) and **never modifies it** —
+  the mapped records are written to the `mmk` changelog (your config's `migrationsCollection`,
+  `_mmk_migrations` by default; `--to` to write to a different collection).
+- Maps `fileName → name`, `appliedAt → appliedAt`, and resolves a checksum: it reuses `migrate-mongo`'s
+  `fileHash` when it matches the file on disk, otherwise recomputes a SHA-256 from disk (`--trust-hash`
+  reuses the stored hash as-is). Records whose files are missing are still imported.
+- Assigns each migration a **unique, sequential batch number** in apply order. If the `mmk` changelog
+  already has records, imported batches **continue after** the existing maximum (use `--force` to import
+  into a non-empty changelog).
+- Leaves migration files that exist on disk but are **not** in the source changelog **pending** — they
+  run on the next `mmk up`, exactly as expected for newly added migrations.
+
+**Options**
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--from <collection>` | `changelog` | Source collection to read (never modified). |
+| `--to <collection>` | config `migrationsCollection` (`_mmk_migrations`) | Target collection to write the adopted history to. |
+| `--dry-run` | off | Preview the mapping and print the table; writes nothing. |
+| `--trust-hash` | off | Reuse `migrate-mongo`'s stored `fileHash` as-is instead of recomputing the checksum from disk. |
+| `--force` | off | Import into a changelog that already has records (imported batches continue after the existing max). |
+| `--no-lock` | off | Skip the MongoDB concurrency lock (local dev only). |
+
+Plus the global flags `--uri`, `--db`, `--dir`, and `--config`.
+
+**Forward-only — imported migrations cannot be rolled back**
+
+Adopted records are tagged `origin: 'migrate-mongo'`. `migrate-mongo` files use a positional
+`up(db, client)` signature, which `mmk` does not execute (it passes a single context object). To avoid
+ever corrupting your data, `mmk down` / `mmk redo` **refuse** an imported migration up front, before
+running or writing anything, and tell you why:
+
+```text
+✖ Cannot roll back 1 migrate-mongo-imported migration(s): 20260101-add-index.js
+```
+
+If you need an old migration to be reversible under `mmk`, re-author its file in the native format
+(named exports, single context argument — see [Migration file formats](#migration-file-formats)).
+
+</details>
 
 <details>
 <summary><b>Transactions</b> — wrap a migration in an all-or-nothing MongoDB transaction</summary>
@@ -379,7 +461,14 @@ module.exports = {
 };
 ```
 
-Optional per-file exports: `description` (shown in `status`) and `useTransaction`.
+Optional per-file exports: `description` (shown in `status`) and `useTransaction`. Note that `up`/`down`
+receive a **single context object** (`{ db, client, mongoose?, session? }`) — not `migrate-mongo`'s
+positional `(db, client)`.
+
+> **ESM vs CommonJS:** Node decides a file's module system from its extension and the nearest
+> `package.json` `"type"`. In a project with `"type": "module"`, a `.js` file is an ES module, so
+> `module.exports = …` throws *"module is not defined in ES module scope."* Use named `export`s (above),
+> or name the file `.cjs` and add `'.cjs'` to `fileExtensions` in your config.
 
 ---
 

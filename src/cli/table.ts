@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import { format } from 'date-fns';
-import type { StatusRow } from '../types/index.js';
+import type { ImportRow, StatusRow } from '../types/index.js';
 
 /** Render a checksum indicator cell */
 function checksumCell(value: boolean | null): string {
@@ -29,6 +29,32 @@ export function renderStatusTable(rows: StatusRow[]): string {
       row.appliedAt ? format(row.appliedAt, 'yyyy-MM-dd HH:mm:ss') : '',
       row.duration === null ? '' : `${row.duration}ms`,
       checksumCell(row.checksumOk),
+    ]);
+  }
+
+  return table.toString();
+}
+
+/** Render the checksum-source cell for an import row */
+function checksumSourceCell(source: ImportRow['checksumSource']): string {
+  if (source === 'recomputed') return chalk.green('recomputed');
+  if (source === 'reused') return chalk.cyan('reused');
+  return chalk.red('missing');
+}
+
+/** Render mapped import rows as a human-readable table string */
+export function renderImportTable(rows: ImportRow[]): string {
+  const table = new Table({
+    head: ['Migration', 'Batch', 'Applied At', 'Checksum'],
+    style: { head: ['cyan'] },
+  });
+
+  for (const row of rows) {
+    table.push([
+      row.file,
+      String(row.batch),
+      format(row.appliedAt, 'yyyy-MM-dd HH:mm:ss'),
+      checksumSourceCell(row.checksumSource),
     ]);
   }
 

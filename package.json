@@ -20,7 +20,7 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "mmk": "./dist/mmk.cjs"
+    "mmk": "dist/mmk.cjs"
   },
   "exports": {
     ".": {

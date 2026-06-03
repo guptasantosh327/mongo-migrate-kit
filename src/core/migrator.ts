@@ -5,10 +5,16 @@ import { type Db, MongoClient } from 'mongodb';
 import {
   ChecksumMismatchError,
   ConnectionFailedError,
+  ImportTargetNotEmptyError,
+  IrreversibleMigrationError,
   MigrationFileNotFoundError,
   NotAppliedError,
 } from '../errors/index.js';
 import type {
+  ImportChecksumSource,
+  ImportResult,
+  ImportRow,
+  MigrateMongoDoc,
   MigrationRecord,
   MmkConfig,
   MmkLogger,
@@ -27,8 +33,12 @@ import {
 import { Changelog } from './changelog.js';
 import { loadConfig } from './config.js';
 import { buildContext } from './context.js';
+import { isMigrateMongoDoc, mapMigrateMongoDocs } from './import.js';
 import { MigrationLock, runWithLock } from './lock.js';
 import { runMigration } from './runner.js';
+
+/** Default source collection name used by migrate-mongo */
+const MIGRATE_MONGO_COLLECTION = 'changelog';
 
 /** Options for {@link MigratorKit.up} */
 export interface UpOptions {
@@ -70,6 +80,22 @@ export interface InitOptions {
    * for `js`/`ts` formats.
    */
   secretProvider?: boolean;
+}
+
+/** Options for {@link MigratorKit.import} */
+export interface ImportOptions {
+  /** Source collection to read. Default: `changelog` (migrate-mongo's default) */
+  from?: string;
+  /** Target collection to write. Default: the config's `migrationsCollection` */
+  to?: string;
+  /** Preview the mapping without writing anything */
+  dryRun?: boolean;
+  /** Reuse the source `fileHash` verbatim instead of recomputing from disk */
+  trustHash?: boolean;
+  /** Proceed even when the target changelog already has records */
+  force?: boolean;
+  /** Skip lock acquisition (dev only) */
+  noLock?: boolean;
 }
 
 /**
@@ -312,13 +338,13 @@ export class MigratorKit {
     const changelog = this.requireChangelog();
     const logger = this.logger;
 
-    let names: string[];
+    let toRevert: MigrationRecord[];
     if (filename) {
       const record = await changelog.getByName(db, filename);
       if (!record || record.status !== 'applied') {
         throw new NotAppliedError('Migration is not applied', { filename });
       }
-      names = [filename];
+      toRevert = [record];
     } else {
       const batch = options.batch ?? (await changelog.getLastBatch(db));
       if (batch === null) {
@@ -326,17 +352,23 @@ export class MigratorKit {
         return [];
       }
       const records = await changelog.getByBatch(db, batch);
-      names = records
-        .filter((record) => record.status === 'applied')
-        .map((record) => record.name)
-        .sort()
-        .reverse();
+      toRevert = records.filter((record) => record.status === 'applied');
     }
 
-    if (names.length === 0) {
+    if (toRevert.length === 0) {
       logger.info('Nothing to rollback');
       return [];
     }
+
+    // Preflight, before running or writing anything: migrate-mongo-imported
+    // records are forward-only. Refuse the whole rollback up front with a clear
+    // reason so the changelog and collection are never left half-reverted.
+    this.assertReversible(toRevert);
+
+    const names = toRevert
+      .map((record) => record.name)
+      .sort()
+      .reverse();
 
     const context = buildContext(this.client as MongoClient, db, config.mongoose);
     const results: RunResult[] = [];
@@ -374,6 +406,32 @@ export class MigratorKit {
 
     await config.hooks?.afterAll?.(context);
     return results;
+  }
+
+  /**
+   * Refuse rollback of any migrate-mongo-imported record. These are forward-only:
+   * their files use migrate-mongo's positional `up(db, client)`/`down(db, client)`
+   * signature, which mmk cannot invoke safely, so reverting them could corrupt the
+   * collection. Throws before any migration runs or the changelog is touched.
+   */
+  private assertReversible(records: MigrationRecord[]): void {
+    const blocked = records.filter((record) => record.origin === 'migrate-mongo');
+    if (blocked.length === 0) {
+      return;
+    }
+    const names = blocked.map((record) => record.name);
+    this.logger.error(
+      `✖ Cannot roll back ${names.length} migrate-mongo-imported migration(s): ${names.join(', ')}`,
+    );
+    this.logger.dim(
+      'These were adopted via `mmk import` (forward-only). Their files use the positional ' +
+        'migrate-mongo signature, which mmk cannot run. Revert them manually or re-author ' +
+        'them in mmk format.',
+    );
+    throw new IrreversibleMigrationError(
+      `Cannot roll back migrate-mongo-imported migration(s): ${names.join(', ')}`,
+      { names },
+    );
   }
 
   /** Rollback then re-apply: the last applied migration, or a specific file */
@@ -518,5 +576,142 @@ export class MigratorKit {
     });
     this.logger.success(`✔ Created  ${path.basename(filepath)}`);
     return filepath;
+  }
+
+  /**
+   * Adopt an existing migrate-mongo `changelog` collection by mapping its
+   * records into our schema and writing them to `migrationsCollection`. The
+   * source collection is never modified. Forward-only: it records applied
+   * history so `up` skips it correctly — it does not adapt legacy migration
+   * file signatures, so `down`/`redo` on imported files is unsupported.
+   */
+  async import(options: ImportOptions = {}): Promise<ImportResult> {
+    const config = await this.ensureConfig();
+    await this.connect();
+    const lock = new MigrationLock(this.requireDb(), config.lockCollection, config.lockTTLSeconds);
+    return runWithLock(
+      lock,
+      { logger: this.logger, ...(options.noLock ? { noLock: true } : {}) },
+      () => this.runImport(options),
+    );
+  }
+
+  private async runImport(options: ImportOptions): Promise<ImportResult> {
+    const config = this.config as MmkConfig;
+    const db = this.requireDb();
+    const changelog = this.requireChangelog();
+    const logger = this.logger;
+
+    const source = options.from ?? MIGRATE_MONGO_COLLECTION;
+    const target = options.to ?? config.migrationsCollection;
+    const dryRun = options.dryRun ?? false;
+
+    // Records are written to `target`; reuse the connected changelog when it
+    // already points there, otherwise bind a fresh one (and ensure its index).
+    const targetChangelog =
+      target === config.migrationsCollection ? changelog : new Changelog(target);
+    if (targetChangelog !== changelog && !dryRun) {
+      await targetChangelog.ensureIndexes(db);
+    }
+
+    const rawDocs = await changelog.getForeignDocs(db, source);
+    if (rawDocs.length === 0) {
+      logger.info(`Nothing to import from "${source}"`);
+      return { source, target, imported: 0, skipped: 0, dryRun, rows: [] };
+    }
+
+    const valid: MigrateMongoDoc[] = [];
+    let skipped = 0;
+    for (const doc of rawDocs) {
+      if (isMigrateMongoDoc(doc)) {
+        valid.push(doc);
+      } else {
+        skipped += 1;
+        logger.warn('⚠ Skipping source doc without a usable fileName');
+      }
+    }
+
+    const existing = await targetChangelog.getAll(db);
+    if (!options.force && !dryRun && existing.length > 0) {
+      throw new ImportTargetNotEmptyError(
+        `Target collection "${target}" already has ${existing.length} record(s) — re-run with force to proceed`,
+        { target, existing: existing.length },
+      );
+    }
+
+    // Continue batch numbering after the batches already in the target so imported
+    // records never collide with existing ones. Records this import will overwrite
+    // (same name) are excluded, keeping a forced re-import's batch numbers stable.
+    const incomingNames = new Set(valid.map((doc) => doc.fileName));
+    const batchOffset = existing
+      .filter((record) => !incomingNames.has(record.name))
+      .reduce((max, record) => Math.max(max, record.batch), 0);
+
+    const rowSources = new Map<string, ImportChecksumSource>();
+    const records = mapMigrateMongoDocs(valid, {
+      environment: 'imported',
+      executedBy: 'mmk-import',
+      batchOffset,
+      resolveChecksum: (fileName, fileHash) => {
+        const resolved = this.resolveImportChecksum(fileName, fileHash, options.trustHash ?? false);
+        rowSources.set(fileName, resolved.source);
+        if (resolved.source === 'missing') {
+          logger.warn(`⚠ File not found on disk: ${fileName} — checksum unverifiable`);
+        }
+        return resolved;
+      },
+    });
+
+    const rows: ImportRow[] = records.map((record) => ({
+      file: record.name,
+      batch: record.batch,
+      appliedAt: record.appliedAt,
+      checksum: record.checksum,
+      checksumSource: rowSources.get(record.name) ?? 'missing',
+    }));
+
+    if (dryRun) {
+      logger.info(
+        `◎ Dry-run  Would import ${rows.length} record(s) from "${source}" → "${target}"`,
+      );
+      return { source, target, imported: 0, skipped, dryRun, rows };
+    }
+
+    for (const record of records) {
+      await targetChangelog.markApplied(db, record);
+    }
+
+    logger.success(`✔ Imported ${records.length} record(s) from "${source}" → "${target}"`);
+    return { source, target, imported: records.length, skipped, dryRun, rows };
+  }
+
+  /**
+   * Decide the checksum to store for an imported migration. Order: when
+   * `trustHash`, reuse the source `fileHash` if present; otherwise reuse it only
+   * when it matches a freshly computed hash (algorithms align), else recompute
+   * from disk; when the file is missing, fall back to the source hash or empty.
+   */
+  private resolveImportChecksum(
+    fileName: string,
+    fileHash: string | undefined,
+    trustHash: boolean,
+  ): { checksum: string; source: ImportChecksumSource } {
+    const filepath = this.filepath(fileName);
+    const exists = existsSync(filepath);
+
+    if (trustHash && fileHash) {
+      return { checksum: fileHash, source: 'reused' };
+    }
+    if (exists) {
+      const recomputed = computeChecksum(filepath);
+      if (fileHash && fileHash === recomputed) {
+        return { checksum: fileHash, source: 'reused' };
+      }
+      return { checksum: recomputed, source: 'recomputed' };
+    }
+    if (fileHash) {
+      return { checksum: fileHash, source: 'reused' };
+    }
+    return { checksum: '', source: 'missing' };
   }
 }

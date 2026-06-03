@@ -32,6 +32,13 @@ export interface MigrationModule {
 
 export type MigrationStatus = 'applied' | 'reverted';
 
+/**
+ * Where a changelog record originated. `'migrate-mongo'` marks a record adopted
+ * via `mmk import`; such records are forward-only and cannot be reverted by mmk.
+ * Absent (or `'mmk'`) means a natively-applied, reversible migration.
+ */
+export type MigrationOrigin = 'mmk' | 'migrate-mongo';
+
 /** A single record in the _mmk_migrations changelog collection */
 export interface MigrationRecord {
   /** Migration filename e.g. 20240526143021-add-users-index.ts */
@@ -51,6 +58,11 @@ export interface MigrationRecord {
   executedBy: string;
   /** Optional description from migration file */
   description?: string;
+  /**
+   * Origin of this record. Set to `'migrate-mongo'` for records adopted via
+   * `mmk import` — these are not reversible by mmk. Absent for native records.
+   */
+  origin?: MigrationOrigin;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -156,6 +168,49 @@ export interface StatusRow {
   description?: string;
 }
 
+// ─── Import (migrate-mongo adoption) ────────────────────────────────────────────
+
+/**
+ * The shape of a record in a migrate-mongo `changelog` collection. Only
+ * `fileName` and `appliedAt` are guaranteed; `fileHash` exists only when
+ * migrate-mongo ran with `useFileHash`, and `migrationBlock` only on newer
+ * versions.
+ */
+export interface MigrateMongoDoc {
+  fileName: string;
+  appliedAt: Date;
+  fileHash?: string;
+  migrationBlock?: number;
+}
+
+/** How an imported record's checksum was resolved */
+export type ImportChecksumSource = 'reused' | 'recomputed' | 'missing';
+
+/** One mapped row produced by `mmk import` */
+export interface ImportRow {
+  file: string;
+  batch: number;
+  appliedAt: Date;
+  checksum: string;
+  checksumSource: ImportChecksumSource;
+}
+
+/** Outcome of an `mmk import` run */
+export interface ImportResult {
+  /** Source collection that was read (e.g. `changelog`) */
+  source: string;
+  /** Target collection records were written to (e.g. `_mmk_migrations`) */
+  target: string;
+  /** Number of records written (0 when `dryRun` is true) */
+  imported: number;
+  /** Number of source docs skipped as invalid (missing `fileName`) */
+  skipped: number;
+  /** True when the run previewed only and wrote nothing */
+  dryRun: boolean;
+  /** The mapped rows, in apply order */
+  rows: ImportRow[];
+}
+
 // ─── Error Codes ──────────────────────────────────────────────────────────────
 
 export type MmkErrorCode =
@@ -169,4 +224,6 @@ export type MmkErrorCode =
   | 'CONFIG_FILE_EXISTS'
   | 'CONNECTION_FAILED'
   | 'ALREADY_APPLIED'
-  | 'NOT_APPLIED';
+  | 'NOT_APPLIED'
+  | 'IMPORT_TARGET_NOT_EMPTY'
+  | 'MIGRATION_IRREVERSIBLE';
