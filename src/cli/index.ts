@@ -20,7 +20,9 @@ export function buildProgram(): Command {
     .option('--db <name>', 'Database name (overrides MMK_DB)')
     .option('--dir <path>', 'Migrations directory (overrides MMK_MIGRATIONS_DIR)')
     .option('--config <path>', 'Path to a config file (overrides auto-discovery)')
-    .version('1.0.0');
+    // Injected from package.json at build time (see tsup.config.ts); falls back
+    // to a dev sentinel when run unbundled (e.g. via tsx).
+    .version(process.env.MMK_VERSION ?? '0.0.0-dev');
 
   registerInit(program);
   registerImport(program);

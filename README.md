@@ -8,7 +8,7 @@
 
 _A modern, drop-in replacement for `migrate-mongo` etc._
 
-[![npm](https://img.shields.io/badge/npm-v1.0.0-1E9E57?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/mongo-migrate-kit)
+[![npm](https://img.shields.io/badge/npm-v1.1.0-1E9E57?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/mongo-migrate-kit)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-1E9E57?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A518-1E9E57?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![MongoDB](https://img.shields.io/badge/MongoDB-%E2%89%A55.0-1E9E57?style=flat-square&logo=mongodb&logoColor=white)](https://www.mongodb.com)
