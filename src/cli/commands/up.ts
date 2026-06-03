@@ -28,11 +28,15 @@ export function registerUp(program: Command): void {
         }
       }
 
-      await withMigrator(opts, async (migrator) => {
-        await migrator.up(file, {
-          noLock: opts.lock === false,
-          ...(opts.force ? { force: true } : {}),
-        });
-      });
+      await withMigrator(
+        opts,
+        async (migrator) => {
+          await migrator.up(file, {
+            noLock: opts.lock === false,
+            ...(opts.force ? { force: true } : {}),
+          });
+        },
+        { spinner: true },
+      );
     });
 }

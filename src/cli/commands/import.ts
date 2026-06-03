@@ -27,18 +27,22 @@ export function registerImport(program: Command): void {
         lock?: boolean;
       };
 
-      await withMigrator(opts, async (migrator) => {
-        const result = await migrator.import({
-          noLock: opts.lock === false,
-          ...(opts.from ? { from: opts.from } : {}),
-          ...(opts.to ? { to: opts.to } : {}),
-          ...(opts.dryRun ? { dryRun: true } : {}),
-          ...(opts.trustHash ? { trustHash: true } : {}),
-          ...(opts.force ? { force: true } : {}),
-        });
-        if (result.rows.length > 0) {
-          createLogger().info(renderImportTable(result.rows));
-        }
-      });
+      await withMigrator(
+        opts,
+        async (migrator) => {
+          const result = await migrator.import({
+            noLock: opts.lock === false,
+            ...(opts.from ? { from: opts.from } : {}),
+            ...(opts.to ? { to: opts.to } : {}),
+            ...(opts.dryRun ? { dryRun: true } : {}),
+            ...(opts.trustHash ? { trustHash: true } : {}),
+            ...(opts.force ? { force: true } : {}),
+          });
+          if (result.rows.length > 0) {
+            createLogger().info(renderImportTable(result.rows));
+          }
+        },
+        { spinner: true },
+      );
     });
 }

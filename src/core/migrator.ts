@@ -18,6 +18,7 @@ import type {
   MigrationRecord,
   MmkConfig,
   MmkLogger,
+  ProgressReporter,
   RunResult,
   StatusRow,
 } from '../types/index.js';
@@ -106,11 +107,18 @@ export interface ImportOptions {
 export interface MigratorKitOptions {
   /** Explicit config file path — overrides auto-discovery */
   configPath?: string;
+  /**
+   * Optional lifecycle reporter, invoked around each migration's execution so a
+   * UI (the CLI's ora spinner) can show progress. Core never imports a spinner
+   * library — it only calls these callbacks.
+   */
+  progress?: ProgressReporter;
 }
 
 export class MigratorKit {
   private readonly partialConfig: Partial<MmkConfig>;
   private readonly configPath: string | undefined;
+  private readonly progress: ProgressReporter | undefined;
   private config: MmkConfig | undefined;
   private client: MongoClient | undefined;
   private db: Db | undefined;
@@ -119,6 +127,7 @@ export class MigratorKit {
   constructor(config: Partial<MmkConfig> = {}, options: MigratorKitOptions = {}) {
     this.partialConfig = config;
     this.configPath = options.configPath;
+    this.progress = options.progress;
   }
 
   /** Resolve and cache the full configuration */
@@ -279,6 +288,7 @@ export class MigratorKit {
       const migration = await loadMigrationFile(filepath);
       const useTransaction = migration.useTransaction ?? config.useTransaction;
 
+      this.progress?.onStart(name, 'up');
       try {
         const { duration } = await runMigration({
           name,
@@ -288,6 +298,7 @@ export class MigratorKit {
           useTransaction,
           ...(config.hooks ? { hooks: config.hooks } : {}),
         });
+        this.progress?.onStop();
 
         const record: MigrationRecord = {
           name,
@@ -306,6 +317,7 @@ export class MigratorKit {
         results.push({ file: name, status: 'applied', duration, batch });
         await config.hooks?.afterEach?.(name, duration, context);
       } catch (error) {
+        this.progress?.onStop();
         logger.error(`✖ Error    ${name}`);
         results.push({
           file: name,
@@ -380,6 +392,7 @@ export class MigratorKit {
       const migration = await loadMigrationFile(this.filepath(name));
       const useTransaction = migration.useTransaction ?? config.useTransaction;
 
+      this.progress?.onStart(name, 'down');
       try {
         const { duration } = await runMigration({
           name,
@@ -389,11 +402,13 @@ export class MigratorKit {
           useTransaction,
           ...(config.hooks ? { hooks: config.hooks } : {}),
         });
+        this.progress?.onStop();
         await changelog.markReverted(db, name);
         logger.success(`↩ Reverted ${name}   [${duration}ms]`);
         results.push({ file: name, status: 'reverted', duration });
         await config.hooks?.afterEach?.(name, duration, context);
       } catch (error) {
+        this.progress?.onStop();
         logger.error(`✖ Error    ${name}`);
         results.push({
           file: name,

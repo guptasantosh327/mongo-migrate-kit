@@ -15,15 +15,19 @@ export function registerList(program: Command): void {
         pending?: boolean;
         applied?: boolean;
       };
-      await withMigrator(opts, async (migrator) => {
-        const filter = opts.pending ? 'pending' : opts.applied ? 'applied' : 'all';
-        const rows = await migrator.list(filter);
-        const logger = createLogger();
-        if (rows.length === 0) {
-          logger.info('No migrations found');
-          return;
-        }
-        logger.info(renderStatusTable(rows));
-      });
+      await withMigrator(
+        opts,
+        async (migrator) => {
+          const filter = opts.pending ? 'pending' : opts.applied ? 'applied' : 'all';
+          const rows = await migrator.list(filter);
+          const logger = createLogger();
+          if (rows.length === 0) {
+            logger.info('No migrations found');
+            return;
+          }
+          logger.info(renderStatusTable(rows));
+        },
+        { spinner: true },
+      );
     });
 }

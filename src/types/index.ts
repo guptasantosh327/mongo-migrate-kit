@@ -144,6 +144,22 @@ export interface MmkLogger {
   dim: (msg: string) => void;
 }
 
+// ─── Progress Reporter ─────────────────────────────────────────────────────────
+
+/**
+ * Receives migration lifecycle callbacks so a presentation layer (e.g. an ora
+ * spinner) can react. Deliberately separate from {@link MigrationHooks}: hooks
+ * run user DB logic inside the migration; this only drives a UI indicator and
+ * never touches the database. The CLI uses it to show a spinner while each
+ * migration executes; core invokes it but never imports any spinner library.
+ */
+export interface ProgressReporter {
+  /** A migration's up()/down() is about to execute */
+  onStart: (name: string, direction: 'up' | 'down') => void;
+  /** The in-flight migration finished (success or error) — stop any indicator */
+  onStop: () => void;
+}
+
 // ─── Results ──────────────────────────────────────────────────────────────────
 
 export type RunResultStatus = 'applied' | 'reverted' | 'skipped' | 'error';

@@ -9,8 +9,12 @@ export function registerRedo(program: Command): void {
     .argument('[file]', 'Specific migration file to redo')
     .action(async (file: string | undefined, _opts, command) => {
       const opts = command.optsWithGlobals() as CliOptions;
-      await withMigrator(opts, async (migrator) => {
-        await migrator.redo(file);
-      });
+      await withMigrator(
+        opts,
+        async (migrator) => {
+          await migrator.redo(file);
+        },
+        { spinner: true },
+      );
     });
 }

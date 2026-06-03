@@ -27,6 +27,7 @@ export type {
   MmkConfigInput,
   MmkErrorCode,
   MmkLogger,
+  ProgressReporter,
   RunResult,
   RunResultStatus,
   StatusRow,

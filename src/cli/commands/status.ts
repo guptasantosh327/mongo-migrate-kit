@@ -10,14 +10,18 @@ export function registerStatus(program: Command): void {
     .description('Show the full migration status table')
     .action(async (_opts, command) => {
       const opts = command.optsWithGlobals() as CliOptions;
-      await withMigrator(opts, async (migrator) => {
-        const rows = await migrator.status();
-        const logger = createLogger();
-        if (rows.length === 0) {
-          logger.info('No migrations found');
-          return;
-        }
-        logger.info(renderStatusTable(rows));
-      });
+      await withMigrator(
+        opts,
+        async (migrator) => {
+          const rows = await migrator.status();
+          const logger = createLogger();
+          if (rows.length === 0) {
+            logger.info('No migrations found');
+            return;
+          }
+          logger.info(renderStatusTable(rows));
+        },
+        { spinner: true },
+      );
     });
 }

@@ -13,15 +13,19 @@ export function registerDryRun(program: Command): void {
     .argument('[file]', 'Specific migration file')
     .action(async (direction: string, file: string | undefined, _opts, command) => {
       const opts = command.optsWithGlobals() as CliOptions;
-      await withMigrator(opts, async (migrator) => {
-        if (direction !== 'up' && direction !== 'down') {
-          throw new ConfigInvalidError("Direction must be 'up' or 'down'", { direction });
-        }
-        const rows = await migrator.dryRun(direction, file);
-        const logger = createLogger();
-        if (rows.length > 0) {
-          logger.info(renderStatusTable(rows));
-        }
-      });
+      await withMigrator(
+        opts,
+        async (migrator) => {
+          if (direction !== 'up' && direction !== 'down') {
+            throw new ConfigInvalidError("Direction must be 'up' or 'down'", { direction });
+          }
+          const rows = await migrator.dryRun(direction, file);
+          const logger = createLogger();
+          if (rows.length > 0) {
+            logger.info(renderStatusTable(rows));
+          }
+        },
+        { spinner: true },
+      );
     });
 }
