@@ -13,3 +13,4 @@ tests/.tmp
 # VitePress
 docs/.vitepress/dist
 docs/.vitepress/cache
+.vercel

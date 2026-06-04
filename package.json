@@ -9,7 +9,7 @@
     "type": "git",
     "url": "git+https://github.com/guptasantosh327/mongo-migrate-kit.git"
   },
-  "homepage": "https://github.com/guptasantosh327/mongo-migrate-kit#readme",
+  "homepage": "https://mongo-migrate-kit.vercel.app/",
   "bugs": {
     "url": "https://github.com/guptasantosh327/mongo-migrate-kit/issues"
   },
