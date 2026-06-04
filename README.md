@@ -8,57 +8,47 @@
 
 _A modern, drop-in replacement for `migrate-mongo` etc._
 
-[![npm](https://img.shields.io/badge/npm-v1.2.0-1E9E57?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/mongo-migrate-kit)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-1E9E57?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![npm version](https://img.shields.io/npm/v/mongo-migrate-kit?style=flat-square&color=1E9E57&logo=npm&logoColor=white)](https://www.npmjs.com/package/mongo-migrate-kit)
+[![Docs](https://img.shields.io/badge/docs-online-1E9E57?style=flat-square&logo=readthedocs&logoColor=white)](https://guptasantosh327.github.io/mongo-migrate-kit/)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A518-1E9E57?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
-[![MongoDB](https://img.shields.io/badge/MongoDB-%E2%89%A55.0-1E9E57?style=flat-square&logo=mongodb&logoColor=white)](https://www.mongodb.com)
-[![Known Vulnerabilities](https://snyk.io/test/github/seppevs/migrate-mongo/badge.svg)](https://socket.dev/npm/package/mongo-migrate-kit/overview/1.2.0)
+[![Known Vulnerabilities](https://snyk.io/test/npm/mongo-migrate-kit/badge.svg)](https://snyk.io/test/npm/mongo-migrate-kit)
+[![License: MIT](https://img.shields.io/badge/License-MIT-1E9E57?style=flat-square)](https://opensource.org/licenses/MIT)
 
 
-Single-file runs · per-batch rollback · dry-run previews · transactions · lifecycle hooks ·
-SHA-256 tamper detection · MongoDB-native locking · an append-only audit trail — all behind one
-small `mmk` CLI and a fully-typed API.
+Precise, safe migrations for MongoDB. Run a single file, roll back anything, and preview every
+change before it touches your database.
+
+### 📖 [Read the documentation →](https://guptasantosh327.github.io/mongo-migrate-kit/)
 
 </div>
 
 ---
 
-## Why mongo-migrate-kit
+## Reasons to choose it
 
-Built for teams who outgrew the basics. You keep everything you expect — `up`, `down`, `create`,
-`status` — and gain the features the older tools never added:
-
-- **Dry-run previews** — `mmk dry-run up` shows exactly what would run before anything touches the
-  database (something `migrate-mongo` users have [asked for since 2019](https://github.com/seppevs/migrate-mongo/issues/43)).
-- **Run one file at a time** — `mmk up <file>` / `mmk down <file>`, not just "all pending" or "the last one".
-- **Real rollbacks** — revert any batch (`--batch 3`), the last N migrations (`--steps 2`), a single
-  migration, or `redo` in one step — instead of only the most recently applied migration.
-- **A cleaner, richer CLI** — a focused set of commands with colorized output and a status table,
-  versus the bare `init`/`create`/`up`/`down`/`status` set.
-- **Safe by default** — an atomic MongoDB lock (with a renewal heartbeat for long migrations) stops
-  two deploys racing; SHA-256 checksums catch edited migrations before they silently re-run; and
-  `mmk unlock` clears a lock left by a crashed run.
-- **CI-friendly** — `--json` on every data command for clean machine-readable output, and
-  `mmk status --check` exits non-zero when migrations are pending so you can gate a deploy.
-- **First-class TypeScript _and_ JavaScript** — `.ts` (via `tsx`), ESM, and CommonJS all just work,
-  with a fully-typed context and config — no `ts-node` plumbing.
-- **Zero config files required** — drive everything from env vars, or generate a documented config with `mmk init`.
-- **Audit-ready** — every run records duration, checksum, environment, user, and batch, and the
-  history is **never deleted** (a rollback updates the record, it doesn't remove it).
+- **Run a single migration** — `mmk up <file>`, not just "all pending".
+- **Roll back anything** — a batch (`--batch 3`), the last N (`--steps 2`), one file, or `redo`.
+- **Preview before you run** — `mmk dry-run up` prints the exact plan without touching the database.
+- **No race conditions** — an atomic MongoDB lock stops two deploys running migrations at once.
+- **Tamper detection** — SHA-256 checksums catch a migration edited after it was applied.
+- **Audit trail kept** — a rollback updates the record, it never deletes it.
+- **Lifecycle hooks** — `beforeAll`, `afterAll`, `beforeEach`, `afterEach`, `onError`.
+- **Opt-in transactions** — wrap a migration so it fully commits or fully aborts.
+- **TypeScript, ESM & CommonJS** — all run with no `ts-node` plumbing.
+- **Zero config files required** — drive everything from env vars if you prefer.
 
 ### How it compares to `migrate-mongo`
 
-| Capability | `migrate-mongo` | `mongo-migrate-kit` |
-|---|:---:|:---:|
-| `up` / `down` / `create` / `status` | ✅ | ✅ |
-| Dry-run preview | ❌ | ✅ |
-| Run a single migration file | ❌ | ✅ |
-| Roll back a specific batch or file | ❌ *(last only)* | ✅ |
-| `redo` (down + up) | ❌ | ✅ |
-| SHA-256 checksum / tamper detection | ❌ | ✅ |
-| Lifecycle hooks | ❌ | ✅ |
-| First-class TypeScript | community setup | ✅ built-in |
-| History preserved on rollback | ❌ *(entry removed)* | ✅ *(never deleted)* |
+| Capability                                      | `migrate-mongo` | `mongo-migrate-kit` |
+| ----------------------------------------------- | :-------------: | :-----------------: |
+| Run a single migration file                     |        ❌        |          ✅          |
+| Roll back a specific batch (not just the last)  |        ❌        |          ✅          |
+| Dry-run preview                                 |        ❌        |          ✅          |
+| `redo` (down + up)                              |        ❌        |          ✅          |
+| Checksum / tamper detection                     |        ❌        |          ✅          |
+| Lifecycle hooks                                 |        ❌        |          ✅          |
+| First-class TypeScript (no setup)               |        ❌        |          ✅          |
+| History kept on rollback (never deleted)        |        ❌        |          ✅          |
 | Adopt an existing `migrate-mongo` changelog | — | ✅ `mmk import` |
 
 <sub>Reflects `migrate-mongo`'s documented CLI as of mid-2026. It has since added transaction access
@@ -119,6 +109,20 @@ export async function down({ db }: MigrationContext): Promise<void> {
 ```
 
 > Prefer no files at all? Skip `mmk init` and export `MMK_URI` and `MMK_DB` — that is enough to run.
+
+---
+
+## Documentation
+
+Full docs, guides, and the API reference live at
+**[guptasantosh327.github.io/mongo-migrate-kit](https://guptasantosh327.github.io/mongo-migrate-kit/)**.
+
+- [Why mongo-migrate-kit?](https://guptasantosh327.github.io/mongo-migrate-kit/guide/why) — how it compares to `migrate-mongo`
+- [Core Concepts](https://guptasantosh327.github.io/mongo-migrate-kit/guide/concepts) — migrations, batches, the changelog, locking
+- [Getting Started](https://guptasantosh327.github.io/mongo-migrate-kit/guide/getting-started) & [Tutorial](https://guptasantosh327.github.io/mongo-migrate-kit/guide/tutorial)
+- [Configuration](https://guptasantosh327.github.io/mongo-migrate-kit/guide/configuration) · [Writing Migrations](https://guptasantosh327.github.io/mongo-migrate-kit/guide/writing-migrations) · [Transactions](https://guptasantosh327.github.io/mongo-migrate-kit/guide/transactions) · [Hooks](https://guptasantosh327.github.io/mongo-migrate-kit/guide/hooks)
+- [Programmatic API](https://guptasantosh327.github.io/mongo-migrate-kit/guide/api) · [CI/CD](https://guptasantosh327.github.io/mongo-migrate-kit/guide/ci-cd) · [Troubleshooting](https://guptasantosh327.github.io/mongo-migrate-kit/guide/troubleshooting)
+- Reference: [CLI Cheatsheet](https://guptasantosh327.github.io/mongo-migrate-kit/reference/cli) · [Error Codes](https://guptasantosh327.github.io/mongo-migrate-kit/reference/error-codes)
 
 ---
 

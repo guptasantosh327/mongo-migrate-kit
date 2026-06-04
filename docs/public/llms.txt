@@ -1,0 +1,46 @@
+# mongo-migrate-kit
+
+> Production-grade MongoDB migration toolkit for Node.js and TypeScript. Run a single migration file,
+> roll back any batch or the last N, preview with dry-run, wrap migrations in transactions, verify
+> file checksums, and run safely behind a native MongoDB concurrency lock — via the `mmk` CLI or a
+> fully-typed programmatic API. A drop-in alternative to migrate-mongo, with one-command import of an
+> existing migrate-mongo changelog.
+
+Key facts:
+- Package (npm): `mongo-migrate-kit` — install with `npm install mongo-migrate-kit mongodb`
+- CLI binary: `mmk`
+- Requires Node.js >= 18 and MongoDB >= 5.0; supports TypeScript, ESM, and CommonJS
+- License: MIT
+- Repository: https://github.com/guptasantosh327/mongo-migrate-kit
+
+## Guide
+
+- [Why mongo-migrate-kit?](https://guptasantosh327.github.io/mongo-migrate-kit/guide/why): Reasons to choose it and how it compares to migrate-mongo
+- [Core Concepts](https://guptasantosh327.github.io/mongo-migrate-kit/guide/concepts): Migrations, batches, the changelog, ordering, locking, and checksums
+- [Getting Started](https://guptasantosh327.github.io/mongo-migrate-kit/guide/getting-started): Install, configure, create, and run your first migration
+- [Tutorial](https://guptasantosh327.github.io/mongo-migrate-kit/guide/tutorial): End-to-end worked example from init to rollback
+- [Configuration](https://guptasantosh327.github.io/mongo-migrate-kit/guide/configuration): Config file, env vars, precedence, and all options
+- [Writing Migrations](https://guptasantosh327.github.io/mongo-migrate-kit/guide/writing-migrations): The up/down contract in TypeScript, ESM, and CommonJS
+- [Transactions](https://guptasantosh327.github.io/mongo-migrate-kit/guide/transactions): Opt-in MongoDB transactions per file or globally
+- [Lifecycle Hooks](https://guptasantosh327.github.io/mongo-migrate-kit/guide/hooks): beforeAll, afterAll, beforeEach, afterEach, onError
+- [Programmatic API](https://guptasantosh327.github.io/mongo-migrate-kit/guide/api): The MigratorKit class, methods, and result types
+- [CI/CD & Deployment](https://guptasantosh327.github.io/mongo-migrate-kit/guide/ci-cd): GitHub Actions, Docker, deploy gates, and JSON output
+- [Troubleshooting](https://guptasantosh327.github.io/mongo-migrate-kit/guide/troubleshooting): Common errors and how to fix them
+- [Migrating from migrate-mongo](https://guptasantosh327.github.io/mongo-migrate-kit/guide/migrate-mongo): Adopt an existing migrate-mongo changelog
+- [FAQ](https://guptasantosh327.github.io/mongo-migrate-kit/guide/faq): Common questions about running MongoDB migrations
+
+## Commands
+
+- [mmk up](https://guptasantosh327.github.io/mongo-migrate-kit/commands/up): Run all pending migrations, or a single file
+- [mmk down](https://guptasantosh327.github.io/mongo-migrate-kit/commands/down): Roll back the last batch, a batch, the last N, or a file
+- [mmk redo](https://guptasantosh327.github.io/mongo-migrate-kit/commands/redo): Roll back then re-apply a migration
+- [mmk status & list](https://guptasantosh327.github.io/mongo-migrate-kit/commands/status): Inspect migration state; --check gates CI
+- [mmk create & init](https://guptasantosh327.github.io/mongo-migrate-kit/commands/create): Scaffold migrations and generate a config
+- [mmk dry-run](https://guptasantosh327.github.io/mongo-migrate-kit/commands/dry-run): Preview up/down without touching the database
+- [mmk import](https://guptasantosh327.github.io/mongo-migrate-kit/commands/import): Adopt a migrate-mongo changelog (forward-only)
+- [mmk unlock](https://guptasantosh327.github.io/mongo-migrate-kit/commands/unlock): Force-release a stuck concurrency lock
+
+## Reference
+
+- [CLI Cheatsheet](https://guptasantosh327.github.io/mongo-migrate-kit/reference/cli): Every command and flag on one page
+- [Error Codes](https://guptasantosh327.github.io/mongo-migrate-kit/reference/error-codes): All error codes, classes, causes, and fixes

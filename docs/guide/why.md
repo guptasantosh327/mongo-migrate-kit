@@ -4,6 +4,13 @@ Most MongoDB migration tools run every pending migration, then only undo the las
 `mongo-migrate-kit` gives you precise control over what runs and what rolls back — and won't leave
 your database half-migrated when something fails.
 
+::: info Where to start
+**New to migrations?** Read [Core Concepts](/guide/concepts), then follow the
+[Tutorial](/guide/tutorial). <br>
+**Done this before?** Jump to [Getting Started](/guide/getting-started), the
+[CLI Cheatsheet](/reference/cli), or the [Programmatic API](/guide/api).
+:::
+
 ## Reasons to choose it
 
 - **Run a single migration** — `mmk up <file>`, not just "all pending".

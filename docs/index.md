@@ -7,7 +7,7 @@ titleTemplate: Elegant MongoDB migrations for Node.js
 hero:
   name: mongo-migrate-kit
   text: Elegant MongoDB migrations for Node.js
-  tagline: Single-file runs · real rollbacks · dry-run previews · transactions · checksums · MongoDB-native locking — behind one small mmk CLI and a fully-typed API.
+  tagline: Precise, safe migrations for MongoDB. Run a single file, roll back anything, and preview every change before it touches your database.
   image:
     src: /logo.png
     alt: mongo-migrate-kit

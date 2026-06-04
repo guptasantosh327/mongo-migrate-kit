@@ -77,24 +77,21 @@
   letter-spacing: -0.02em;
 }
 
-/* ─── Home feature cards: lift + glow on hover (clickable cards) ───────── */
+/* ─── Home feature cards: glow on hover (clickable, no layout shift) ───── */
 .VPFeatures .VPFeature {
   transition:
     border-color 0.25s ease,
     background-color 0.25s ease,
-    transform 0.25s ease,
     box-shadow 0.25s ease;
-  will-change: transform;
 }
 
 .VPFeatures .VPFeature.link:hover {
   border-color: var(--vp-c-brand-1);
-  transform: translateY(-4px);
-  box-shadow: 0 12px 30px rgba(0, 104, 74, 0.18);
+  box-shadow: 0 8px 24px rgba(0, 104, 74, 0.14);
 }
 
 .dark .VPFeatures .VPFeature.link:hover {
-  box-shadow: 0 12px 30px rgba(0, 237, 100, 0.16);
+  box-shadow: 0 8px 24px rgba(0, 237, 100, 0.12);
 }
 
 /* Make the "learn more" link adopt the brand color on card hover */
