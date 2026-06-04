@@ -11,15 +11,18 @@ export function registerDryRun(program: Command): void {
     .description('Preview what an up or down would do, without touching the database')
     .argument('<direction>', "Either 'up' or 'down'")
     .argument('[file]', 'Specific migration file')
+    .option('--steps <n>', 'Preview reverting the last N migrations (down only)')
     .action(async (direction: string, file: string | undefined, _opts, command) => {
-      const opts = command.optsWithGlobals() as CliOptions;
+      const opts = command.optsWithGlobals() as CliOptions & { steps?: string };
       await withMigrator(
         opts,
         async (migrator) => {
           if (direction !== 'up' && direction !== 'down') {
             throw new ConfigInvalidError("Direction must be 'up' or 'down'", { direction });
           }
-          const rows = await migrator.dryRun(direction, file);
+          const rows = await migrator.dryRun(direction, file, {
+            ...(opts.steps !== undefined ? { steps: Number(opts.steps) } : {}),
+          });
           const logger = createLogger();
           if (rows.length > 0) {
             logger.info(renderStatusTable(rows));

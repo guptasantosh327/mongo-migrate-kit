@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { startTestMongo, type TestMongo } from '../helpers/mongo.js';
+import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
 import { failingMigration, insertMigration, makeProject } from '../helpers/project.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -115,6 +115,32 @@ describe('mmk CLI (integration)', () => {
     expect(await mongo.db.collection('_mmk_migrations').countDocuments()).toBe(0);
   });
 
+  it('should apply per-file batches with up --step then peel them with down --steps', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    project.write('0003-c.ts', insertMigration('things', 'c'));
+
+    const up = await runCli(baseArgs(['up', '--step']));
+    expect(up.code).toBe(0);
+    const batches = (
+      await mongo.db.collection('_mmk_migrations').find().sort({ name: 1 }).toArray()
+    ).map((d) => d.batch);
+    expect(batches).toEqual([1, 2, 3]);
+
+    const down = await runCli(baseArgs(['down', '--steps', '2']));
+    expect(down.code).toBe(0);
+    // Only 0001-a's marker survives.
+    expect(await mongo.db.collection('things').countDocuments()).toBe(1);
+  });
+
+  it('should exit 1 when down combines --steps with --batch', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await runCli(baseArgs(['up']));
+    const result = await runCli(baseArgs(['down', '--steps', '1', '--batch', '1']));
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('CONFIG_INVALID');
+  });
+
   it('should resolve an async function config file (simulating a fetched secret)', async () => {
     project.write('0001-a.ts', insertMigration('things', 'a'));
     // Config lives in its own cwd (as in a real project); the migrations dir is
@@ -154,6 +180,18 @@ describe('mmk CLI (integration)', () => {
     expect(result.stdout).toContain('0001-a.ts');
     // DB untouched
     expect(await mongo.db.collection('_mmk_migrations').countDocuments()).toBe(0);
+  });
+
+  it('should preview a step rollback with dry-run down --steps and write nothing', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    await runCli(baseArgs(['up']));
+    const result = await runCli(baseArgs(['dry-run', 'down', '--steps', '1']));
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('0002-b.ts');
+    expect(result.stdout).not.toContain('0001-a.ts');
+    // nothing reverted
+    expect(await mongo.db.collection('things').countDocuments()).toBe(2);
   });
 
   it('should create a mmk.config.js by default with init', async () => {
@@ -211,7 +249,11 @@ describe('mmk CLI (integration)', () => {
 
   it('should generate a correctly named file and default to .js with no config or flag', async () => {
     // Run from a clean dir (no config file) so the built-in default applies.
-    const result = await runCli(['create', 'add users index', '--dir', project.dir], {}, project.dir);
+    const result = await runCli(
+      ['create', 'add users index', '--dir', project.dir],
+      {},
+      project.dir,
+    );
     expect(result.code).toBe(0);
     const created = readdirSync(project.dir).filter((f) => f.endsWith('add-users-index.js'));
     expect(created).toHaveLength(1);

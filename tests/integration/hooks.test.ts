@@ -1,8 +1,13 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MigrationExecutionFailedError } from '../../src/errors/index.js';
 import type { MigratorKit } from '../../src/core/migrator.js';
-import { startTestMongo, type TestMongo } from '../helpers/mongo.js';
-import { failingMigration, insertMigration, makeMigrator, makeProject } from '../helpers/project.js';
+import { MigrationExecutionFailedError } from '../../src/errors/index.js';
+import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
+import {
+  failingMigration,
+  insertMigration,
+  makeMigrator,
+  makeProject,
+} from '../helpers/project.js';
 
 let mongo: TestMongo;
 const DB = 'mmk_hooks_test';

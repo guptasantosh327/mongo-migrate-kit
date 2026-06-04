@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MigratorKit } from '../../src/core/migrator.js';
-import { startTestMongo, type TestMongo } from '../helpers/mongo.js';
+import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
 import { insertMigration, makeMigrator, makeProject } from '../helpers/project.js';
 
 let mongo: TestMongo;

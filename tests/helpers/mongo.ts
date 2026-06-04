@@ -1,5 +1,5 @@
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { type Db, MongoClient } from 'mongodb';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 
 /** A running in-memory MongoDB plus a connected client and database handle */
 export interface TestMongo {

@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { NotAppliedError } from '../../src/errors/index.js';
 import { Changelog } from '../../src/core/changelog.js';
 import type { MigratorKit } from '../../src/core/migrator.js';
-import { startTestMongo, type TestMongo } from '../helpers/mongo.js';
+import { ConfigInvalidError, NotAppliedError } from '../../src/errors/index.js';
+import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
 import { insertMigration, makeMigrator, makeProject } from '../helpers/project.js';
 
 let mongo: TestMongo;
@@ -77,5 +77,58 @@ describe('MigratorKit.down (integration)', () => {
     setup();
     const results = await migrator.down();
     expect(results).toEqual([]);
+  });
+
+  it('should revert the last N migrations with steps, newest first, ignoring batches', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    project.write('0003-c.ts', insertMigration('things', 'c'));
+    // Two separate runs → batch 1 holds a, batch 2 holds b+c.
+    await migrator.up('0001-a.ts');
+    await migrator.up();
+    const results = await migrator.down(undefined, { steps: 2 });
+    expect(results.map((r) => r.file)).toEqual(['0003-c.ts', '0002-b.ts']);
+    // 0001-a.ts (batch 1) is untouched even though steps crossed into batch 2.
+    expect(await mongo.db.collection('things').countDocuments()).toBe(1);
+  });
+
+  it('should revert just the last applied file with steps=1', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    await migrator.up();
+    const results = await migrator.down(undefined, { steps: 1 });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.file).toBe('0002-b.ts');
+    expect(await mongo.db.collection('things').countDocuments()).toBe(1);
+  });
+
+  it('should clamp steps to the number of applied migrations', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await migrator.up();
+    const results = await migrator.down(undefined, { steps: 5 });
+    expect(results).toHaveLength(1);
+    expect(await mongo.db.collection('things').countDocuments()).toBe(0);
+  });
+
+  it('should reject steps combined with a filename', async () => {
+    setup();
+    await expect(migrator.down('0001-a.ts', { steps: 1 })).rejects.toBeInstanceOf(
+      ConfigInvalidError,
+    );
+  });
+
+  it('should reject steps combined with batch', async () => {
+    setup();
+    await expect(migrator.down(undefined, { steps: 1, batch: 1 })).rejects.toBeInstanceOf(
+      ConfigInvalidError,
+    );
+  });
+
+  it('should reject a non-positive steps value', async () => {
+    setup();
+    await expect(migrator.down(undefined, { steps: 0 })).rejects.toBeInstanceOf(ConfigInvalidError);
   });
 });

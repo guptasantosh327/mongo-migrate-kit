@@ -1,7 +1,7 @@
 import type { Db } from 'mongodb';
 import { describe, expect, it, vi } from 'vitest';
-import { LockAlreadyHeldError, LockReleaseFailedError } from '../../src/errors/index.js';
 import { LOCK_ID, MigrationLock, runWithLock } from '../../src/core/lock.js';
+import { LockAlreadyHeldError, LockReleaseFailedError } from '../../src/errors/index.js';
 import { silentLogger } from '../../src/utils/logger.js';
 
 interface MockCollection {

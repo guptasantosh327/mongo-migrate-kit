@@ -1,7 +1,7 @@
 import type { Db, MongoClient } from 'mongodb';
 import { describe, expect, it, vi } from 'vitest';
-import { MigrationExecutionFailedError } from '../../src/errors/index.js';
 import { runMigration } from '../../src/core/runner.js';
+import { MigrationExecutionFailedError } from '../../src/errors/index.js';
 import type { MigrationContext, MigrationModule } from '../../src/types/index.js';
 
 function makeContext(): {
@@ -50,7 +50,13 @@ describe('runMigration', () => {
       up: vi.fn().mockResolvedValue(undefined),
       down: vi.fn().mockResolvedValue(undefined),
     };
-    await runMigration({ name: 'a.ts', migration, direction: 'down', context, useTransaction: false });
+    await runMigration({
+      name: 'a.ts',
+      migration,
+      direction: 'down',
+      context,
+      useTransaction: false,
+    });
     expect(migration.down).toHaveBeenCalledOnce();
     expect(migration.up).not.toHaveBeenCalled();
   });

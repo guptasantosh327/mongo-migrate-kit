@@ -30,8 +30,8 @@ Built for teams who outgrew the basics. You keep everything you expect — `up`,
 - **Dry-run previews** — `mmk dry-run up` shows exactly what would run before anything touches the
   database (something `migrate-mongo` users have [asked for since 2019](https://github.com/seppevs/migrate-mongo/issues/43)).
 - **Run one file at a time** — `mmk up <file>` / `mmk down <file>`, not just "all pending" or "the last one".
-- **Real rollbacks** — revert any batch (`--batch 3`), a single migration, or `redo` in one step —
-  instead of only the most recently applied migration.
+- **Real rollbacks** — revert any batch (`--batch 3`), the last N migrations (`--steps 2`), a single
+  migration, or `redo` in one step — instead of only the most recently applied migration.
 - **A cleaner, richer CLI** — eight focused commands with colorized output and a status table, versus
   the bare `init`/`create`/`up`/`down`/`status` set.
 - **Safe by default** — an atomic MongoDB lock stops two deploys racing; SHA-256 checksums catch
@@ -128,7 +128,7 @@ Every command accepts the global flags `--uri`, `--db`, `--dir`, and `--config`.
 | `mmk import` | Adopt an existing `migrate-mongo` changelog (one-time, forward-only) |
 | `mmk create <name>` | Generate a timestamped migration file |
 | `mmk up [file]` | Run all pending migrations, or one named file |
-| `mmk down [file]` | Roll back the last batch, a chosen batch, or one file |
+| `mmk down [file]` | Roll back the last batch, a chosen batch, the last N steps, or one file |
 | `mmk redo [file]` | Roll back then re-apply (the last migration, or one file) |
 | `mmk status` | Print the full migration status table |
 | `mmk list` | List migrations, filtered by status |
@@ -162,16 +162,18 @@ mmk create <name> --js       # force a .js file
 mmk create <name> --template <path>   # use a custom template
 
 # up — apply migrations
-mmk up                       # all pending
+mmk up                       # all pending (one shared batch for the run)
 mmk up <file>                # one specific file
+mmk up --step                # apply each file as its own batch (revert individually later)
 mmk up <file> --force        # re-run an ALREADY-applied file (asks for confirmation)
 mmk up --strict              # abort on any checksum mismatch
 mmk up --no-lock             # skip the concurrency lock (local dev only)
 
 # down — roll back
-mmk down                     # the last batch
+mmk down                     # the last batch (may be several files)
 mmk down <file>              # one specific file
 mmk down --batch <n>         # a specific batch number
+mmk down --steps <n>         # the last N migrations, newest first, ignoring batches
 
 # redo — down then up
 mmk redo                     # the most recently applied migration
@@ -319,6 +321,29 @@ export default async () => {
 
 Run `mmk init --secret-provider` to scaffold this form with an AWS example you can swap for any provider.
 If the function throws, it surfaces as a `ConfigInvalidError` with the cause attached.
+
+</details>
+
+<details>
+<summary><b>Batches &amp; step rollback</b> — group a deploy, or revert file-by-file</summary>
+
+<br>
+
+A **batch** is one `mmk up` run. By default every migration applied in a single run shares one batch
+number, so `mmk down` rolls back that whole run as a unit — the same model used by **Laravel** and
+**Knex**. That keeps a deploy atomic: one command applied it, one command reverts it.
+
+When you want finer control, two flags mirror Laravel's `migrate --step` / `migrate:rollback --step`:
+
+- **`mmk up --step`** — apply each file in the run as its **own** sequential batch instead of one shared
+  batch. A later `mmk down` then peels them off one at a time.
+- **`mmk down --steps <n>`** — revert the **last N applied migrations**, newest first, counted as
+  individual files **regardless of batch**. `mmk down --steps 1` reverts just the single most-recently
+  applied migration; a larger N can cross batch boundaries, so check `mmk list --applied` first to see
+  exactly which files are in scope.
+
+`--steps` is mutually exclusive with `--batch` and a filename. Migrations are always reverted
+newest-first, so `up` followed by `down --steps <same n>` returns you to the starting state.
 
 </details>
 

@@ -11,8 +11,13 @@ export function registerUp(program: Command): void {
     .option('--no-lock', 'Skip the concurrency lock (dev only)')
     .option('--strict', 'Abort on checksum mismatch')
     .option('-f, --force', 'Re-run an already-applied migration (requires a file)')
+    .option('--step', 'Apply each migration as its own batch (revert individually later)')
     .action(async (file: string | undefined, _opts, command) => {
-      const opts = command.optsWithGlobals() as CliOptions & { lock?: boolean; force?: boolean };
+      const opts = command.optsWithGlobals() as CliOptions & {
+        lock?: boolean;
+        force?: boolean;
+        step?: boolean;
+      };
 
       if (opts.force && !file) {
         createLogger().error('✖ --force requires a specific migration file');
@@ -34,6 +39,7 @@ export function registerUp(program: Command): void {
           await migrator.up(file, {
             noLock: opts.lock === false,
             ...(opts.force ? { force: true } : {}),
+            ...(opts.step ? { step: true } : {}),
           });
         },
         { spinner: true },

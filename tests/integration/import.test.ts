@@ -1,12 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MigratorKit } from '../../src/core/migrator.js';
-import {
-  ImportTargetNotEmptyError,
-  IrreversibleMigrationError,
-} from '../../src/errors/index.js';
+import { ImportTargetNotEmptyError, IrreversibleMigrationError } from '../../src/errors/index.js';
 import type { MigrationRecord } from '../../src/types/index.js';
 import { computeChecksum } from '../../src/utils/checksum.js';
-import { startTestMongo, type TestMongo } from '../helpers/mongo.js';
+import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
 import { insertMigration, makeMigrator, makeProject } from '../helpers/project.js';
 import { makeRecord } from '../helpers/records.js';
 
@@ -98,9 +95,21 @@ describe('MigratorKit.import (integration)', () => {
     // Reproduces the reported case: a changelog applied in a single migrate-mongo
     // run (one shared migrationBlock), with none of the files present on disk.
     await seedChangelog([
-      { fileName: 'a.js', appliedAt: new Date('2026-06-02T11:35:49.001Z'), migrationBlock: 1780400149448 },
-      { fileName: 'b.js', appliedAt: new Date('2026-06-02T11:35:49.002Z'), migrationBlock: 1780400149448 },
-      { fileName: 'c.js', appliedAt: new Date('2026-06-02T11:35:49.003Z'), migrationBlock: 1780400149448 },
+      {
+        fileName: 'a.js',
+        appliedAt: new Date('2026-06-02T11:35:49.001Z'),
+        migrationBlock: 1780400149448,
+      },
+      {
+        fileName: 'b.js',
+        appliedAt: new Date('2026-06-02T11:35:49.002Z'),
+        migrationBlock: 1780400149448,
+      },
+      {
+        fileName: 'c.js',
+        appliedAt: new Date('2026-06-02T11:35:49.003Z'),
+        migrationBlock: 1780400149448,
+      },
     ]);
 
     await migrator.import();
@@ -159,10 +168,7 @@ describe('MigratorKit.import (integration)', () => {
 
   it('should skip source docs without a usable fileName', async () => {
     setup();
-    await seedChangelog([
-      { fileName: 'a.js', appliedAt: new Date() },
-      { appliedAt: new Date() },
-    ]);
+    await seedChangelog([{ fileName: 'a.js', appliedAt: new Date() }, { appliedAt: new Date() }]);
 
     const result = await migrator.import();
     expect(result.imported).toBe(1);
@@ -350,10 +356,7 @@ describe('MigratorKit.import (integration)', () => {
 
     // up() runs only the new files; the imported ones are skipped.
     const upResults = await migrator.up();
-    expect(upResults.map((r) => r.file)).toEqual([
-      '20260201000000-c.js',
-      '20260201000001-d.js',
-    ]);
+    expect(upResults.map((r) => r.file)).toEqual(['20260201000000-c.js', '20260201000001-d.js']);
     expect(await mongo.db.collection('things').countDocuments()).toBe(2);
   });
 });

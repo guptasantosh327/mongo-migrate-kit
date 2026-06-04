@@ -1,10 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import {
-  MigrationFileNotFoundError,
-  MigrationInvalidExportError,
-} from '../../src/errors/index.js';
+import { MigrationFileNotFoundError, MigrationInvalidExportError } from '../../src/errors/index.js';
 import { loadMigrationFile } from '../../src/utils/loader.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));

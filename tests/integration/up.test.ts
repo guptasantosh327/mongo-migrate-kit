@@ -1,8 +1,13 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { ChecksumMismatchError, MigrationExecutionFailedError } from '../../src/errors/index.js';
 import type { MigratorKit } from '../../src/core/migrator.js';
-import { startTestMongo, type TestMongo } from '../helpers/mongo.js';
-import { insertMigration, failingMigration, makeMigrator, makeProject } from '../helpers/project.js';
+import { ChecksumMismatchError, MigrationExecutionFailedError } from '../../src/errors/index.js';
+import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
+import {
+  failingMigration,
+  insertMigration,
+  makeMigrator,
+  makeProject,
+} from '../helpers/project.js';
 
 let mongo: TestMongo;
 const DB = 'mmk_up_test';
@@ -49,6 +54,25 @@ describe('MigratorKit.up (integration)', () => {
     const results = await migrator.up();
     expect(results[0]?.batch).toBe(1);
     expect(results[1]?.batch).toBe(1);
+  });
+
+  it('should give each file its own batch with step=true', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    project.write('0003-c.ts', insertMigration('things', 'c'));
+    const results = await migrator.up(undefined, { step: true });
+    expect(results.map((r) => r.batch)).toEqual([1, 2, 3]);
+  });
+
+  it('should continue step batch numbering after an earlier run', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await migrator.up();
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    project.write('0003-c.ts', insertMigration('things', 'c'));
+    const results = await migrator.up(undefined, { step: true });
+    expect(results.map((r) => r.batch)).toEqual([2, 3]);
   });
 
   it('should run a single file by name', async () => {
@@ -147,11 +171,6 @@ describe('MigratorKit.up (integration)', () => {
     });
     project.write('0001-a.ts', insertMigration('things', 'a'));
     await migrator.up();
-    expect(calls).toEqual([
-      'beforeAll',
-      'beforeEach:0001-a.ts',
-      'afterEach:0001-a.ts',
-      'afterAll',
-    ]);
+    expect(calls).toEqual(['beforeAll', 'beforeEach:0001-a.ts', 'afterEach:0001-a.ts', 'afterAll']);
   });
 });

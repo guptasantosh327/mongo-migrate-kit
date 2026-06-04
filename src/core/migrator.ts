@@ -4,6 +4,7 @@ import path from 'node:path';
 import { type Db, MongoClient } from 'mongodb';
 import {
   ChecksumMismatchError,
+  ConfigInvalidError,
   ConnectionFailedError,
   ImportTargetNotEmptyError,
   IrreversibleMigrationError,
@@ -51,6 +52,13 @@ export interface UpOptions {
    * files, so `force` has no applied target to re-run.
    */
   force?: boolean;
+  /**
+   * Apply each migration in this run as its own batch (sequential, one per file)
+   * instead of grouping the whole run into a single shared batch. This lets a
+   * later `down` peel migrations off one at a time. Mirrors Laravel's
+   * `migrate --step`.
+   */
+  step?: boolean;
 }
 
 /** Options for {@link MigratorKit.down} */
@@ -59,6 +67,12 @@ export interface DownOptions {
   noLock?: boolean;
   /** Revert a specific batch number instead of the last batch */
   batch?: number;
+  /**
+   * Revert the last N applied migrations (counted as individual files, newest
+   * first), regardless of how they were grouped into batches. Mirrors Laravel's
+   * `migrate:rollback --step=N`. Mutually exclusive with `batch` and a filename.
+   */
+  steps?: number;
 }
 
 /** Options for {@link MigratorKit.create} */
@@ -216,6 +230,39 @@ export class MigratorKit {
     return maxBatch + 1;
   }
 
+  /**
+   * Validate the `--steps` option for `down`/`dry-run down`: a positive integer,
+   * mutually exclusive with a filename and `--batch`. No-op when steps is unset.
+   */
+  private assertStepsValid(steps: number | undefined, filename?: string, batch?: number): void {
+    if (steps === undefined) {
+      return;
+    }
+    if (filename) {
+      throw new ConfigInvalidError('Cannot combine a filename with --steps', { filename });
+    }
+    if (batch !== undefined) {
+      throw new ConfigInvalidError('Cannot combine --batch with --steps', { batch, steps });
+    }
+    if (!Number.isInteger(steps) || steps < 1) {
+      throw new ConfigInvalidError('--steps must be a positive integer', { steps });
+    }
+  }
+
+  /**
+   * Select the last N applied migrations, newest first (by `appliedAt`, tie-broken
+   * by name desc), ignoring batch grouping. Shared by `down --steps` and its dry-run.
+   */
+  private selectLastApplied(records: MigrationRecord[], steps: number): MigrationRecord[] {
+    return records
+      .filter((record) => record.status === 'applied')
+      .sort((a, b) => {
+        const byTime = b.appliedAt.getTime() - a.appliedAt.getTime();
+        return byTime !== 0 ? byTime : b.name.localeCompare(a.name);
+      })
+      .slice(0, steps);
+  }
+
   /** Run all pending migrations, or a specific named file */
   async up(filename?: string, options: UpOptions = {}): Promise<RunResult[]> {
     const config = await this.ensureConfig();
@@ -254,7 +301,12 @@ export class MigratorKit {
 
     const context = buildContext(this.client as MongoClient, db, config.mongoose);
     const results: RunResult[] = [];
-    const batch = await this.nextBatch();
+    // Without --step every file in this run shares one batch. With --step each
+    // applied file gets its own sequential batch (base, base+1, …) so a later
+    // `down` can revert them individually. Only successful applies advance the
+    // counter, so --step never leaves gaps.
+    const baseBatch = await this.nextBatch();
+    let appliedCount = 0;
 
     await config.hooks?.beforeAll?.(context);
 
@@ -300,6 +352,7 @@ export class MigratorKit {
         });
         this.progress?.onStop();
 
+        const batch = options.step ? baseBatch + appliedCount : baseBatch;
         const record: MigrationRecord = {
           name,
           batch,
@@ -312,6 +365,7 @@ export class MigratorKit {
           ...(migration.description ? { description: migration.description } : {}),
         };
         await changelog.markApplied(db, record);
+        appliedCount += 1;
 
         logger.success(`✔ Applied  ${name}   [${duration}ms]`);
         results.push({ file: name, status: 'applied', duration, batch });
@@ -332,8 +386,9 @@ export class MigratorKit {
     return results;
   }
 
-  /** Rollback the last batch, a specific batch, or a specific named file */
+  /** Rollback the last batch, a specific batch, a specific file, or the last N steps */
   async down(filename?: string, options: DownOptions = {}): Promise<RunResult[]> {
+    this.assertStepsValid(options.steps, filename, options.batch);
     const config = await this.ensureConfig();
     await this.connect();
     const lock = new MigrationLock(this.requireDb(), config.lockCollection, config.lockTTLSeconds);
@@ -351,12 +406,19 @@ export class MigratorKit {
     const logger = this.logger;
 
     let toRevert: MigrationRecord[];
+    // When true, `toRevert` is already in revert order (newest applied first) and
+    // must not be re-sorted by filename below.
+    let preserveOrder = false;
     if (filename) {
       const record = await changelog.getByName(db, filename);
       if (!record || record.status !== 'applied') {
         throw new NotAppliedError('Migration is not applied', { filename });
       }
       toRevert = [record];
+    } else if (options.steps !== undefined) {
+      // Revert the last N applied migrations, newest first, ignoring batches.
+      toRevert = this.selectLastApplied(await changelog.getAll(db), options.steps);
+      preserveOrder = true;
     } else {
       const batch = options.batch ?? (await changelog.getLastBatch(db));
       if (batch === null) {
@@ -377,10 +439,12 @@ export class MigratorKit {
     // reason so the changelog and collection are never left half-reverted.
     this.assertReversible(toRevert);
 
-    const names = toRevert
-      .map((record) => record.name)
-      .sort()
-      .reverse();
+    const names = preserveOrder
+      ? toRevert.map((record) => record.name)
+      : toRevert
+          .map((record) => record.name)
+          .sort()
+          .reverse();
 
     const context = buildContext(this.client as MongoClient, db, config.mongoose);
     const results: RunResult[] = [];
@@ -477,7 +541,12 @@ export class MigratorKit {
   }
 
   /** Preview what would run — never writes to the database */
-  async dryRun(direction: 'up' | 'down', filename?: string): Promise<StatusRow[]> {
+  async dryRun(
+    direction: 'up' | 'down',
+    filename?: string,
+    options: { steps?: number } = {},
+  ): Promise<StatusRow[]> {
+    this.assertStepsValid(options.steps, filename);
     await this.ensureConfig();
     await this.connect();
     const db = this.requireDb();
@@ -495,6 +564,9 @@ export class MigratorKit {
       names = filename
         ? [filename]
         : this.listMigrationFiles().filter((file) => !applied.has(file));
+    } else if (options.steps !== undefined) {
+      // Mirror `down --steps`: the last N applied migrations, newest first.
+      names = this.selectLastApplied(records, options.steps).map((record) => record.name);
     } else {
       const lastBatch = await changelog.getLastBatch(db);
       if (filename) {

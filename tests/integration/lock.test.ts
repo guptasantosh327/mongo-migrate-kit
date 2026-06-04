@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LockAlreadyHeldError } from '../../src/errors/index.js';
 import { LOCK_ID, MigrationLock, runWithLock } from '../../src/core/lock.js';
+import { LockAlreadyHeldError } from '../../src/errors/index.js';
 import { silentLogger } from '../../src/utils/logger.js';
-import { startTestMongo, type TestMongo } from '../helpers/mongo.js';
+import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
 
 let mongo: TestMongo;
 const COLLECTION = '_mmk_locks';

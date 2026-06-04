@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Changelog } from '../../src/core/changelog.js';
+import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
 import { makeRecord } from '../helpers/records.js';
-import { startTestMongo, type TestMongo } from '../helpers/mongo.js';
 
 let mongo: TestMongo;
 const COLLECTION = '_mmk_migrations';

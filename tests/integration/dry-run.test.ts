@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MigratorKit } from '../../src/core/migrator.js';
-import { startTestMongo, type TestMongo } from '../helpers/mongo.js';
+import { ConfigInvalidError } from '../../src/errors/index.js';
+import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
 import { insertMigration, makeMigrator, makeProject } from '../helpers/project.js';
 
 let mongo: TestMongo;
@@ -49,6 +50,26 @@ describe('MigratorKit.dryRun (integration)', () => {
     await migrator.up();
     const rows = await migrator.dryRun('down');
     expect(rows.map((r) => r.file)).toEqual(['0001-a.ts']);
+  });
+
+  it('should preview the last N migrations for down with steps, newest first', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    project.write('0003-c.ts', insertMigration('things', 'c'));
+    await migrator.up('0001-a.ts');
+    await migrator.up();
+    const rows = await migrator.dryRun('down', undefined, { steps: 2 });
+    expect(rows.map((r) => r.file)).toEqual(['0003-c.ts', '0002-b.ts']);
+    // preview only — nothing reverted
+    expect(await mongo.db.collection('things').countDocuments()).toBe(3);
+  });
+
+  it('should reject dry-run down --steps combined with a filename', async () => {
+    setup();
+    await expect(migrator.dryRun('down', '0001-a.ts', { steps: 1 })).rejects.toBeInstanceOf(
+      ConfigInvalidError,
+    );
   });
 
   it('should leave DB state unchanged after a dry-run', async () => {
