@@ -48,6 +48,18 @@ export class MigrationFileNotFoundError extends MmkError {
   }
 }
 
+/**
+ * Thrown when a migration name is not a plain filename — e.g. it contains a
+ * path separator or `..`, which would let a target escape the migrations
+ * directory (path traversal) when joined into a filesystem path.
+ */
+export class MigrationInvalidNameError extends MmkError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super('MIGRATION_INVALID_NAME', message, context);
+    this.name = 'MigrationInvalidNameError';
+  }
+}
+
 /** Thrown when a migration file does not export valid up()/down() functions */
 export class MigrationInvalidExportError extends MmkError {
   constructor(message: string, context?: Record<string, unknown>) {

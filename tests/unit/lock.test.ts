@@ -11,9 +11,25 @@ interface MockCollection {
 }
 
 function makeDb(): { db: Db; collection: MockCollection } {
+  // acquire() upserts with a random `owner` token, then reads it back to confirm
+  // ownership. The mock captures the token from the update and echoes it from
+  // findOne so a successful acquire resolves.
+  let storedOwner: string | undefined;
   const collection: MockCollection = {
-    updateOne: vi.fn().mockResolvedValue({}),
-    findOne: vi.fn().mockResolvedValue(null),
+    updateOne: vi.fn().mockImplementation((_filter, update) => {
+      const owner = (update as { $set?: { owner?: string } })?.$set?.owner;
+      if (owner) {
+        storedOwner = owner;
+      }
+      return Promise.resolve({ matchedCount: 1 });
+    }),
+    findOne: vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(
+          storedOwner ? { _id: LOCK_ID, owner: storedOwner, pid: process.pid } : null,
+        ),
+      ),
     deleteOne: vi.fn().mockResolvedValue({}),
   };
   const db = { collection: () => collection } as unknown as Db;
@@ -44,6 +60,30 @@ describe('MigrationLock.acquire', () => {
     collection.updateOne.mockRejectedValueOnce(new Error('network down'));
     const lock = new MigrationLock(db, '_mmk_locks', 60);
     await expect(lock.acquire()).rejects.toThrow('network down');
+  });
+});
+
+describe('MigrationLock.renew', () => {
+  it('should return false before the lock is acquired', async () => {
+    const { db } = makeDb();
+    const lock = new MigrationLock(db, '_mmk_locks', 60);
+    expect(await lock.renew()).toBe(false);
+  });
+
+  it('should return true while the lock is still held', async () => {
+    const { db, collection } = makeDb();
+    const lock = new MigrationLock(db, '_mmk_locks', 60);
+    await lock.acquire();
+    collection.updateOne.mockResolvedValueOnce({ matchedCount: 1 });
+    expect(await lock.renew()).toBe(true);
+  });
+
+  it('should return false when the lock has been lost', async () => {
+    const { db, collection } = makeDb();
+    const lock = new MigrationLock(db, '_mmk_locks', 60);
+    await lock.acquire();
+    collection.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
+    expect(await lock.renew()).toBe(false);
   });
 });
 

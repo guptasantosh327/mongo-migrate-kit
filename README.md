@@ -32,10 +32,13 @@ Built for teams who outgrew the basics. You keep everything you expect — `up`,
 - **Run one file at a time** — `mmk up <file>` / `mmk down <file>`, not just "all pending" or "the last one".
 - **Real rollbacks** — revert any batch (`--batch 3`), the last N migrations (`--steps 2`), a single
   migration, or `redo` in one step — instead of only the most recently applied migration.
-- **A cleaner, richer CLI** — eight focused commands with colorized output and a status table, versus
-  the bare `init`/`create`/`up`/`down`/`status` set.
-- **Safe by default** — an atomic MongoDB lock stops two deploys racing; SHA-256 checksums catch
-  edited migrations before they silently re-run.
+- **A cleaner, richer CLI** — a focused set of commands with colorized output and a status table,
+  versus the bare `init`/`create`/`up`/`down`/`status` set.
+- **Safe by default** — an atomic MongoDB lock (with a renewal heartbeat for long migrations) stops
+  two deploys racing; SHA-256 checksums catch edited migrations before they silently re-run; and
+  `mmk unlock` clears a lock left by a crashed run.
+- **CI-friendly** — `--json` on every data command for clean machine-readable output, and
+  `mmk status --check` exits non-zero when migrations are pending so you can gate a deploy.
 - **First-class TypeScript _and_ JavaScript** — `.ts` (via `tsx`), ESM, and CommonJS all just work,
   with a fully-typed context and config — no `ts-node` plumbing.
 - **Zero config files required** — drive everything from env vars, or generate a documented config with `mmk init`.
@@ -130,9 +133,13 @@ Every command accepts the global flags `--uri`, `--db`, `--dir`, and `--config`.
 | `mmk up [file]` | Run all pending migrations, or one named file |
 | `mmk down [file]` | Roll back the last batch, a chosen batch, the last N steps, or one file |
 | `mmk redo [file]` | Roll back then re-apply (the last migration, or one file) |
-| `mmk status` | Print the full migration status table |
+| `mmk status` | Print the full migration status table (`--check` to fail CI on pending) |
 | `mmk list` | List migrations, filtered by status |
 | `mmk dry-run <up\|down> [file]` | Preview a run without touching the database |
+| `mmk unlock` | Force-release a stuck lock left behind by a crashed run |
+
+Most data commands (`up`, `down`, `redo`, `status`, `list`, `dry-run`, `import`, `create`,
+`unlock`) accept **`--json`** for machine-readable output — see [CI & automation](#ci--automation).
 
 <details>
 <summary><b>Options for every command</b></summary>
@@ -140,11 +147,12 @@ Every command accepts the global flags `--uri`, `--db`, `--dir`, and `--config`.
 ```bash
 # init — generate a config file
 mmk init                     # mmk.config.js (default)
+mmk init --js                # mmk.config.js (explicit default)
 mmk init --ts                # mmk.config.ts
-mmk init --json              # mmk.config.json
+mmk init --json              # mmk.config.json  (NOTE: here --json picks the file format)
 mmk init --secret-provider   # async config that loads the URI from a secret manager (js/ts only)
 mmk init --force             # overwrite an existing config file
-mmk init --uri mongodb://localhost:27017 --db my_app # prefilled the mmk.config.* file with uri and db details
+mmk init --uri mongodb://localhost:27017 --db my_app   # prefill the generated config
 
 # import — adopt an existing migrate-mongo changelog
 mmk import                   # read `changelog`, write the mmk changelog
@@ -154,41 +162,69 @@ mmk import --dry-run         # preview the mapping, write nothing
 mmk import --trust-hash      # reuse migrate-mongo's fileHash instead of recomputing
 mmk import --force           # proceed even if the mmk changelog already has records
 mmk import --no-lock         # skip the concurrency lock (local dev only)
+mmk import --json            # machine-readable output
 
 # create — generate a migration file
 mmk create <name>            # file type follows config `createExtension` (default .js)
 mmk create <name> --ts       # force a .ts file
 mmk create <name> --js       # force a .js file
 mmk create <name> --template <path>   # use a custom template
+mmk create <name> --json     # machine-readable output ({ "path": "..." })
 
 # up — apply migrations
 mmk up                       # all pending (one shared batch for the run)
 mmk up <file>                # one specific file
 mmk up --step                # apply each file as its own batch (revert individually later)
 mmk up <file> --force        # re-run an ALREADY-applied file (asks for confirmation)
+mmk up <file> --force --yes  # confirm a re-run non-interactively (required with --json)
 mmk up --strict              # abort on any checksum mismatch
 mmk up --no-lock             # skip the concurrency lock (local dev only)
+mmk up --json                # machine-readable output (array of run results)
 
 # down — roll back
 mmk down                     # the last batch (may be several files)
 mmk down <file>              # one specific file
 mmk down --batch <n>         # a specific batch number
 mmk down --steps <n>         # the last N migrations, newest first, ignoring batches
+mmk down --no-lock           # skip the concurrency lock (local dev only)
+mmk down --json              # machine-readable output (array of run results)
 
 # redo — down then up
 mmk redo                     # the most recently applied migration
 mmk redo <file>              # a specific file
+mmk redo --json              # machine-readable output (array of run results)
+
+# status — full status table
+mmk status                   # the full status table
+mmk status --check           # exit 1 if any migration is pending (CI gate)
+mmk status --json            # machine-readable output (array of status rows)
 
 # list — filtered status
+mmk list                     # all migrations
 mmk list --pending           # only pending
 mmk list --applied           # only applied
+mmk list --json              # machine-readable output (array of status rows)
 
 # dry-run — preview, never writes
 mmk dry-run up [file]
 mmk dry-run down [file]
+mmk dry-run down --steps <n> # preview a step rollback (the last N migrations)
+mmk dry-run up --json        # machine-readable output (array of status rows)
+
+# unlock — clear a stuck lock after a crash
+mmk unlock                   # shows the holder, prompts y/N
+mmk unlock --yes             # skip the prompt
+mmk unlock --json            # machine-readable output ({ "released": ..., "holder": ... })
 ```
 
-**Global flags** (available on all commands): `--uri <uri>`, `--db <name>`, `--dir <path>`, `--config <path>`.
+**Global flags** (available on all commands): `--uri <uri>` (override `MMK_URI`),
+`--db <name>` (override `MMK_DB`), `--dir <path>` (override `MMK_MIGRATIONS_DIR`),
+`--config <path>` (explicit config file, overrides auto-discovery).
+
+**`--json`** is accepted by every data command above (`up`, `down`, `redo`, `status`, `list`,
+`dry-run`, `import`, `create`, `unlock`) and prints one JSON document to stdout — see
+[CI & automation](#ci--automation). On `mmk init` only, `--json` instead selects the config
+**file format** (`mmk.config.json`).
 
 </details>
 
@@ -339,8 +375,8 @@ When you want finer control, two flags mirror Laravel's `migrate --step` / `migr
   batch. A later `mmk down` then peels them off one at a time.
 - **`mmk down --steps <n>`** — revert the **last N applied migrations**, newest first, counted as
   individual files **regardless of batch**. `mmk down --steps 1` reverts just the single most-recently
-  applied migration; a larger N can cross batch boundaries, so check `mmk list --applied` first to see
-  exactly which files are in scope.
+  applied migration; a larger N can cross batch boundaries, so preview it first with
+  `mmk dry-run down --steps <n>`.
 
 `--steps` is mutually exclusive with `--batch` and a filename. Migrations are always reverted
 newest-first, so `up` followed by `down --steps <same n>` returns you to the starting state.
@@ -353,13 +389,51 @@ newest-first, so `up` followed by `down --steps <same n>` returns you to the sta
 <br>
 
 **Lock.** Each run acquires an atomic lock document in `_mmk_locks`, so two deploys can never migrate
-at once. A lock older than `lockTTLSeconds` is treated as stale and reclaimed; the lock is always
-released in a `finally` block. `--no-lock` bypasses it for local development (and warns loudly).
+at once. A lock older than `lockTTLSeconds` is treated as stale and reclaimed; while a migration runs,
+a heartbeat renews the lock at half the TTL so a long migration can't have its lock stolen mid-run.
+The lock is always released in a `finally` block. `--no-lock` bypasses it for local development (and
+warns loudly). If a process crashes hard and leaves a lock behind, clear it with **`mmk unlock`** (it
+shows you who held it and asks for confirmation).
 
 **Checksums.** Every applied migration stores a SHA-256 of its file. On later runs `mmk` compares the
 two and surfaces drift in `status`. With `strict: true` (or `--strict`) a mismatch aborts the run;
 otherwise it warns and skips. To intentionally re-run an edited, already-applied file, use
 `mmk up <file> --force`.
+
+</details>
+
+<details id="ci--automation">
+<summary><b>CI &amp; automation</b> — JSON output, deploy gates, scripting</summary>
+
+<br>
+
+**Machine-readable output.** Add `--json` to any data command (`up`, `down`, `redo`, `status`,
+`list`, `dry-run`, `import`, `create`, `unlock`) to get a single JSON document on **stdout** — all
+human logs and the spinner are redirected to stderr, so the stream is safe to pipe into `jq` or parse
+in a script. On failure the command prints `{ "error": { "code": "...", "message": "..." } }` to
+stdout and exits `1`.
+
+```bash
+# Apply pending migrations and capture the result in CI
+mmk up --json | jq '.[] | select(.status == "applied") | .file'
+
+# Fail a deploy step if the database isn't fully migrated
+mmk status --check          # exits 1 when anything is pending, 0 otherwise
+
+# Inspect status as data
+mmk status --json | jq 'map(select(.status == "pending")) | length'
+```
+
+A typical pipeline gate:
+
+```yaml
+# .github/workflows/deploy.yml (excerpt)
+- name: Fail if migrations are pending
+  run: npx mmk status --check --uri "$MONGO_URI" --db "$MONGO_DB"
+```
+
+> Note: `mmk init --json` is the one exception — there `--json` means "write `mmk.config.json`",
+> not machine-readable output (kept for backwards compatibility).
 
 </details>
 

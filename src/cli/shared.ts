@@ -12,6 +12,13 @@ export interface CliOptions {
   dir?: string;
   config?: string;
   strict?: boolean;
+  /** Emit machine-readable JSON to stdout (per-command flag on data commands) */
+  json?: boolean;
+}
+
+/** Write a value as pretty JSON to stdout, followed by a newline */
+export function emitJson(value: unknown): void {
+  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
 /** Build the partial config passed to MigratorKit from CLI flags */
@@ -33,6 +40,13 @@ export interface WithMigratorOptions {
    * result line is printed so it never garbles the per-file output.
    */
   spinner?: boolean;
+  /**
+   * Machine-readable mode. Routes all human log output (and the migrator's own
+   * progress lines) to stderr and disables the spinner, so the command can emit
+   * a single clean JSON document on stdout via {@link emitJson}. On failure,
+   * withMigrator emits `{ error: { code?, message } }` to stdout and exits 1.
+   */
+  json?: boolean;
 }
 
 /**
@@ -44,9 +58,17 @@ export async function withMigrator(
   fn: (migrator: MigratorKit) => Promise<void>,
   options: WithMigratorOptions = {},
 ): Promise<void> {
-  // One ora instance drives both the connection wait and per-migration progress.
-  // ora auto-disables on a non-TTY (pipes/CI), so this is safe everywhere.
-  const spinner = options.spinner ? ora() : undefined;
+  const json = options.json ?? false;
+  // In JSON mode the spinner is suppressed and all human output goes to stderr,
+  // so stdout carries exactly one JSON document.
+  const spinner = options.spinner && !json ? ora() : undefined;
+
+  const partial = partialFromOpts(opts);
+  if (json) {
+    // Route the migrator's own progress/info lines to stderr.
+    partial.logger = createLogger(process.stderr);
+  }
+
   const migratorOptions: MigratorKitOptions = {
     ...(opts.config ? { configPath: opts.config } : {}),
   };
@@ -59,8 +81,9 @@ export async function withMigrator(
     };
     migratorOptions.progress = reporter;
   }
-  const migrator = new MigratorKit(partialFromOpts(opts), migratorOptions);
-  const logger = createLogger();
+  const migrator = new MigratorKit(partial, migratorOptions);
+  // Human-facing logger for withMigrator's own messages; stderr in JSON mode.
+  const logger = createLogger(json ? process.stderr : process.stdout);
   try {
     if (spinner) {
       spinner.start('Connecting to MongoDB…');
@@ -76,10 +99,15 @@ export async function withMigrator(
   } catch (error) {
     // Safety net: clear any spinner still spinning before printing the error.
     spinner?.stop();
-    if (error instanceof MmkError) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (json) {
+      emitJson({
+        error: { ...(error instanceof MmkError ? { code: error.code } : {}), message },
+      });
+    } else if (error instanceof MmkError) {
       logger.error(`✖ ${error.code}: ${error.message}`);
     } else {
-      logger.error(`✖ ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`✖ ${message}`);
     }
     process.exitCode = 1;
   } finally {

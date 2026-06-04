@@ -47,7 +47,7 @@
     "coverage": "vitest run --coverage",
     "lint": "biome check src/",
     "format": "biome format --write src/",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm run test && npm run build",
     "release": "bumpp && npm publish"
   },
   "keywords": [

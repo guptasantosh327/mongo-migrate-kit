@@ -15,6 +15,7 @@ export type {
   ImportChecksumSource,
   ImportResult,
   ImportRow,
+  LockInfo,
   MigrateMongoDoc,
   MigrationContext,
   MigrationExtension,
@@ -47,6 +48,7 @@ export {
   MigrationExecutionFailedError,
   MigrationFileNotFoundError,
   MigrationInvalidExportError,
+  MigrationInvalidNameError,
   MmkError,
   NotAppliedError,
 } from './errors/index.js';

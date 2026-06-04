@@ -10,24 +10,26 @@ export const silentLogger: MmkLogger = {
   dim: () => {},
 };
 
-/** Write a line to stdout */
-function out(msg: string): void {
-  process.stdout.write(`${msg}\n`);
-}
-
-/** Write a line to stderr */
-function err(msg: string): void {
-  process.stderr.write(`${msg}\n`);
-}
-
-/** Create the default chalk-based structured logger */
-export function createLogger(): MmkLogger {
+/**
+ * Create the default chalk-based structured logger.
+ *
+ * `info`/`success`/`dim` write to `stream` (stdout by default); `warn`/`error`
+ * always write to stderr. Pass `process.stderr` as `stream` to keep stdout clean
+ * for machine-readable output (e.g. `--json` mode routes all human lines here).
+ */
+export function createLogger(stream: NodeJS.WritableStream = process.stdout): MmkLogger {
+  const writeOut = (msg: string): void => {
+    stream.write(`${msg}\n`);
+  };
+  const writeErr = (msg: string): void => {
+    process.stderr.write(`${msg}\n`);
+  };
   return {
-    info: (msg: string): void => out(msg),
-    success: (msg: string): void => out(chalk.green(msg)),
-    warn: (msg: string): void => err(chalk.yellow(msg)),
-    error: (msg: string): void => err(chalk.red(msg)),
-    dim: (msg: string): void => out(chalk.dim(msg)),
+    info: (msg: string): void => writeOut(msg),
+    success: (msg: string): void => writeOut(chalk.green(msg)),
+    warn: (msg: string): void => writeErr(chalk.yellow(msg)),
+    error: (msg: string): void => writeErr(chalk.red(msg)),
+    dim: (msg: string): void => writeOut(chalk.dim(msg)),
   };
 }
 

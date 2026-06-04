@@ -7,6 +7,7 @@ import { registerInit } from './commands/init.js';
 import { registerList } from './commands/list.js';
 import { registerRedo } from './commands/redo.js';
 import { registerStatus } from './commands/status.js';
+import { registerUnlock } from './commands/unlock.js';
 import { registerUp } from './commands/up.js';
 
 /** Build the root commander program with all commands and global flags */
@@ -33,6 +34,7 @@ export function buildProgram(): Command {
   registerList(program);
   registerDryRun(program);
   registerCreate(program);
+  registerUnlock(program);
 
   return program;
 }

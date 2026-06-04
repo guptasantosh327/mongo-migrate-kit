@@ -2,7 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MigrationFileNotFoundError, MigrationInvalidExportError } from '../../src/errors/index.js';
-import { loadMigrationFile } from '../../src/utils/loader.js';
+import { loadMigrationFile, tsLoadErrorOrNull } from '../../src/utils/loader.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = path.join(here, '..', 'fixtures', 'migrations');
@@ -41,5 +41,35 @@ describe('loadMigrationFile', () => {
     await expect(
       loadMigrationFile(path.join(fixtures, 'invalid-no-down.ts')),
     ).rejects.toBeInstanceOf(MigrationInvalidExportError);
+  });
+});
+
+describe('tsLoadErrorOrNull', () => {
+  const unknownExt = {
+    code: 'ERR_UNKNOWN_FILE_EXTENSION',
+    message: 'Unknown file extension ".ts"',
+  };
+
+  it('should map an unknown-extension failure on a .ts file to a clear error', () => {
+    const result = tsLoadErrorOrNull('/migrations/0001-x.ts', unknownExt);
+    expect(result).toBeInstanceOf(MigrationInvalidExportError);
+    expect(result?.message).toContain('TypeScript');
+  });
+
+  it('should also handle .mts and .cts files', () => {
+    expect(tsLoadErrorOrNull('/m/0001-x.mts', unknownExt)).toBeInstanceOf(
+      MigrationInvalidExportError,
+    );
+    expect(tsLoadErrorOrNull('/m/0001-x.cts', unknownExt)).toBeInstanceOf(
+      MigrationInvalidExportError,
+    );
+  });
+
+  it('should return null for a .js file (not a TypeScript problem)', () => {
+    expect(tsLoadErrorOrNull('/migrations/0001-x.js', unknownExt)).toBeNull();
+  });
+
+  it('should return null when the error is unrelated to the file extension', () => {
+    expect(tsLoadErrorOrNull('/migrations/0001-x.ts', new Error('boom'))).toBeNull();
   });
 });

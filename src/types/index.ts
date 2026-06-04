@@ -227,6 +227,20 @@ export interface ImportResult {
   rows: ImportRow[];
 }
 
+// ─── Lock ─────────────────────────────────────────────────────────────────────
+
+/** Public view of the current holder of the migration lock */
+export interface LockInfo {
+  /** When the lock was acquired (or last renewed) */
+  lockedAt: Date;
+  /** OS process id of the holder */
+  pid: number;
+  /** Hostname of the holder */
+  host: string;
+  /** Username of the holder */
+  executedBy: string;
+}
+
 // ─── Error Codes ──────────────────────────────────────────────────────────────
 
 export type MmkErrorCode =
@@ -234,6 +248,7 @@ export type MmkErrorCode =
   | 'LOCK_RELEASE_FAILED'
   | 'CHECKSUM_MISMATCH'
   | 'MIGRATION_FILE_NOT_FOUND'
+  | 'MIGRATION_INVALID_NAME'
   | 'MIGRATION_INVALID_EXPORT'
   | 'MIGRATION_EXECUTION_FAILED'
   | 'CONFIG_INVALID'

@@ -9,7 +9,7 @@ tsconfig.json
 tsup.config.ts
 vitest.config.ts
 CLAUDE.md
-.calude
+.claude
 .env
 .env.*
 *.tsbuildinfo

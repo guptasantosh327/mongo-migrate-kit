@@ -9,12 +9,14 @@ import {
   ImportTargetNotEmptyError,
   IrreversibleMigrationError,
   MigrationFileNotFoundError,
+  MigrationInvalidNameError,
   NotAppliedError,
 } from '../errors/index.js';
 import type {
   ImportChecksumSource,
   ImportResult,
   ImportRow,
+  LockInfo,
   MigrateMongoDoc,
   MigrationRecord,
   MmkConfig,
@@ -36,7 +38,7 @@ import { Changelog } from './changelog.js';
 import { loadConfig } from './config.js';
 import { buildContext } from './context.js';
 import { isMigrateMongoDoc, mapMigrateMongoDocs } from './import.js';
-import { MigrationLock, runWithLock } from './lock.js';
+import { type LockDocument, MigrationLock, runWithLock } from './lock.js';
 import { runMigration } from './runner.js';
 
 /** Default source collection name used by migrate-mongo */
@@ -188,6 +190,41 @@ export class MigratorKit {
     }
   }
 
+  /** Map an internal lock document to the public {@link LockInfo} shape */
+  private toLockInfo(doc: LockDocument | null): LockInfo | null {
+    if (!doc) {
+      return null;
+    }
+    return { lockedAt: doc.lockedAt, pid: doc.pid, host: doc.host, executedBy: doc.executedBy };
+  }
+
+  /** Build a lock bound to the configured collection (assumes connected) */
+  private buildLock(): MigrationLock {
+    const config = this.config as MmkConfig;
+    return new MigrationLock(this.requireDb(), config.lockCollection, config.lockTTLSeconds);
+  }
+
+  /**
+   * Inspect the current migration lock without modifying it. Returns the holder,
+   * or null when no lock is held.
+   */
+  async lockInfo(): Promise<LockInfo | null> {
+    await this.ensureConfig();
+    await this.connect();
+    return this.toLockInfo(await this.buildLock().inspect());
+  }
+
+  /**
+   * Force-release the migration lock regardless of who holds it — for clearing a
+   * lock left behind by a crashed run (`mmk unlock`). Returns the holder that was
+   * removed, or null if no lock was held.
+   */
+  async forceUnlock(): Promise<LockInfo | null> {
+    await this.ensureConfig();
+    await this.connect();
+    return this.toLockInfo(await this.buildLock().forceRelease());
+  }
+
   /** Internal accessors that assume a successful connect() */
   private requireDb(): Db {
     if (!this.db) {
@@ -207,8 +244,38 @@ export class MigratorKit {
     return path.resolve(this.config?.migrationsDir ?? './migrations');
   }
 
+  /**
+   * Resolve a migration name to an absolute path inside the migrations dir.
+   *
+   * The name must be a bare filename: a name containing a path separator, a
+   * NUL byte, or `.`/`..` is rejected with {@link MigrationInvalidNameError}.
+   * This prevents path traversal — e.g. `mmk up ../../evil.js` would otherwise
+   * resolve (and `loadMigrationFile` execute) a file outside the migrations
+   * directory. A final containment check guards against any residual escape.
+   */
   private filepath(name: string): string {
-    return path.join(this.migrationsPath(), name);
+    const dir = this.migrationsPath();
+    if (
+      name.length === 0 ||
+      name === '.' ||
+      name === '..' ||
+      name.includes('/') ||
+      name.includes('\\') ||
+      name.includes('\0')
+    ) {
+      throw new MigrationInvalidNameError(
+        'Invalid migration name — must be a bare filename with no path segments',
+        { name },
+      );
+    }
+    const resolved = path.join(dir, name);
+    const relative = path.relative(dir, resolved);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new MigrationInvalidNameError('Migration name escapes the migrations directory', {
+        name,
+      });
+    }
+    return resolved;
   }
 
   /** List migration files on disk, sorted ascending */

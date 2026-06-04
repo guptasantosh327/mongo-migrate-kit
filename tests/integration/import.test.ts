@@ -1,6 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MigratorKit } from '../../src/core/migrator.js';
-import { ImportTargetNotEmptyError, IrreversibleMigrationError } from '../../src/errors/index.js';
+import {
+  ImportTargetNotEmptyError,
+  IrreversibleMigrationError,
+  MigrationInvalidNameError,
+} from '../../src/errors/index.js';
 import type { MigrationRecord } from '../../src/types/index.js';
 import { computeChecksum } from '../../src/utils/checksum.js';
 import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
@@ -46,6 +50,16 @@ function targetRecords(): Promise<MigrationRecord[]> {
 }
 
 describe('MigratorKit.import (integration)', () => {
+  it('should reject a path-traversing fileName from the foreign changelog', async () => {
+    setup();
+    // A compromised/hand-crafted migrate-mongo changelog whose fileName escapes
+    // the migrations dir. The checksum step feeds fileName into readFileSync via
+    // filepath(); that must reject it before any file is read or record written.
+    await seedChangelog([{ fileName: '../../../../etc/passwd', appliedAt: new Date() }]);
+    await expect(migrator.import()).rejects.toBeInstanceOf(MigrationInvalidNameError);
+    expect(await targetRecords()).toHaveLength(0);
+  });
+
   it('should map migrate-mongo docs into the mmk changelog', async () => {
     setup();
     project.write('20260101000000-a.js', insertMigration('things', 'a'));

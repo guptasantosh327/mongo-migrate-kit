@@ -115,6 +115,30 @@ describe('mmk CLI (integration)', () => {
     expect(await mongo.db.collection('_mmk_migrations').countDocuments()).toBe(0);
   });
 
+  it('should refuse up <file> --force --json without --yes (no silent re-run)', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await runCli(baseArgs(['up']));
+    expect(await mongo.db.collection('things').countDocuments()).toBe(1);
+
+    const result = await runCli(baseArgs(['up', '0001-a.ts', '--force', '--json']));
+    expect(result.code).toBe(1);
+    const parsed = JSON.parse(result.stdout) as { error: { message: string } };
+    expect(parsed.error.message).toContain('--yes');
+    // Migration was NOT re-run.
+    expect(await mongo.db.collection('things').countDocuments()).toBe(1);
+  });
+
+  it('should re-run with up <file> --force --yes --json (explicit non-interactive confirm)', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await runCli(baseArgs(['up']));
+
+    const result = await runCli(baseArgs(['up', '0001-a.ts', '--force', '--yes', '--json']));
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout) as Array<{ file: string; status: string }>;
+    expect(parsed[0]).toMatchObject({ file: '0001-a.ts', status: 'applied' });
+    expect(await mongo.db.collection('things').countDocuments()).toBe(2);
+  });
+
   it('should apply per-file batches with up --step then peel them with down --steps', async () => {
     project.write('0001-a.ts', insertMigration('things', 'a'));
     project.write('0002-b.ts', insertMigration('things', 'b'));
@@ -281,6 +305,84 @@ describe('mmk CLI (integration)', () => {
     const result = await runCli(['create', 'from config', '--dir', project.dir], {}, project.dir);
     expect(result.code).toBe(0);
     expect(readdirSync(project.dir).filter((f) => f.endsWith('from-config.ts'))).toHaveLength(1);
+  });
+
+  // ── --json output (feature 1) ────────────────────────────────────────────
+  it('should emit a clean JSON array for up --json (stdout is pure JSON)', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    const result = await runCli(baseArgs(['up', '--json']));
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout) as Array<{ file: string; status: string }>;
+    expect(parsed.map((r) => r.status)).toEqual(['applied', 'applied']);
+    expect(parsed.map((r) => r.file)).toEqual(['0001-a.ts', '0002-b.ts']);
+  });
+
+  it('should emit a JSON status array with --json', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await runCli(baseArgs(['up']));
+    const result = await runCli(baseArgs(['status', '--json']));
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout) as Array<{ file: string; status: string }>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]).toMatchObject({ file: '0001-a.ts', status: 'applied' });
+  });
+
+  it('should emit a JSON error object and exit 1 on failure with --json', async () => {
+    project.write('0001-x.ts', failingMigration());
+    const result = await runCli(baseArgs(['up', '--json']));
+    expect(result.code).toBe(1);
+    const parsed = JSON.parse(result.stdout) as { error: { code?: string; message: string } };
+    expect(parsed.error.code).toBe('MIGRATION_EXECUTION_FAILED');
+  });
+
+  // ── status --check (feature 2) ───────────────────────────────────────────
+  it('should exit 1 from status --check when migrations are pending', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    const pending = await runCli(baseArgs(['status', '--check']));
+    expect(pending.code).toBe(1);
+
+    await runCli(baseArgs(['up']));
+    const clean = await runCli(baseArgs(['status', '--check']));
+    expect(clean.code).toBe(0);
+  });
+
+  // ── mmk unlock (feature 3) ───────────────────────────────────────────────
+  it('should report no lock held and exit 0', async () => {
+    const result = await runCli(baseArgs(['unlock', '--json']));
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ released: false, holder: null });
+  });
+
+  it('should force-release a held lock with unlock --yes', async () => {
+    await mongo.db.collection('_mmk_locks').insertOne({
+      _id: 'mmk_lock',
+      lockedAt: new Date(),
+      pid: 4242,
+      host: 'crashed-host',
+      executedBy: 'ghost',
+      owner: 'stale-token',
+    });
+    const result = await runCli(baseArgs(['unlock', '--yes']));
+    expect(result.code).toBe(0);
+    expect(await mongo.db.collection('_mmk_locks').countDocuments()).toBe(0);
+  });
+
+  it('should return the released holder as JSON with unlock --json', async () => {
+    await mongo.db.collection('_mmk_locks').insertOne({
+      _id: 'mmk_lock',
+      lockedAt: new Date(),
+      pid: 4242,
+      host: 'crashed-host',
+      executedBy: 'ghost',
+      owner: 'stale-token',
+    });
+    const result = await runCli(baseArgs(['unlock', '--json']));
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout) as { released: boolean; holder: { pid: number } };
+    expect(parsed.released).toBe(true);
+    expect(parsed.holder.pid).toBe(4242);
+    expect(await mongo.db.collection('_mmk_locks').countDocuments()).toBe(0);
   });
 
   it('should let --ts override a js createExtension from config', async () => {

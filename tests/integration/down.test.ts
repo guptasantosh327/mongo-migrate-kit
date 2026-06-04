@@ -1,9 +1,14 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Changelog } from '../../src/core/changelog.js';
 import type { MigratorKit } from '../../src/core/migrator.js';
-import { ConfigInvalidError, NotAppliedError } from '../../src/errors/index.js';
+import {
+  ConfigInvalidError,
+  MigrationInvalidNameError,
+  NotAppliedError,
+} from '../../src/errors/index.js';
 import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
 import { insertMigration, makeMigrator, makeProject } from '../helpers/project.js';
+import { makeRecord } from '../helpers/records.js';
 
 let mongo: TestMongo;
 const DB = 'mmk_down_test';
@@ -34,6 +39,16 @@ function setup(): void {
 }
 
 describe('MigratorKit.down (integration)', () => {
+  it('should refuse a path-traversing name even from a crafted applied record', async () => {
+    setup();
+    // Simulate a tampered changelog record whose name escapes the migrations dir.
+    // The down preflight must reject it before loading/executing any file.
+    const collection = new Changelog('_mmk_migrations');
+    await migrator.connect();
+    await collection.markApplied(mongo.db, makeRecord({ name: '../../evil.js', batch: 1 }));
+    await expect(migrator.down('../../evil.js')).rejects.toBeInstanceOf(MigrationInvalidNameError);
+  });
+
   it('should revert the last batch', async () => {
     setup();
     project.write('0001-a.ts', insertMigration('things', 'a'));

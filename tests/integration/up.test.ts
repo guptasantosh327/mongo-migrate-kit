@@ -1,6 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MigratorKit } from '../../src/core/migrator.js';
-import { ChecksumMismatchError, MigrationExecutionFailedError } from '../../src/errors/index.js';
+import {
+  ChecksumMismatchError,
+  MigrationExecutionFailedError,
+  MigrationInvalidNameError,
+} from '../../src/errors/index.js';
 import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
 import {
   failingMigration,
@@ -38,6 +42,16 @@ function setup(): void {
 }
 
 describe('MigratorKit.up (integration)', () => {
+  it('should reject a path-traversing filename instead of loading outside the dir', async () => {
+    setup();
+    // A real secret a traversal could try to read/execute; it must never be touched.
+    await expect(migrator.up('../../etc/passwd')).rejects.toBeInstanceOf(MigrationInvalidNameError);
+    await expect(migrator.up('sub/dir/0001-a.ts')).rejects.toBeInstanceOf(
+      MigrationInvalidNameError,
+    );
+    await expect(migrator.up('..')).rejects.toBeInstanceOf(MigrationInvalidNameError);
+  });
+
   it('should run all pending migrations', async () => {
     setup();
     project.write('0001-a.ts', insertMigration('things', 'a'));

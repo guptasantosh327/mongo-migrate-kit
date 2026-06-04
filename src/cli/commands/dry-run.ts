@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 import { ConfigInvalidError } from '../../errors/index.js';
 import { createLogger } from '../../utils/logger.js';
-import { type CliOptions, withMigrator } from '../shared.js';
+import { type CliOptions, emitJson, withMigrator } from '../shared.js';
 import { renderStatusTable } from '../table.js';
 
 /** Register the `dry-run` command */
@@ -12,6 +12,7 @@ export function registerDryRun(program: Command): void {
     .argument('<direction>', "Either 'up' or 'down'")
     .argument('[file]', 'Specific migration file')
     .option('--steps <n>', 'Preview reverting the last N migrations (down only)')
+    .option('--json', 'Output machine-readable JSON instead of a table')
     .action(async (direction: string, file: string | undefined, _opts, command) => {
       const opts = command.optsWithGlobals() as CliOptions & { steps?: string };
       await withMigrator(
@@ -23,12 +24,13 @@ export function registerDryRun(program: Command): void {
           const rows = await migrator.dryRun(direction, file, {
             ...(opts.steps !== undefined ? { steps: Number(opts.steps) } : {}),
           });
-          const logger = createLogger();
-          if (rows.length > 0) {
-            logger.info(renderStatusTable(rows));
+          if (opts.json) {
+            emitJson(rows);
+          } else if (rows.length > 0) {
+            createLogger().info(renderStatusTable(rows));
           }
         },
-        { spinner: true },
+        { spinner: true, ...(opts.json ? { json: true } : {}) },
       );
     });
 }

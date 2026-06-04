@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 import { createLogger } from '../../utils/logger.js';
-import { type CliOptions, withMigrator } from '../shared.js';
+import { type CliOptions, emitJson, withMigrator } from '../shared.js';
 import { renderImportTable } from '../table.js';
 
 /** Register the `import` command (adopt a migrate-mongo changelog) */
@@ -17,6 +17,7 @@ export function registerImport(program: Command): void {
     .option('--trust-hash', 'Reuse the source fileHash instead of recomputing from disk')
     .option('--force', 'Proceed even when the target changelog already has records')
     .option('--no-lock', 'Skip the concurrency lock (dev only)')
+    .option('--json', 'Output machine-readable JSON instead of a table')
     .action(async (_opts, command) => {
       const opts = command.optsWithGlobals() as CliOptions & {
         from?: string;
@@ -38,11 +39,13 @@ export function registerImport(program: Command): void {
             ...(opts.trustHash ? { trustHash: true } : {}),
             ...(opts.force ? { force: true } : {}),
           });
-          if (result.rows.length > 0) {
+          if (opts.json) {
+            emitJson(result);
+          } else if (result.rows.length > 0) {
             createLogger().info(renderImportTable(result.rows));
           }
         },
-        { spinner: true },
+        { spinner: true, ...(opts.json ? { json: true } : {}) },
       );
     });
 }
