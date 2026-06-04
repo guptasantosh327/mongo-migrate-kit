@@ -9,7 +9,7 @@
 _A modern, drop-in replacement for `migrate-mongo` etc._
 
 [![npm version](https://img.shields.io/npm/v/mongo-migrate-kit?style=flat-square&color=1E9E57&logo=npm&logoColor=white)](https://www.npmjs.com/package/mongo-migrate-kit)
-[![Docs](https://img.shields.io/badge/docs-online-1E9E57?style=flat-square&logo=readthedocs&logoColor=white)](https://guptasantosh327.github.io/mongo-migrate-kit/)
+[![Docs](https://img.shields.io/badge/docs-online-1E9E57?style=flat-square&logo=readthedocs&logoColor=white)](https://mongo-migrate-kit.vercel.app/)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A518-1E9E57?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Known Vulnerabilities](https://snyk.io/test/npm/mongo-migrate-kit/badge.svg)](https://snyk.io/test/npm/mongo-migrate-kit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1E9E57?style=flat-square)](https://opensource.org/licenses/MIT)
@@ -18,7 +18,7 @@ _A modern, drop-in replacement for `migrate-mongo` etc._
 Precise, safe migrations for MongoDB. Run a single file, roll back anything, and preview every
 change before it touches your database.
 
-### 📖 [Read the documentation →](https://guptasantosh327.github.io/mongo-migrate-kit/)
+### 📖 [Read the documentation →](https://mongo-migrate-kit.vercel.app/)
 
 </div>
 
@@ -115,14 +115,14 @@ export async function down({ db }: MigrationContext): Promise<void> {
 ## Documentation
 
 Full docs, guides, and the API reference live at
-**[guptasantosh327.github.io/mongo-migrate-kit](https://guptasantosh327.github.io/mongo-migrate-kit/)**.
+**[mongo-migrate-kit.vercel.app](https://mongo-migrate-kit.vercel.app/)**.
 
-- [Why mongo-migrate-kit?](https://guptasantosh327.github.io/mongo-migrate-kit/guide/why) — how it compares to `migrate-mongo`
-- [Core Concepts](https://guptasantosh327.github.io/mongo-migrate-kit/guide/concepts) — migrations, batches, the changelog, locking
-- [Getting Started](https://guptasantosh327.github.io/mongo-migrate-kit/guide/getting-started) & [Tutorial](https://guptasantosh327.github.io/mongo-migrate-kit/guide/tutorial)
-- [Configuration](https://guptasantosh327.github.io/mongo-migrate-kit/guide/configuration) · [Writing Migrations](https://guptasantosh327.github.io/mongo-migrate-kit/guide/writing-migrations) · [Transactions](https://guptasantosh327.github.io/mongo-migrate-kit/guide/transactions) · [Hooks](https://guptasantosh327.github.io/mongo-migrate-kit/guide/hooks)
-- [Programmatic API](https://guptasantosh327.github.io/mongo-migrate-kit/guide/api) · [CI/CD](https://guptasantosh327.github.io/mongo-migrate-kit/guide/ci-cd) · [Troubleshooting](https://guptasantosh327.github.io/mongo-migrate-kit/guide/troubleshooting)
-- Reference: [CLI Cheatsheet](https://guptasantosh327.github.io/mongo-migrate-kit/reference/cli) · [Error Codes](https://guptasantosh327.github.io/mongo-migrate-kit/reference/error-codes)
+- [Why mongo-migrate-kit?](https://mongo-migrate-kit.vercel.app/guide/why) — how it compares to `migrate-mongo`
+- [Core Concepts](https://mongo-migrate-kit.vercel.app/guide/concepts) — migrations, batches, the changelog, locking
+- [Getting Started](https://mongo-migrate-kit.vercel.app/guide/getting-started) & [Tutorial](https://mongo-migrate-kit.vercel.app/guide/tutorial)
+- [Configuration](https://mongo-migrate-kit.vercel.app/guide/configuration) · [Writing Migrations](https://mongo-migrate-kit.vercel.app/guide/writing-migrations) · [Transactions](https://mongo-migrate-kit.vercel.app/guide/transactions) · [Hooks](https://mongo-migrate-kit.vercel.app/guide/hooks)
+- [Programmatic API](https://mongo-migrate-kit.vercel.app/guide/api) · [CI/CD](https://mongo-migrate-kit.vercel.app/guide/ci-cd) · [Troubleshooting](https://mongo-migrate-kit.vercel.app/guide/troubleshooting)
+- Reference: [CLI Cheatsheet](https://mongo-migrate-kit.vercel.app/reference/cli) · [Error Codes](https://mongo-migrate-kit.vercel.app/reference/error-codes)
 
 ---
 

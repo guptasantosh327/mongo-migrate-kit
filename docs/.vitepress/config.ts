@@ -5,8 +5,8 @@ const ogDescription =
   'MongoDB migration toolkit for Node.js & TypeScript. Run a single migration, ' +
   'roll back any batch, preview with dry-run, transactions, checksums, and native locking.';
 const repo = 'https://github.com/guptasantosh327/mongo-migrate-kit';
-const base = '/mongo-migrate-kit/';
-const hostname = 'https://guptasantosh327.github.io/mongo-migrate-kit/';
+const base = '/';
+const hostname = 'https://mongo-migrate-kit.vercel.app/';
 const ogImage = `${hostname}logo.png`;
 
 const keywords = [
