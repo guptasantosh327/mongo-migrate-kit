@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
-import { format } from 'date-fns';
 import type { ImportRow, StatusRow } from '../types/index.js';
+import { formatDateTime } from '../utils/date.js';
 
 /** Render a checksum indicator cell */
 function checksumCell(value: boolean | null): string {
@@ -26,7 +26,7 @@ export function renderStatusTable(rows: StatusRow[]): string {
       row.file,
       statusCell(row.status),
       row.batch === null ? '' : String(row.batch),
-      row.appliedAt ? format(row.appliedAt, 'yyyy-MM-dd HH:mm:ss') : '',
+      row.appliedAt ? formatDateTime(row.appliedAt) : '',
       row.duration === null ? '' : `${row.duration}ms`,
       checksumCell(row.checksumOk),
     ]);
@@ -53,7 +53,7 @@ export function renderImportTable(rows: ImportRow[]): string {
     table.push([
       row.file,
       String(row.batch),
-      format(row.appliedAt, 'yyyy-MM-dd HH:mm:ss'),
+      formatDateTime(row.appliedAt),
       checksumSourceCell(row.checksumSource),
     ]);
   }

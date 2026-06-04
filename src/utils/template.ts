@@ -1,12 +1,12 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { format } from 'date-fns';
 import {
   ConfigFileExistsError,
   ConfigInvalidError,
   MigrationFileNotFoundError,
 } from '../errors/index.js';
 import type { MigrationExtension } from '../types/index.js';
+import { formatStamp } from './date.js';
 
 /** Convert an arbitrary migration name into a kebab-case slug */
 export function slugify(name: string): string {
@@ -25,7 +25,7 @@ export function buildPrefix(options: { sequential: boolean; index: number }): st
   if (options.sequential) {
     return String(options.index).padStart(4, '0');
   }
-  return format(new Date(), 'yyyyMMddHHmmss');
+  return formatStamp(new Date());
 }
 
 /** Count existing migration files in a directory to derive the next sequence index */

@@ -1,6 +1,6 @@
 {
   "name": "mongo-migrate-kit",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Elegant, fast, TypeScript-first MongoDB migrations for Node.js",
   "license": "MIT",
   "author": "guptasantosh327@gmail.com",
@@ -72,7 +72,6 @@
     "chalk": "^4.1.2",
     "cli-table3": "^0.6.5",
     "commander": "^12.1.0",
-    "date-fns": "^3.6.0",
     "dotenv": "^16.4.5",
     "ora": "^5.4.1",
     "zod": "^3.23.8"

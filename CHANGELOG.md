@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.2.1
+
+### Changed
+
+- **Dropped the `date-fns` runtime dependency** — the only two usages were fixed-pattern,
+  local-time formats (`yyyyMMddHHmmss` for migration filenames and `yyyy-MM-dd HH:mm:ss` in the
+  status/list/import tables). Both are now produced by a tiny dependency-free helper
+  (`src/utils/date.ts`: `formatStamp` / `formatDateTime`). Output is byte-for-byte identical;
+  one fewer dependency in the install tree.
+
 ## v1.2.0
 
 CI-friendly output, an unlock escape hatch, and security/robustness hardening.

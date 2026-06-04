@@ -12,7 +12,7 @@ _A modern, drop-in replacement for `migrate-mongo` etc._
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-1E9E57?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A518-1E9E57?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![MongoDB](https://img.shields.io/badge/MongoDB-%E2%89%A55.0-1E9E57?style=flat-square&logo=mongodb&logoColor=white)](https://www.mongodb.com)
-[![Known Vulnerabilities](https://snyk.io/test/github/seppevs/migrate-mongo/badge.svg)](https://snyk.io/test/github/seppevs/migrate-mongo)
+[![Known Vulnerabilities](https://snyk.io/test/github/seppevs/migrate-mongo/badge.svg)](https://socket.dev/npm/package/mongo-migrate-kit/overview/1.2.0)
 
 
 Single-file runs · per-batch rollback · dry-run previews · transactions · lifecycle hooks ·
