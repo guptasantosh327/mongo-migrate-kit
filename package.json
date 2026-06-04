@@ -47,6 +47,9 @@
     "coverage": "vitest run --coverage",
     "lint": "biome check src/",
     "format": "biome format --write src/",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
     "prepublishOnly": "npm run typecheck && npm run lint && npm run test && npm run build",
     "release": "bumpp && npm publish"
   },
@@ -97,6 +100,7 @@
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "vitepress": "^1.6.4",
     "vitest": "^2.1.8"
   }
 }

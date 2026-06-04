@@ -1,0 +1,103 @@
+/**
+ * Brand theme for mongo-migrate-kit — same approach Pinia/Vite/Vue use:
+ * override VitePress CSS variables to restyle the default theme.
+ * Palette: MongoDB green (#00ED64 / #13AA52 / #00684A).
+ */
+
+:root {
+  /* ─── Brand colors (buttons, links, accents) ──────────────────────── */
+  --vp-c-brand-1: #00875c;
+  --vp-c-brand-2: #00a36c;
+  --vp-c-brand-3: #00ED64;
+  --vp-c-brand-soft: rgba(0, 237, 100, 0.14);
+
+  /* Default theme alias mappings (kept in sync with brand) */
+  --vp-c-default-1: var(--vp-c-gray-1);
+  --vp-c-default-2: var(--vp-c-gray-2);
+  --vp-c-default-3: var(--vp-c-gray-3);
+  --vp-c-default-soft: var(--vp-c-gray-soft);
+
+  --vp-c-tip-1: var(--vp-c-brand-1);
+  --vp-c-tip-2: var(--vp-c-brand-2);
+  --vp-c-tip-3: var(--vp-c-brand-3);
+  --vp-c-tip-soft: var(--vp-c-brand-soft);
+}
+
+.dark {
+  --vp-c-brand-1: #00ED64;
+  --vp-c-brand-2: #13AA52;
+  --vp-c-brand-3: #00875c;
+}
+
+/* ─── Buttons ──────────────────────────────────────────────────────── */
+:root {
+  --vp-button-brand-bg: var(--vp-c-brand-2);
+  --vp-button-brand-hover-bg: var(--vp-c-brand-1);
+  --vp-button-brand-active-bg: var(--vp-c-brand-1);
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-text: #ffffff;
+}
+
+/* ─── Home hero: gradient title + glowing logo blob (the "Pinia look") ─ */
+:root {
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: -webkit-linear-gradient(
+    120deg,
+    #00ED64 25%,
+    #13AA52
+  );
+
+  --vp-home-hero-image-background-image: linear-gradient(
+    -45deg,
+    #00ED64 40%,
+    #00684A 100%
+  );
+  --vp-home-hero-image-filter: blur(48px);
+}
+
+@media (min-width: 640px) {
+  :root {
+    --vp-home-hero-image-filter: blur(72px);
+  }
+}
+
+@media (min-width: 960px) {
+  :root {
+    --vp-home-hero-image-filter: blur(96px);
+  }
+}
+
+/* ─── Code block inline highlight accent ──────────────────────────────── */
+:root {
+  --vp-code-block-bg: var(--vp-c-bg-alt);
+}
+
+/* Slightly larger, friendlier hero on wide screens */
+.VPHero .name {
+  letter-spacing: -0.02em;
+}
+
+/* ─── Home feature cards: lift + glow on hover (clickable cards) ───────── */
+.VPFeatures .VPFeature {
+  transition:
+    border-color 0.25s ease,
+    background-color 0.25s ease,
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+  will-change: transform;
+}
+
+.VPFeatures .VPFeature.link:hover {
+  border-color: var(--vp-c-brand-1);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(0, 104, 74, 0.18);
+}
+
+.dark .VPFeatures .VPFeature.link:hover {
+  box-shadow: 0 12px 30px rgba(0, 237, 100, 0.16);
+}
+
+/* Make the "learn more" link adopt the brand color on card hover */
+.VPFeatures .VPFeature.link:hover .link-text-value {
+  color: var(--vp-c-brand-1);
+}
