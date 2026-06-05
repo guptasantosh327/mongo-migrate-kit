@@ -34,7 +34,7 @@ your database half-migrated when something fails.
 | `redo` (down + up)                              |        ❌        |          ✅          |
 | Checksum / tamper detection                     |        ❌        |          ✅          |
 | Lifecycle hooks                                 |        ❌        |          ✅          |
-| First-class TypeScript (no setup)               |        ❌        |          ✅          |
+| First-class TypeScript (built-in)               |        ❌        |          ✅          |
 | History kept on rollback (never deleted)        |        ❌        |          ✅          |
 
 ::: tip Already on migrate-mongo?

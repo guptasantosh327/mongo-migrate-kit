@@ -9,7 +9,7 @@ hero:
   text: Elegant MongoDB migrations for Node.js
   tagline: Precise, safe migrations for MongoDB. Run a single file, roll back anything, and preview every change before it touches your database.
   image:
-    src: /logo.png
+    src: /logo-mark.svg
     alt: mongo-migrate-kit
   actions:
     - theme: brand
@@ -60,7 +60,7 @@ features:
     linkText: mmk status
   - icon: 📘
     title: TypeScript & JavaScript
-    details: .ts (via tsx), ESM, and CommonJS all just work, with a fully-typed context and config. No ts-node plumbing required.
+    details: .ts (native on Node 22.18+, or via a loader like tsx), ESM, and CommonJS all just work, with a fully-typed context and config.
     link: /guide/writing-migrations
     linkText: Writing migrations
   - icon: 📦

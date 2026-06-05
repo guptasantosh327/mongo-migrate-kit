@@ -55,12 +55,17 @@ ConnectionFailedError: Failed to connect to MongoDB
 Cannot import a TypeScript migration: ERR_UNKNOWN_FILE_EXTENSION
 ```
 
-**Why:** you're running under a Node runtime that can't import `.ts` directly.
+**Why:** you're on a Node version below 22.18, which can't import `.ts` directly, and no TypeScript
+loader is registered. `mmk` runs under your Node and does not bundle a loader.
 
 **Fix:** any one of:
-- Use the `mmk` CLI, which runs `.ts` through `tsx` automatically.
-- Use Node ≥ 22.18, or register a loader (`node --import tsx ...`).
-- Or author the migration as `.js` (`mmk create <name> --js`).
+- **Upgrade to Node ≥ 22.18** — `.ts` then loads natively, no setup.
+- **Register a loader:** install `tsx` and run mmk under it, e.g.
+  `node --import tsx node_modules/mongo-migrate-kit/dist/mmk.cjs up`.
+- **Use `.js` instead** (`mmk create <name> --js`) — runs on Node 18+ with zero setup.
+
+See [Running TypeScript migrations](/guide/writing-migrations#running-typescript-migrations) for the
+full breakdown.
 
 ## "Transaction numbers are only allowed on a replica set"
 

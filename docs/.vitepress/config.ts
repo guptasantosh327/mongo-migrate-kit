@@ -57,7 +57,7 @@ export default defineConfig({
   sitemap: { hostname },
 
   head: [
-    ['link', { rel: 'icon', type: 'image/png', href: `${base}favicon.png` }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}logo-mark.svg.svg` }],
     ['meta', { name: 'theme-color', content: '#00ED64' }],
     ['meta', { name: 'author', content: 'Santosh Gupta' }],
     ['meta', { name: 'keywords', content: keywords }],
@@ -86,7 +86,7 @@ export default defineConfig({
   },
 
   themeConfig: {
-    logo: '/favicon.png',
+    logo: '/logo-mark.svg',
 
     // ─── Top navigation ──────────────────────────────────────────────
     nav: [

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/monochrome_svg.png" alt="mongo-migrate-kit" width="360" />
+<img src="assets/logo-icon-b-alt2.png" alt="mongo-migrate-kit" width="420" />
 
 # mongo-migrate-kit
 
@@ -47,7 +47,7 @@ change before it touches your database.
 | `redo` (down + up)                              |        ❌        |          ✅          |
 | Checksum / tamper detection                     |        ❌        |          ✅          |
 | Lifecycle hooks                                 |        ❌        |          ✅          |
-| First-class TypeScript (no setup)               |        ❌        |          ✅          |
+| First-class TypeScript (built-in)               |        ❌        |          ✅          |
 | History kept on rollback (never deleted)        |        ❌        |          ✅          |
 | Adopt an existing `migrate-mongo` changelog | — | ✅ `mmk import` |
 
@@ -552,7 +552,7 @@ export default {
 `mmk` loads TypeScript and both JavaScript module systems with no extra setup:
 
 ```ts
-// TypeScript / ESM — named exports (runs through tsx)
+// TypeScript / ESM — named exports (native on Node 22.18+, or under a loader like tsx)
 export async function up({ db }) { /* ... */ }
 export async function down({ db }) { /* ... */ }
 ```

@@ -46,9 +46,11 @@ Rollbacks never delete history — the record is marked `reverted`. See [`mmk do
 
 ## Does mongo-migrate-kit support TypeScript?
 
-Yes — TypeScript is first-class. `.ts` migrations run natively through `tsx` (no `ts-node` setup),
-and the migration context and config are fully typed. ESM and CommonJS `.js` files work too. See
-[Writing Migrations](/guide/writing-migrations).
+Yes — TypeScript is first-class, with a fully-typed migration context and config. On **Node ≥ 22.18**
+`.ts` migrations load natively with zero setup. On older Node, run `mmk` under a TypeScript loader
+like `tsx`, or author migrations as `.js` (which work on Node 18+). `mmk` doesn't bundle a loader —
+it uses your installed Node. See
+[Running TypeScript migrations](/guide/writing-migrations#running-typescript-migrations).
 
 ## How do I write a MongoDB migration?
 

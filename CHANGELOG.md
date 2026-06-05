@@ -12,6 +12,21 @@ All notable changes to this project will be documented in this file.
   (`src/utils/date.ts`: `formatStamp` / `formatDateTime`). Output is byte-for-byte identical;
   one fewer dependency in the install tree.
 
+### Documentation
+
+- **New documentation website** at <https://mongo-migrate-kit.vercel.app/> — guides, a full command
+  reference, a programmatic API overview, an FAQ, and a migrate-mongo migration guide.
+- Clarified the TypeScript runtime story: `.ts` migrations run natively on **Node ≥ 22.18** (built-in
+  type stripping) or under a TypeScript loader such as `tsx` (the CLI does not bundle one); `.js`
+  migrations run on Node 18+ with no setup.
+
+### Internal
+
+- No change to the published package's runtime behaviour. Dev-tooling only: upgraded `vitest` and
+  `@vitest/coverage-v8` to v4 (developing/testing now requires Node ≥ 20; the package's Node ≥ 18
+  floor is unchanged) and refreshed `bumpp`/`changelogen` to drop a vulnerable transitive `tar`.
+  Added unit tests to keep the coverage gate green under v4's stricter counting.
+
 ## v1.2.0
 
 CI-friendly output, an unlock escape hatch, and security/robustness hardening.

@@ -61,6 +61,47 @@ describe('MigrationLock.acquire', () => {
     const lock = new MigrationLock(db, '_mmk_locks', 60);
     await expect(lock.acquire()).rejects.toThrow('network down');
   });
+
+  it('should throw when another writer won the stale-reclaim race', async () => {
+    const { db, collection } = makeDb();
+    // Upsert succeeds, but the read-back shows a different owner token.
+    collection.findOne.mockResolvedValueOnce({ _id: LOCK_ID, owner: 'other-writer' });
+    const lock = new MigrationLock(db, '_mmk_locks', 60);
+    await expect(lock.acquire()).rejects.toBeInstanceOf(LockAlreadyHeldError);
+  });
+
+  it('should throw when the lock document is missing after upsert', async () => {
+    const { db, collection } = makeDb();
+    collection.findOne.mockResolvedValueOnce(null);
+    const lock = new MigrationLock(db, '_mmk_locks', 60);
+    await expect(lock.acquire()).rejects.toBeInstanceOf(LockAlreadyHeldError);
+  });
+});
+
+describe('MigrationLock.inspect / forceRelease', () => {
+  it('should return the current lock document from inspect', async () => {
+    const { db, collection } = makeDb();
+    const doc = { _id: LOCK_ID, owner: 'abc', pid: 1 };
+    collection.findOne.mockResolvedValueOnce(doc);
+    const lock = new MigrationLock(db, '_mmk_locks', 60);
+    expect(await lock.inspect()).toBe(doc);
+  });
+
+  it('should delete and return the existing doc from forceRelease', async () => {
+    const { db, collection } = makeDb();
+    const doc = { _id: LOCK_ID, owner: 'abc' };
+    collection.findOne.mockResolvedValueOnce(doc);
+    const lock = new MigrationLock(db, '_mmk_locks', 60);
+    expect(await lock.forceRelease()).toBe(doc);
+    expect(collection.deleteOne).toHaveBeenCalledWith({ _id: LOCK_ID });
+  });
+
+  it('should return null from forceRelease when no lock exists', async () => {
+    const { db, collection } = makeDb();
+    const lock = new MigrationLock(db, '_mmk_locks', 60);
+    expect(await lock.forceRelease()).toBeNull();
+    expect(collection.deleteOne).toHaveBeenCalledWith({ _id: LOCK_ID });
+  });
 });
 
 describe('MigrationLock.renew', () => {

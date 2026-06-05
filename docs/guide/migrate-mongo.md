@@ -55,5 +55,5 @@ reversible. Only the *imported* legacy records are forward-only.
 | `redo` (down + up)                              |        ❌        |          ✅          |
 | SHA-256 checksum / tamper detection             |        ❌        |          ✅          |
 | Lifecycle hooks                                 |        ❌        |          ✅          |
-| First-class TypeScript (no setup)               |        ❌        |          ✅          |
+| First-class TypeScript (built-in)               |        ❌        |          ✅          |
 | History preserved on rollback (never deleted)   |        ❌        |          ✅          |

@@ -42,6 +42,12 @@ describe('loadMigrationFile', () => {
       loadMigrationFile(path.join(fixtures, 'invalid-no-down.ts')),
     ).rejects.toBeInstanceOf(MigrationInvalidExportError);
   });
+
+  it('should rethrow a non-TypeScript import failure unchanged', async () => {
+    await expect(loadMigrationFile(path.join(fixtures, 'throws-on-import.cjs'))).rejects.toThrow(
+      'boom at import time',
+    );
+  });
 });
 
 describe('tsLoadErrorOrNull', () => {
@@ -71,5 +77,17 @@ describe('tsLoadErrorOrNull', () => {
 
   it('should return null when the error is unrelated to the file extension', () => {
     expect(tsLoadErrorOrNull('/migrations/0001-x.ts', new Error('boom'))).toBeNull();
+  });
+
+  it('should return null when the error is not an object', () => {
+    expect(tsLoadErrorOrNull('/migrations/0001-x.ts', 'a string error')).toBeNull();
+    expect(tsLoadErrorOrNull('/migrations/0001-x.ts', null)).toBeNull();
+  });
+
+  it('should detect the failure via the error message on an Error instance', () => {
+    const err = new Error('Unknown file extension ".ts" for /x.ts');
+    const result = tsLoadErrorOrNull('/migrations/0001-x.ts', err);
+    expect(result).toBeInstanceOf(MigrationInvalidExportError);
+    expect(result?.context?.cause).toBe(err.message);
   });
 });

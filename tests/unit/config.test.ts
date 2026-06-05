@@ -57,6 +57,12 @@ describe('loadConfig', () => {
     expect(config.sequential).toBe(false);
   });
 
+  it('should default uri and dbName to empty strings when requireDb is false', async () => {
+    const config = await loadConfig({ cwd: tmp, requireDb: false });
+    expect(config.uri).toBe('');
+    expect(config.dbName).toBe('');
+  });
+
   it('should let MMK_CREATE_EXTENSION override the default', async () => {
     process.env.MMK_URI = 'mongodb://env-host:27017';
     process.env.MMK_DB = 'env-db';

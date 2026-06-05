@@ -99,8 +99,41 @@ By default files are timestamped: `20260605143021-add-users-index.ts`. Migration
 filename order, so the timestamp prefix guarantees deterministic ordering. Set `sequential: true` in
 config for `0001-`, `0002-` numbering instead.
 
-## TypeScript at runtime
+## Running TypeScript migrations
 
-The `mmk` CLI runs `.ts` migrations natively through `tsx` — no `ts-node` setup. If you invoke the
-library programmatically under a plain Node runtime that can't import `.ts`, either use Node ≥ 22.18,
-register a TypeScript loader (such as `tsx`), or author the file as `.js`.
+`mmk` runs under your installed Node — it does **not** bundle a TypeScript loader. How a `.ts`
+migration loads depends on your Node version:
+
+| Your Node | `.ts` migrations | Setup needed |
+|---|---|---|
+| **≥ 22.18** | Load natively via built-in type stripping | None |
+| **< 22.18** | Need a TypeScript loader, or use `.js` | See below |
+
+::: tip The simplest path
+On **Node ≥ 22.18**, `.ts` migrations just work — nothing to install. If you're on older Node and
+don't want to set up a loader, author migrations as **`.js`**: they run everywhere on Node 18+ with
+zero setup.
+:::
+
+### Using `.ts` on Node < 22.18
+
+Install [`tsx`](https://github.com/privatenumber/tsx) and run `mmk` under it so its loader is
+registered before the migration is imported:
+
+```bash
+npm install -D tsx
+```
+
+```json
+{
+  "scripts": {
+    "migrate": "node --import tsx node_modules/mongo-migrate-kit/dist/mmk.cjs up"
+  }
+}
+```
+
+`tsx` is *your* dev dependency here — `mmk` doesn't ship it. The same applies when you call the
+library programmatically: run your script under Node ≥ 22.18 or with a TypeScript loader registered.
+
+If a `.ts` file can't be loaded, `mmk` throws a clear error explaining these options — see
+[Troubleshooting](/guide/troubleshooting#a-ts-migration-won-t-load).
