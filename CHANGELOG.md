@@ -2,16 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## v1.2.1
-
-### Changed
-
-- **Dropped the `date-fns` runtime dependency** — the only two usages were fixed-pattern,
-  local-time formats (`yyyyMMddHHmmss` for migration filenames and `yyyy-MM-dd HH:mm:ss` in the
-  status/list/import tables). Both are now produced by a tiny dependency-free helper
-  (`src/utils/date.ts`: `formatStamp` / `formatDateTime`). Output is byte-for-byte identical;
-  one fewer dependency in the install tree.
-
+## v1.2.2
 ### Documentation
 
 - **New documentation website** at <https://mongo-migrate-kit.vercel.app/> — guides, a full command
@@ -26,6 +17,17 @@ All notable changes to this project will be documented in this file.
   `@vitest/coverage-v8` to v4 (developing/testing now requires Node ≥ 20; the package's Node ≥ 18
   floor is unchanged) and refreshed `bumpp`/`changelogen` to drop a vulnerable transitive `tar`.
   Added unit tests to keep the coverage gate green under v4's stricter counting.
+
+
+## v1.2.1
+
+### Changed
+
+- **Dropped the `date-fns` runtime dependency** — the only two usages were fixed-pattern,
+  local-time formats (`yyyyMMddHHmmss` for migration filenames and `yyyy-MM-dd HH:mm:ss` in the
+  status/list/import tables). Both are now produced by a tiny dependency-free helper
+  (`src/utils/date.ts`: `formatStamp` / `formatDateTime`). Output is byte-for-byte identical;
+  one fewer dependency in the install tree.
 
 ## v1.2.0
 

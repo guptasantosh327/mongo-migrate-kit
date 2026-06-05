@@ -94,7 +94,7 @@ export default defineConfig({
       { text: 'Commands', link: '/commands/up', activeMatch: '/commands/' },
       { text: 'Reference', link: '/reference/cli', activeMatch: '/reference/' },
       {
-        text: 'v1.2.1',
+        text: 'v1.2.2',
         items: [
           { text: 'Changelog', link: `${repo}/blob/main/CHANGELOG.md` },
           { text: 'npm', link: 'https://www.npmjs.com/package/mongo-migrate-kit' },

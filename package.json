@@ -1,6 +1,6 @@
 {
   "name": "mongo-migrate-kit",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Elegant, fast, TypeScript-first MongoDB migrations for Node.js",
   "license": "MIT",
   "author": "guptasantosh327@gmail.com",
