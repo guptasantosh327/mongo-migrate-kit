@@ -454,24 +454,71 @@ and stamps `revertedAt` — it is **never deleted**, so the full history stays i
 </details>
 
 <details>
-<summary><b>Programmatic API</b> — drive migrations from your own code</summary>
+<summary><b>Programmatic API</b> — run migrations from your own code</summary>
 
 <br>
 
-Every CLI command is a method on `MigratorKit`:
+#### Run pending migrations on app start
+
+`runMigrations()` is the blessed one-call entry point. It opens its own connection, applies every
+pending migration, and **always disconnects** — even if a migration throws, so a failed boot never
+leaks a MongoDB connection. A failing migration aborts startup instead of letting your app serve
+traffic against a half-migrated database:
 
 ```ts
-import { MigratorKit } from 'mongo-migrate-kit';
+import { runMigrations } from 'mongo-migrate-kit';
 
-const migrator = new MigratorKit({
-  uri: 'mongodb://localhost:27017',
+// Call this before your server starts listening.
+const { applied, upToDate } = await runMigrations({
+  uri: process.env.MONGO_URI!,
   dbName: 'my_app',
   migrationsDir: './migrations',
 });
 
+if (!upToDate) console.log(`Applied ${applied.length} migration(s)`);
+// then: app.listen(...)
+```
+
+#### Multiple instances booting together
+
+When several instances start at once, only one wins the lock. Set `onLockHeld: 'wait'` so the others
+block until the migrating peer finishes, then confirm there's nothing left to apply before returning:
+
+```ts
+await runMigrations(
+  { uri: process.env.MONGO_URI!, dbName: 'my_app' },
+  { onLockHeld: 'wait', lockWaitTimeoutMs: 30_000 }, // default 'throw'
+);
+```
+
+#### Serverless / cold start
+
+The same call works in a Lambda/Cloud Function bootstrap. Keep `onLockHeld: 'wait'` so concurrent
+cold starts don't fail, and rely on the auto-disconnect so each invocation cleans up after itself.
+
+#### Fail a deploy/health check when the DB is behind (no writes)
+
+`pendingMigrations()` is a connection-managed, read-only readiness probe:
+
+```ts
+import { pendingMigrations } from 'mongo-migrate-kit';
+
+const pending = await pendingMigrations({ uri, dbName: 'my_app' });
+if (pending.length > 0) {
+  throw new Error(`Database is behind by ${pending.length} migration(s)`);
+}
+```
+
+#### Full control
+
+For everything else, every CLI command is a method on `MigratorKit` (you manage the lifecycle):
+
+```ts
+import { MigratorKit } from 'mongo-migrate-kit';
+
+const migrator = new MigratorKit({ uri, dbName: 'my_app', migrationsDir: './migrations' });
 await migrator.connect();
-const applied = await migrator.up();       // RunResult[]
-const rows    = await migrator.status();   // StatusRow[]
+const rows = await migrator.status();   // StatusRow[]
 await migrator.disconnect();
 ```
 
