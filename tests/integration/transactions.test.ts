@@ -99,6 +99,54 @@ describe('runMigration transactions (integration)', () => {
     expect(Number.isFinite(outcome.duration)).toBe(true);
   });
 
+  it('should persist the changelog write inside the same transaction', async () => {
+    const persist = vi.fn(async (_duration: number, session) => {
+      // Writing through the provided session enrols this in the migration's txn.
+      await mongo.db.collection('tx_changelog').insertOne({ name: 'atomic.ts' }, { session });
+    });
+    await mongo.db.collection('tx_changelog').deleteMany({});
+    await runMigration({
+      name: 'atomic.ts',
+      migration: {
+        up: async (ctx) => {
+          await ctx.db.collection(COLLECTION).insertOne({ v: 9 }, { session: ctx.session });
+        },
+        down: async () => undefined,
+      },
+      direction: 'up',
+      context: context(),
+      useTransaction: true,
+      persist,
+    });
+    expect(persist).toHaveBeenCalledOnce();
+    // The session arg proves the record write joined the transaction.
+    expect(persist.mock.calls[0]?.[1]).toBeDefined();
+    expect(await mongo.db.collection(COLLECTION).countDocuments()).toBe(1);
+    expect(await mongo.db.collection('tx_changelog').countDocuments()).toBe(1);
+  });
+
+  it('should not persist when the migration body throws (record + data roll back)', async () => {
+    const persist = vi.fn(async () => undefined);
+    await expect(
+      runMigration({
+        name: 'rollback.ts',
+        migration: {
+          up: async (ctx) => {
+            await ctx.db.collection(COLLECTION).insertOne({ v: 10 }, { session: ctx.session });
+            throw new Error('boom');
+          },
+          down: async () => undefined,
+        },
+        direction: 'up',
+        context: context(),
+        useTransaction: true,
+        persist,
+      }),
+    ).rejects.toBeInstanceOf(MigrationExecutionFailedError);
+    expect(persist).not.toHaveBeenCalled();
+    expect(await mongo.db.collection(COLLECTION).countDocuments()).toBe(0);
+  });
+
   it('should call the onError hook before rethrowing', async () => {
     const onError = vi.fn().mockResolvedValue(undefined);
     const migration: MigrationModule = {

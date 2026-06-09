@@ -1,4 +1,4 @@
-import type { ClientSession, Db, MongoClient } from 'mongodb';
+import type { ClientSession, Db, MongoClient, MongoClientOptions } from 'mongodb';
 import type { Mongoose } from 'mongoose';
 
 // ─── Migration File Contract ───────────────────────────────────────────────────
@@ -116,6 +116,14 @@ export interface MmkConfig {
   templatePath?: string;
   /** Mongoose instance — required only if your migrations use Mongoose models */
   mongoose?: Mongoose;
+  /**
+   * Extra options forwarded to the `MongoClient` constructor — the escape hatch
+   * for connection hardening (TLS, timeouts, auth, read/write preferences) when
+   * you would rather not put everything in the URI. mmk applies its own safe
+   * defaults first (sane server-selection/connect timeouts); anything you set
+   * here overrides them.
+   */
+  mongoClientOptions?: MongoClientOptions;
   hooks?: MigrationHooks;
   /** Custom logger — set to null to silence all output (useful in tests) */
   logger?: MmkLogger | null;
@@ -257,4 +265,5 @@ export type MmkErrorCode =
   | 'ALREADY_APPLIED'
   | 'NOT_APPLIED'
   | 'IMPORT_TARGET_NOT_EMPTY'
-  | 'MIGRATION_IRREVERSIBLE';
+  | 'MIGRATION_IRREVERSIBLE'
+  | 'TRANSACTIONS_UNSUPPORTED';

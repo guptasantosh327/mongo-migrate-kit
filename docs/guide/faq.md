@@ -73,8 +73,11 @@ Generate the scaffold with `mmk create <name>`. See [Writing Migrations](/guide/
 ## Can I run MongoDB migrations in a transaction?
 
 Yes. Export `useTransaction = true` from a migration (or set it globally in config) and `mmk` wraps
-it in a MongoDB session + transaction — commit on success, abort on error. Requires a replica set.
-See [Transactions](/guide/transactions).
+it in a MongoDB session + transaction — commit on success, abort on error. The changelog "applied"
+record is written **inside the same transaction**, so the migration and its bookkeeping commit
+atomically (a crash can't leave a committed-but-unrecorded migration that re-runs next deploy).
+Requires a replica set; on a standalone, `mmk` fails fast with `TRANSACTIONS_UNSUPPORTED` before
+running anything. See [Transactions](/guide/transactions).
 
 ## How do I preview migrations before running them?
 

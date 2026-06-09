@@ -28,6 +28,7 @@ Available on every command, highest precedence:
 | `mmk down <file>` | Roll back a single migration |
 | `mmk down --batch <n>` | Roll back a specific batch |
 | `mmk down --steps <n>` | Roll back the last N migrations |
+| `mmk down --force` | Roll back even if a file drifted (asks to confirm) |
 | [`mmk redo`](/commands/redo) | Down + up the last applied migration |
 | `mmk redo <file>` | Down + up a specific migration |
 

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
-import type { Db } from 'mongodb';
+import type { Collection, Db } from 'mongodb';
 import { LockAlreadyHeldError, LockReleaseFailedError } from '../errors/index.js';
 import type { MmkLogger } from '../types/index.js';
 
@@ -52,11 +52,26 @@ export class MigrationLock {
   }
 
   /**
+   * The lock collection, pinned to `w: 'majority'` / `readConcern: 'majority'`.
+   * Mutual exclusion is only as strong as the lock's durability: a lock write
+   * that is rolled back on a primary failover (or a read that sees a stale,
+   * not-yet-committed state) would let two runs proceed at once. Majority on
+   * both sides closes that window. (Harmless on a standalone, where "majority"
+   * is a single node.)
+   */
+  private coll(): Collection<LockDocument> {
+    return this.db.collection<LockDocument>(this.collectionName, {
+      writeConcern: { w: 'majority' },
+      readConcern: { level: 'majority' },
+    });
+  }
+
+  /**
    * Acquire the lock, reclaiming it if the existing one is stale.
    * @throws {@link LockAlreadyHeldError} when another process holds a fresh lock
    */
   async acquire(): Promise<void> {
-    const collection = this.db.collection<LockDocument>(this.collectionName);
+    const collection = this.coll();
     const staleThreshold = new Date(Date.now() - this.ttlSeconds * 1000);
     const owner = randomUUID();
     const lockFields = {
@@ -107,15 +122,16 @@ export class MigrationLock {
     if (!this.owner) {
       return false;
     }
-    const result = await this.db
-      .collection<LockDocument>(this.collectionName)
-      .updateOne({ _id: LOCK_ID, owner: this.owner }, { $set: { lockedAt: new Date() } });
+    const result = await this.coll().updateOne(
+      { _id: LOCK_ID, owner: this.owner },
+      { $set: { lockedAt: new Date() } },
+    );
     return result.matchedCount === 1;
   }
 
   /** Read the current lock document, or null when no lock is held */
   async inspect(): Promise<LockDocument | null> {
-    return this.db.collection<LockDocument>(this.collectionName).findOne({ _id: LOCK_ID });
+    return this.coll().findOne({ _id: LOCK_ID });
   }
 
   /**
@@ -124,7 +140,7 @@ export class MigrationLock {
    * left behind by a crashed run — bypasses the owner scoping of {@link release}.
    */
   async forceRelease(): Promise<LockDocument | null> {
-    const collection = this.db.collection<LockDocument>(this.collectionName);
+    const collection = this.coll();
     const existing = await collection.findOne({ _id: LOCK_ID });
     await collection.deleteOne({ _id: LOCK_ID });
     return existing;
@@ -139,7 +155,7 @@ export class MigrationLock {
   async release(): Promise<void> {
     const filter = this.owner ? { _id: LOCK_ID, owner: this.owner } : { _id: LOCK_ID };
     try {
-      await this.db.collection<LockDocument>(this.collectionName).deleteOne(filter);
+      await this.coll().deleteOne(filter);
       this.owner = undefined;
     } catch (error) {
       throw new LockReleaseFailedError('Failed to release migration lock', {

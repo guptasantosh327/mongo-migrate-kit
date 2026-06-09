@@ -6,6 +6,10 @@ operation commits, or none do**. This is opt-in and works at two levels.
 ::: warning Requires a replica set
 MongoDB transactions require a replica set (or a sharded cluster). A standalone `mongod` does not
 support them. Local development with `mongodb-memory-server` spins up a replica set automatically.
+
+`mmk` detects a standalone deployment when it connects and **fails fast** with a
+`TransactionsUnsupportedError` (`TRANSACTIONS_UNSUPPORTED`) *before* the migration body runs — so a
+transaction on the wrong topology errors immediately instead of half-way through at commit time.
 :::
 
 ## Enable per file
@@ -63,10 +67,19 @@ export default {
 
 When a transactional migration runs:
 
-1. A MongoDB session starts and `session.startTransaction()` is called.
+1. A MongoDB session starts and `session.startTransaction({ writeConcern: { w: 'majority' } })` is called.
 2. The session is exposed as `ctx.session` to your `up`/`down`.
-3. On success → `session.commitTransaction()`, then the changelog record is written.
+3. On success → the changelog record is written **through the same session**, then
+   `session.commitTransaction()`.
 4. On any thrown error → `session.abortTransaction()`, the `onError` hook fires, and the batch stops.
 
 This means a failed transactional migration leaves the database in its original state — no partial
 writes.
+
+::: tip The changelog record is part of the transaction
+Because the "applied" record is written inside the transaction (step 3), the migration's data **and**
+its bookkeeping record commit atomically. There is no window where the data is committed but the
+record is missing — the gap that would otherwise let a non-idempotent migration **re-run on the next
+deploy** after a crash between commit and recording. For non-idempotent migrations against
+production, enabling `useTransaction` is the way to get exactly-once semantics.
+:::

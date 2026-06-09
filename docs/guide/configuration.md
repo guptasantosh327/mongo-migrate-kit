@@ -92,8 +92,45 @@ for Google/Vault/Azure/any source — it just must return `{ uri, dbName }`).
 | `sequential` | `boolean` | `false` | Use `0001-` numbering instead of timestamps |
 | `templatePath` | `string` | — | Path to a custom migration template |
 | `mongoose` | `Mongoose` | — | Mongoose instance, if your migrations use it |
+| `mongoClientOptions` | `MongoClientOptions` | — | Extra options merged into the `MongoClient` (TLS, timeouts, auth, read/write prefs) |
 | `hooks` | `MigrationHooks` | — | [Lifecycle hooks](/guide/hooks) |
 | `logger` | `MmkLogger \| null` | built-in | Custom logger; `null` silences all output |
+
+## Connection hardening
+
+`mmk` builds the `MongoClient` with safe defaults so a wrong URI fails fast:
+
+- `serverSelectionTimeoutMS` and `connectTimeoutMS` of `10000` — an unreachable host errors in seconds
+  instead of hanging.
+- `retryWrites: true`.
+- **No client-wide write concern is imposed** — your migration operations keep whatever durability your
+  URI/cluster specifies (so a deliberate `?w=1` for a fast bulk migration is respected).
+- Durability is pinned only where correctness depends on it: the lock collection (`_mmk_locks`) and
+  changelog (`_mmk_migrations`) are always written with `w: 'majority'` (the lock is also read with
+  `readConcern: 'majority'`) at the **collection** level, so mutual exclusion and the audit trail
+  survive a primary failover regardless of your URI.
+
+`mongoClientOptions` is merged **last**, so it overrides the defaults above. Use it to enable TLS, tune
+timeouts, or set auth and read preferences for your production cluster:
+
+```js
+// mmk.config.js
+export default {
+  uri: process.env.MMK_URI,
+  dbName: 'my_app',
+  mongoClientOptions: {
+    tls: true,
+    serverSelectionTimeoutMS: 5000,
+    readPreference: 'primary',
+  },
+};
+```
+
+::: warning Credentials in errors are redacted
+The native driver often embeds the connection string in its error messages. `mmk` scrubs any
+`user:pass@` from connection errors before they reach logs, `--json` output, or an error's `context`,
+so a failed connection never leaks your password.
+:::
 
 ## Environment variables
 

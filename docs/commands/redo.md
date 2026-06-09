@@ -35,6 +35,11 @@ Plus the [global flags](/guide/configuration#global-cli-flags).
 
 ## Notes
 
+- The whole `down` → `up` runs under a **single lock acquisition**, so no other process can interleave
+  between the revert and the re-apply (and the migration can't be stranded in a reverted state if the
+  re-apply fails to start).
+- The `down` half is **forced past the [checksum guard](/commands/down#checksum-verification)** —
+  redoing an *edited* migration is the usual reason to run `redo`, so a drifted file does not block it.
 - `redo` inherits the [forward-only guard](/commands/down#forward-only-imported-migrations): an
   imported `migrate-mongo` record cannot be redone and is rejected up front.
 - Because the `down` half reverts the record and the `up` half re-applies it, the audit trail keeps

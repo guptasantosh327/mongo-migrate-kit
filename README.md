@@ -191,6 +191,8 @@ mmk down                     # the last batch (may be several files)
 mmk down <file>              # one specific file
 mmk down --batch <n>         # a specific batch number
 mmk down --steps <n>         # the last N migrations, newest first, ignoring batches
+mmk down --force             # roll back even if a file drifted (asks for confirmation)
+mmk down --force --yes       # confirm a forced rollback non-interactively (required with --json)
 mmk down --no-lock           # skip the concurrency lock (local dev only)
 mmk down --json              # machine-readable output (array of run results)
 
@@ -314,7 +316,14 @@ export async function up({ db, session }: MigrationContext): Promise<void> {
 }
 ```
 
-> Transactions require a replica set or sharded cluster — MongoDB's own requirement, not a library limit.
+> Transactions require a replica set or sharded cluster — MongoDB's own requirement, not a library
+> limit. `mmk` detects a standalone deployment up front and **fails fast** with
+> `TRANSACTIONS_UNSUPPORTED` *before* running the migration, instead of erroring half-way at commit.
+
+**The changelog record is written inside the transaction**, with `w: 'majority'`. So a migration and
+its "applied" record commit (or roll back) **atomically** — there is no window where the data is
+committed but unrecorded, which would otherwise let the migration re-run on the next deploy. For
+non-idempotent migrations against production, prefer `useTransaction: true` for exactly this reason.
 
 </details>
 
@@ -396,14 +405,22 @@ newest-first, so `up` followed by `down --steps <same n>` returns you to the sta
 **Lock.** Each run acquires an atomic lock document in `_mmk_locks`, so two deploys can never migrate
 at once. A lock older than `lockTTLSeconds` is treated as stale and reclaimed; while a migration runs,
 a heartbeat renews the lock at half the TTL so a long migration can't have its lock stolen mid-run.
-The lock is always released in a `finally` block. `--no-lock` bypasses it for local development (and
-warns loudly). If a process crashes hard and leaves a lock behind, clear it with **`mmk unlock`** (it
-shows you who held it and asks for confirmation).
+The lock is always released in a `finally` block. The lock collection is read and written with
+`w: 'majority'` / `readConcern: 'majority'` so the mutual-exclusion guarantee survives a primary
+failover. `--no-lock` bypasses it for local development (and warns loudly). If a process crashes hard
+and leaves a lock behind, clear it with **`mmk unlock`** (it shows you who held it and asks for
+confirmation).
 
 **Checksums.** Every applied migration stores a SHA-256 of its file. On later runs `mmk` compares the
-two and surfaces drift in `status`. With `strict: true` (or `--strict`) a mismatch aborts the run;
-otherwise it warns and skips. To intentionally re-run an edited, already-applied file, use
-`mmk up <file> --force`.
+two and surfaces drift in `status`.
+
+- **`up`** — with `strict: true` (or `--strict`) a mismatch on an already-applied file aborts the run;
+  otherwise it warns and skips. To intentionally re-run an edited, already-applied file, use
+  `mmk up <file> --force`.
+- **`down`** — the rollback **verifies the checksum first and refuses to run if the file drifted**,
+  regardless of `strict` (running edited rollback code against production is the riskiest case). The
+  whole rollback aborts up front so nothing is left half-reverted. Use `mmk down --force` (it prompts
+  for confirmation; `--yes` to skip) to roll back the drifted file anyway with its current `down()`.
 
 </details>
 
@@ -567,8 +584,21 @@ export default {
   // hooks: { beforeAll, afterAll, beforeEach, afterEach, onError },
   // mongoose: myMongooseInstance, // pass if your migrations use Mongoose models
   // logger: null,                 // null silences all output (handy in CI/tests)
+  // mongoClientOptions: {         // extra MongoClient options for connection hardening
+  //   tls: true,                  //   (TLS, timeouts, auth, read/write prefs).
+  //   serverSelectionTimeoutMS: 10000, // mmk applies safe defaults; these override them.
+  // },
 };
 ```
+
+> **Connection hardening.** `mmk` constructs the `MongoClient` with safe defaults
+> (`serverSelectionTimeoutMS`/`connectTimeoutMS` of 10s and `retryWrites`) so a bad URI fails fast. It
+> deliberately does **not** force a client-wide write concern — your migrations keep whatever durability
+> your URI/cluster specifies. Durability is enforced only where it matters: the bookkeeping collections
+> (`_mmk_locks`, `_mmk_migrations`) are always written with `w: 'majority'` (and the lock is read with
+> `readConcern: 'majority'`), independent of your URI. Use `mongoClientOptions` to enable TLS, tune
+> timeouts, or set auth/read-preference for your production cluster — it's merged last, so it overrides
+> the defaults above.
 
 <details>
 <summary><b>Environment variables</b> — the zero-file way to configure everything</summary>

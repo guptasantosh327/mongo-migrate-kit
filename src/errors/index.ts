@@ -131,3 +131,16 @@ export class IrreversibleMigrationError extends MmkError {
     this.name = 'IrreversibleMigrationError';
   }
 }
+
+/**
+ * Thrown when a migration requests a transaction (`useTransaction`) but the
+ * connected deployment is a standalone `mongod`, which cannot run transactions.
+ * Surfaced before the migration runs so it fails fast instead of part-way
+ * through at commit time.
+ */
+export class TransactionsUnsupportedError extends MmkError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super('TRANSACTIONS_UNSUPPORTED', message, context);
+    this.name = 'TransactionsUnsupportedError';
+  }
+}

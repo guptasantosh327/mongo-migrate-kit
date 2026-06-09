@@ -59,4 +59,5 @@ export {
   MigrationInvalidNameError,
   MmkError,
   NotAppliedError,
+  TransactionsUnsupportedError,
 } from './errors/index.js';

@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { Changelog } from '../../src/core/changelog.js';
 import type { MigratorKit } from '../../src/core/migrator.js';
 import {
+  ChecksumMismatchError,
   ConfigInvalidError,
   MigrationInvalidNameError,
   NotAppliedError,
@@ -145,5 +146,29 @@ describe('MigratorKit.down (integration)', () => {
   it('should reject a non-positive steps value', async () => {
     setup();
     await expect(migrator.down(undefined, { steps: 0 })).rejects.toBeInstanceOf(ConfigInvalidError);
+  });
+
+  it('should refuse to roll back a file whose checksum drifted', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await migrator.up();
+    // Rewrite the file (still valid up/down) so its checksum no longer matches.
+    project.write('0001-a.ts', `${insertMigration('things', 'a')}// drifted\n`);
+    await expect(migrator.down('0001-a.ts')).rejects.toBeInstanceOf(ChecksumMismatchError);
+    // The preflight aborts before running anything — the record stays applied.
+    expect(await migrator.down('0001-a.ts').catch(() => null)).toBeNull();
+    expect((await new Changelog('_mmk_migrations').getByName(mongo.db, '0001-a.ts'))?.status).toBe(
+      'applied',
+    );
+  });
+
+  it('should roll back a drifted file when force is set', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await migrator.up();
+    project.write('0001-a.ts', `${insertMigration('things', 'a')}// drifted\n`);
+    const results = await migrator.down('0001-a.ts', { force: true });
+    expect(results[0]?.status).toBe('reverted');
+    expect(await mongo.db.collection('things').countDocuments()).toBe(0);
   });
 });

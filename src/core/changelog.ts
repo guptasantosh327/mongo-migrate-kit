@@ -1,4 +1,4 @@
-import type { Collection, Db } from 'mongodb';
+import type { ClientSession, Collection, Db } from 'mongodb';
 import type { MigrationRecord } from '../types/index.js';
 
 /**
@@ -16,7 +16,14 @@ export class Changelog {
   }
 
   private coll(db: Db): Collection<MigrationRecord> {
-    return db.collection<MigrationRecord>(this.collectionName);
+    // The changelog is the durable audit trail and the source of truth for what
+    // has run. Force `w: 'majority'` so a record survives a primary failover —
+    // a record that is lost on failover would let an already-applied migration
+    // re-run. (Inside a transaction the transaction's own write concern governs;
+    // see the runner, which commits with majority.)
+    return db.collection<MigrationRecord>(this.collectionName, {
+      writeConcern: { w: 'majority' },
+    });
   }
 
   /** Create the unique index on `name`. Safe to call repeatedly */
@@ -77,19 +84,28 @@ export class Changelog {
    * Record a migration as applied. Uses an upsert keyed on `name` so that
    * re-applying a previously-reverted migration (e.g. via `redo`) overwrites
    * its record without violating the unique index.
+   *
+   * Pass `session` to enrol the write in a migration's transaction, so the
+   * record and the migration's own writes commit (or roll back) atomically.
    */
-  async markApplied(db: Db, record: MigrationRecord): Promise<void> {
-    await this.coll(db).replaceOne({ name: record.name }, record, { upsert: true });
+  async markApplied(db: Db, record: MigrationRecord, session?: ClientSession): Promise<void> {
+    await this.coll(db).replaceOne({ name: record.name }, record, {
+      upsert: true,
+      ...(session ? { session } : {}),
+    });
   }
 
   /**
    * Mark a migration as reverted. Sets `status='reverted'` and `revertedAt=now`.
    * Never deletes the record — preserves the full audit history.
+   *
+   * Pass `session` to enrol the write in the rollback's transaction.
    */
-  async markReverted(db: Db, name: string): Promise<void> {
+  async markReverted(db: Db, name: string, session?: ClientSession): Promise<void> {
     await this.coll(db).updateOne(
       { name, status: 'applied' },
       { $set: { status: 'reverted', revertedAt: new Date() } },
+      session ? { session } : {},
     );
   }
 }

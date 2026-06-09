@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { type Db, MongoClient } from 'mongodb';
+import { type Db, MongoClient, type MongoClientOptions } from 'mongodb';
 import {
   ChecksumMismatchError,
   ConfigInvalidError,
@@ -11,6 +11,7 @@ import {
   MigrationFileNotFoundError,
   MigrationInvalidNameError,
   NotAppliedError,
+  TransactionsUnsupportedError,
 } from '../errors/index.js';
 import type {
   ImportChecksumSource,
@@ -28,6 +29,7 @@ import type {
 import { computeChecksum } from '../utils/checksum.js';
 import { loadMigrationFile } from '../utils/loader.js';
 import { resolveLogger } from '../utils/logger.js';
+import { redactMongoUri } from '../utils/redact.js';
 import {
   type ConfigFormat,
   type ConfigValues,
@@ -75,6 +77,13 @@ export interface DownOptions {
    * `migrate:rollback --step=N`. Mutually exclusive with `batch` and a filename.
    */
   steps?: number;
+  /**
+   * Roll back even when a target file's on-disk checksum no longer matches the
+   * one recorded at apply time. Without it, a drifted file aborts the rollback
+   * (running edited rollback code against production is unsafe). The CLI prompts
+   * for confirmation before setting this.
+   */
+  force?: boolean;
 }
 
 /** Options for {@link MigratorKit.create} */
@@ -139,6 +148,12 @@ export class MigratorKit {
   private client: MongoClient | undefined;
   private db: Db | undefined;
   private changelog: Changelog | undefined;
+  /**
+   * Whether the connected deployment supports multi-document transactions
+   * (replica set / sharded cluster). Detected once on connect; used to fail a
+   * transactional migration fast on a standalone instead of at commit time.
+   */
+  private supportsTransactions = false;
 
   constructor(config: Partial<MmkConfig> = {}, options: MigratorKitOptions = {}) {
     this.partialConfig = config;
@@ -169,15 +184,65 @@ export class MigratorKit {
       return;
     }
     try {
-      this.client = new MongoClient(config.uri);
+      // Safe defaults so a wrong URI / unreachable host fails fast instead of
+      // hanging. We deliberately do NOT set a client-wide write concern: that
+      // would override the user's URI and change the durability/throughput of
+      // their own migration writes. Durability where it matters — the lock and
+      // changelog collections — is pinned to `w:'majority'` at the collection
+      // level instead (see MigrationLock.coll() / Changelog.coll()). The user's
+      // `mongoClientOptions` override these defaults.
+      const clientOptions: MongoClientOptions = {
+        serverSelectionTimeoutMS: 10_000,
+        connectTimeoutMS: 10_000,
+        retryWrites: true,
+        ...(config.mongoClientOptions ?? {}),
+      };
+      this.client = new MongoClient(config.uri, clientOptions);
       await this.client.connect();
       this.db = this.client.db(config.dbName);
+      this.supportsTransactions = await this.detectTransactionSupport(this.client);
       this.changelog = new Changelog(config.migrationsCollection);
       await this.changelog.ensureIndexes(this.db);
     } catch (error) {
+      // Driver errors frequently embed the connection string verbatim — redact
+      // any credentials before they reach a log, JSON output, or error context.
+      const raw = error instanceof Error ? error.message : String(error);
       throw new ConnectionFailedError('Failed to connect to MongoDB', {
-        cause: error instanceof Error ? error.message : String(error),
+        cause: redactMongoUri(raw),
       });
+    }
+  }
+
+  /**
+   * Detect whether the deployment can run multi-document transactions — true for
+   * a replica set (`setName` present) or a sharded cluster (mongos, `msg ===
+   * 'isdbgrid'`), false for a standalone. Best-effort: if the probe itself
+   * fails we assume support (fail open) and let a real commit surface the error,
+   * rather than block a working setup on a flaky admin command.
+   */
+  private async detectTransactionSupport(client: MongoClient): Promise<boolean> {
+    try {
+      const hello = (await client.db('admin').command({ hello: 1 })) as {
+        setName?: string;
+        msg?: string;
+      };
+      return hello.setName !== undefined || hello.msg === 'isdbgrid';
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * Guard a transactional migration before it runs: on a standalone deployment
+   * transactions are unsupported and would only fail at commit — after the body
+   * already executed. Fail fast with an actionable error instead.
+   */
+  private assertTransactionSupported(name: string): void {
+    if (!this.supportsTransactions) {
+      throw new TransactionsUnsupportedError(
+        `Migration "${name}" requests a transaction, but this MongoDB deployment is a standalone server, which does not support transactions. Use a replica set (even single-node) or a sharded cluster, or disable useTransaction for this migration.`,
+        { name },
+      );
     }
   }
 
@@ -406,6 +471,13 @@ export class MigratorKit {
 
       const migration = await loadMigrationFile(filepath);
       const useTransaction = migration.useTransaction ?? config.useTransaction;
+      if (useTransaction) {
+        this.assertTransactionSupported(name);
+      }
+
+      // Batch is fixed before the run so the changelog record can be persisted
+      // inside the migration's transaction (see the persist callback below).
+      const batch = options.step ? baseBatch + appliedCount : baseBatch;
 
       this.progress?.onStart(name, 'up');
       try {
@@ -416,22 +488,24 @@ export class MigratorKit {
           context,
           useTransaction,
           ...(config.hooks ? { hooks: config.hooks } : {}),
+          // Write the changelog record within the same transaction as the
+          // migration's own writes, so applying and recording are atomic.
+          persist: async (runDuration, session) => {
+            const record: MigrationRecord = {
+              name,
+              batch,
+              status: 'applied',
+              appliedAt: new Date(),
+              duration: runDuration,
+              checksum,
+              environment: process.env.NODE_ENV ?? 'development',
+              executedBy: os.userInfo().username,
+              ...(migration.description ? { description: migration.description } : {}),
+            };
+            await changelog.markApplied(db, record, session);
+          },
         });
         this.progress?.onStop();
-
-        const batch = options.step ? baseBatch + appliedCount : baseBatch;
-        const record: MigrationRecord = {
-          name,
-          batch,
-          status: 'applied',
-          appliedAt: new Date(),
-          duration,
-          checksum,
-          environment: process.env.NODE_ENV ?? 'development',
-          executedBy: os.userInfo().username,
-          ...(migration.description ? { description: migration.description } : {}),
-        };
-        await changelog.markApplied(db, record);
         appliedCount += 1;
 
         logger.success(`✔ Applied  ${name}   [${duration}ms]`);
@@ -513,6 +587,13 @@ export class MigratorKit {
           .sort()
           .reverse();
 
+    // Preflight, before running anything: refuse to roll back a file whose
+    // on-disk checksum drifted from what was applied — executing edited rollback
+    // code against production is unsafe. `force` (CLI prompts first) bypasses it.
+    if (!(options.force ?? false)) {
+      this.assertDownChecksums(names, new Map(toRevert.map((record) => [record.name, record])));
+    }
+
     const context = buildContext(this.client as MongoClient, db, config.mongoose);
     const results: RunResult[] = [];
 
@@ -522,6 +603,9 @@ export class MigratorKit {
       await config.hooks?.beforeEach?.(name, context);
       const migration = await loadMigrationFile(this.filepath(name));
       const useTransaction = migration.useTransaction ?? config.useTransaction;
+      if (useTransaction) {
+        this.assertTransactionSupported(name);
+      }
 
       this.progress?.onStart(name, 'down');
       try {
@@ -532,9 +616,12 @@ export class MigratorKit {
           context,
           useTransaction,
           ...(config.hooks ? { hooks: config.hooks } : {}),
+          // Record the revert within the same transaction as the down() writes.
+          persist: async (_duration, session) => {
+            await changelog.markReverted(db, name, session);
+          },
         });
         this.progress?.onStop();
-        await changelog.markReverted(db, name);
         logger.success(`↩ Reverted ${name}   [${duration}ms]`);
         results.push({ file: name, status: 'reverted', duration });
         await config.hooks?.afterEach?.(name, duration, context);
@@ -580,31 +667,81 @@ export class MigratorKit {
     );
   }
 
-  /** Rollback then re-apply: the last applied migration, or a specific file */
-  async redo(filename?: string): Promise<RunResult[]> {
-    await this.ensureConfig();
-    await this.connect();
-    const changelog = this.requireChangelog();
+  /**
+   * Refuse a rollback whose on-disk migration file no longer matches the
+   * checksum recorded when it was applied. Reverting drifted code against
+   * production is the riskiest place to run an unverified `down()`, so — unlike
+   * `up`, which can safely skip — `down` aborts the whole batch on any mismatch
+   * (regardless of `strict`); `--force` is the explicit, confirmed override.
+   * Files missing on disk are left to the loader, which throws a clearer error.
+   */
+  private assertDownChecksums(names: string[], recordByName: Map<string, MigrationRecord>): void {
+    const mismatched: string[] = [];
+    for (const name of names) {
+      const record = recordByName.get(name);
+      if (!record) {
+        continue;
+      }
+      const filepath = this.filepath(name);
+      if (!existsSync(filepath)) {
+        continue;
+      }
+      if (computeChecksum(filepath) !== record.checksum) {
+        mismatched.push(name);
+      }
+    }
+    if (mismatched.length === 0) {
+      return;
+    }
+    this.logger.error(
+      `✖ Checksum mismatch — refusing to roll back drifted file(s): ${mismatched.join(', ')}`,
+    );
+    this.logger.dim(
+      'The on-disk migration differs from the version that was applied. Re-run with --force to ' +
+        "roll back anyway (this runs the current file's down()).",
+    );
+    throw new ChecksumMismatchError(`Checksum mismatch for ${mismatched.join(', ')}`, {
+      names: mismatched,
+    });
+  }
 
-    let target = filename;
-    if (!target) {
-      const records = await changelog.getAll(this.requireDb());
-      const applied = records.filter((record) => record.status === 'applied');
-      if (applied.length === 0) {
-        this.logger.info('Nothing to redo');
+  /**
+   * Rollback then re-apply: the last applied migration, or a specific file.
+   *
+   * The whole down→up runs under a **single** lock acquisition, so no other
+   * process can interleave between the revert and the re-apply (the previous
+   * implementation locked twice, leaving a window — and, if `up` failed, the
+   * migration stranded in a reverted state). The down half is forced past the
+   * checksum guard, since redoing an edited migration is the common reason to
+   * run it.
+   */
+  async redo(filename?: string): Promise<RunResult[]> {
+    const config = await this.ensureConfig();
+    await this.connect();
+    const lock = new MigrationLock(this.requireDb(), config.lockCollection, config.lockTTLSeconds);
+    return runWithLock(lock, { logger: this.logger }, async () => {
+      const changelog = this.requireChangelog();
+
+      let target = filename;
+      if (!target) {
+        const records = await changelog.getAll(this.requireDb());
+        const applied = records.filter((record) => record.status === 'applied');
+        if (applied.length === 0) {
+          this.logger.info('Nothing to redo');
+          return [];
+        }
+        applied.sort((a, b) => a.appliedAt.getTime() - b.appliedAt.getTime());
+        target = applied[applied.length - 1]?.name;
+      }
+
+      if (!target) {
         return [];
       }
-      applied.sort((a, b) => a.appliedAt.getTime() - b.appliedAt.getTime());
-      target = applied[applied.length - 1]?.name;
-    }
 
-    if (!target) {
-      return [];
-    }
-
-    const downResults = await this.down(target);
-    const upResults = await this.up(target);
-    return [...downResults, ...upResults];
+      const downResults = await this.runDown(target, { force: true });
+      const upResults = await this.runUp(target);
+      return [...downResults, ...upResults];
+    });
   }
 
   /** Preview what would run — never writes to the database */

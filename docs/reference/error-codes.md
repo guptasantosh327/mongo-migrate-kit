@@ -23,7 +23,7 @@ In `--json` mode, the CLI prints `{ "error": { "code", "message" } }` and exits 
 |---|---|---|---|
 | `LOCK_ALREADY_HELD` | `LockAlreadyHeldError` | Another run holds the lock within its TTL | Wait, or [`mmk unlock`](/commands/unlock) if it's stale |
 | `LOCK_RELEASE_FAILED` | `LockReleaseFailedError` | The lock couldn't be released | Check DB connectivity; retry |
-| `CHECKSUM_MISMATCH` | `ChecksumMismatchError` | An applied file was edited (in `--strict`) | Don't edit applied files — write a new migration |
+| `CHECKSUM_MISMATCH` | `ChecksumMismatchError` | An applied file was edited — on `up` under `--strict`, or on **any** `down` (verified before reverting) | Don't edit applied files — write a new migration; or `mmk down --force` to revert the drifted file anyway |
 | `MIGRATION_FILE_NOT_FOUND` | `MigrationFileNotFoundError` | A named migration file doesn't exist | Check the filename and `migrationsDir` |
 | `MIGRATION_INVALID_NAME` | `MigrationInvalidNameError` | A migration name escapes the migrations dir | Use a bare filename, not a path |
 | `MIGRATION_INVALID_EXPORT` | `MigrationInvalidExportError` | A file is missing `up`/`down` functions | Export both `up` and `down` |
@@ -35,5 +35,6 @@ In `--json` mode, the CLI prints `{ "error": { "code", "message" } }` and exits 
 | `NOT_APPLIED` | `NotAppliedError` | Tried to revert a migration that isn't applied | Run `mmk status` to see what's applied |
 | `IMPORT_TARGET_NOT_EMPTY` | `ImportTargetNotEmptyError` | `mmk import` target already has records | Use `--force` to import anyway |
 | `MIGRATION_IRREVERSIBLE` | `IrreversibleMigrationError` | Tried to revert an imported migrate-mongo record | Write a new forward migration instead |
+| `TRANSACTIONS_UNSUPPORTED` | `TransactionsUnsupportedError` | A migration requested a transaction but the deployment is a standalone `mongod` | Use a replica set / sharded cluster, or disable `useTransaction` |
 
 See [Troubleshooting](/guide/troubleshooting) for step-by-step fixes for the most common ones.

@@ -19,6 +19,15 @@ export interface RunMigrationParams {
   useTransaction: boolean;
   /** Optional lifecycle hooks */
   hooks?: MigrationHooks;
+  /**
+   * Persist the changelog record for this migration. Invoked after `up`/`down`
+   * succeeds but **before the transaction commits**, with the active `session`
+   * (when transactional), so the changelog write joins the same transaction as
+   * the migration's own writes — they commit, or roll back, atomically. This
+   * closes the "committed the data but crashed before recording it → re-applied
+   * next run" window. Outside a transaction it simply runs immediately after.
+   */
+  persist?: (duration: number, session?: ClientSession) => Promise<void>;
 }
 
 /** Result of running a single migration */
@@ -36,7 +45,7 @@ export interface RunMigrationOutcome {
  * thrown — the error is never swallowed.
  */
 export async function runMigration(params: RunMigrationParams): Promise<RunMigrationOutcome> {
-  const { name, migration, direction, context, useTransaction, hooks } = params;
+  const { name, migration, direction, context, useTransaction, hooks, persist } = params;
   const fn = direction === 'up' ? migration.up : migration.down;
 
   const start = Date.now();
@@ -46,17 +55,26 @@ export async function runMigration(params: RunMigrationParams): Promise<RunMigra
   try {
     if (useTransaction) {
       session = context.client.startSession();
-      session.startTransaction();
+      // Commit the transaction with majority durability so the migration's
+      // writes (and the changelog record persisted within it) survive failover.
+      session.startTransaction({ writeConcern: { w: 'majority' } });
       runtimeContext = { ...context, session };
     }
 
     await fn(runtimeContext);
 
+    // Duration measures the migration body only (not commit time).
+    const duration = Date.now() - start;
+
+    // Record the migration inside the transaction, before commit, so the data
+    // and its changelog entry are atomic.
+    await persist?.(duration, session);
+
     if (session) {
       await session.commitTransaction();
     }
 
-    return { duration: Date.now() - start };
+    return { duration };
   } catch (error) {
     if (session) {
       // Abort the transaction; do not let an abort failure mask the original error.

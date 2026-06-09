@@ -149,9 +149,10 @@ bin/mmk.ts
                                 │         ├─ computeChecksum()               [checksum.ts]
                                 │         ├─ skip/strict-throw if already applied
                                 │         ├─ loadMigrationFile()             [loader.ts]
+                                │         ├─ assertTransactionSupported() if txn (standalone→throw)
                                 │         ├─ progress.onStart() (spinner)
                                 │         ├─ runMigration() (txn?)           [runner.ts]
-                                │         ├─ markApplied() (upsert)          [changelog.ts]
+                                │         │     └─ persist(): markApplied() INSIDE the txn, pre-commit
                                 │         └─ hooks.afterEach
                                 └─ finally: clearInterval(heartbeat); lock.release()
                  └─ finally: migrator.disconnect()
@@ -207,6 +208,9 @@ Each entry: **responsibility · key exports · nuances you must know.**
 ### `src/core/lock.ts` — distributed lock (the subtlest module)
 - **Responsibility:** ensure only one migration run executes at a time, cluster-wide.
 - **Key exports:** `MigrationLock` (acquire/renew/release/inspect/forceRelease), `runWithLock()`.
+- **Durability:** all lock ops go through `MigrationLock.coll()`, which pins the collection to
+  `writeConcern:{w:'majority'}` + `readConcern:{level:'majority'}` — the mutual-exclusion guarantee is
+  only as strong as the lock's durability under failover.
 - See the [deep dive](#62-the-lock-the-most-important-thing-to-get-right) — read it before touching
   anything here.
 
@@ -217,19 +221,27 @@ Each entry: **responsibility · key exports · nuances you must know.**
 - **Nuances:**
   - `markApplied` is a **`replaceOne(..., {upsert:true})` keyed on `name`** — *not* `insertOne`. This
     is deliberate: `redo` / `up --force` / `import` must overwrite a record without violating the
-    unique `name` index ([changelog.ts:81-83](src/core/changelog.ts#L81-L83)).
+    unique `name` index ([changelog.ts](src/core/changelog.ts)).
+  - `markApplied` / `markReverted` take an **optional `session`** — passed by the migrator's `persist`
+    callback so the record write joins the migration's transaction (atomic apply+record).
   - `markReverted` **never deletes** — it sets `status:'reverted'` + `revertedAt`. Audit history is
     sacred.
+  - `coll()` pins the collection to `writeConcern:{w:'majority'}` so the audit trail survives failover
+    (overridden by the transaction's WC when a session is in play).
   - `ensureIndexes` creates the unique index on `name`; called on every `connect()`.
 
 ### `src/core/runner.ts` — single-migration execution
 - **Responsibility:** run exactly one `up()` or `down()`, optionally inside a transaction, time it,
-  fire `onError`, and translate any throw into `MigrationExecutionFailedError`.
+  persist the changelog record inside that transaction, fire `onError`, and translate any throw into
+  `MigrationExecutionFailedError`.
 - **Key export:** `runMigration(params)`.
-- **Nuances:** when `useTransaction`, it starts a session, injects it into a *copy* of the context
-  (`{...context, session}`), commits on success, **aborts on failure (swallowing the abort error so
-  it can't mask the original)**, and always `endSession()` in `finally`. `onError` runs *before* the
-  wrapped error is thrown. Errors are never swallowed.
+- **Nuances:** when `useTransaction`, it starts a session (`startTransaction({writeConcern:
+  {w:'majority'}})`), injects it into a *copy* of the context (`{...context, session}`), then —
+  **after the body succeeds, before commit** — calls the optional `persist(duration, session)` callback
+  so the changelog write enrols in the same transaction (apply+record atomic). Commits on success,
+  **aborts on failure (swallowing the abort error so it can't mask the original)**, and always
+  `endSession()` in `finally`. `onError` runs *before* the wrapped error is thrown. Without a txn,
+  `persist` simply runs right after the body. Errors are never swallowed.
 
 ### `src/core/context.ts` — the migration's world
 - **Responsibility:** build the `MigrationContext` (`{ client, db, mongoose? }`) handed to migrations.
@@ -249,9 +261,16 @@ Each entry: **responsibility · key exports · nuances you must know.**
 - **Shape:** public method validates + connects + wraps the *private* `runX` worker in `runWithLock`.
   The `runX` worker is where the actual sequencing lives. This split keeps lock handling in one place.
 - **Nuances:** `filepath(name)` centralizes **path-traversal defense** — every user-supplied name
-  flows through it ([migrator.ts:256-279](src/core/migrator.ts#L256-L279)). Batch numbers come from
+  flows through it ([migrator.ts](src/core/migrator.ts)). Batch numbers come from
   `nextBatch()` (monotonic max+1). `down --steps` and its dry-run share `selectLastApplied` +
   `assertStepsValid`. `assertReversible` preflights migrate-mongo records before any write.
+  `assertDownChecksums` preflights checksum drift before a rollback (bypassed by `DownOptions.force`).
+  `runUp`/`runDown` build a `persist` callback so the changelog write lands inside the migration's
+  transaction. `redo` wraps `runDown`→`runUp` in a **single** `runWithLock`. `connect()` hardens the
+  `MongoClient` (safe timeouts + `retryWrites`, overridable via `mongoClientOptions`; deliberately
+  **no** client-wide write concern — majority is scoped to the bookkeeping collections instead),
+  detects transaction support (`detectTransactionSupport` → `assertTransactionSupported`), and redacts
+  credentials from connection errors (`redactMongoUri`).
 
 ### `src/core/run.ts` — programmatic entry points
 - **Responsibility:** the "blessed" lifecycle-safe helpers for app startup / serverless / tests.
@@ -273,6 +292,8 @@ Each entry: **responsibility · key exports · nuances you must know.**
   (`createConfigFile`), including the secret-provider template. Owns filename stamping (timestamp vs
   sequential) and the inline-commented config output.
 - **date.ts** — `formatStamp`/`formatDateTime`, dependency-free (replaced `date-fns`).
+- **redact.ts** — `redactMongoUri(text)`: scrubs `user:pass@` from any connection string embedded in a
+  string. Used on driver error messages before they reach `ConnectionFailedError` / logs / `--json`.
 
 ### `src/cli/`
 - **index.ts** — builds the commander program, registers global flags (`--uri/--db/--dir/--config`)
@@ -339,6 +360,12 @@ the process alive, and is `clearInterval`-ed in `finally` ([lock.ts:170-195](src
 **Release** — `deleteOne({_id, owner})`, owner-scoped so we never delete a lock since reclaimed by
 someone else. `forceRelease()` (for `mmk unlock`) deletes unconditionally by `_id`.
 
+**(d) Majority durability** — every lock op goes through `coll()`, which pins
+`writeConcern:{w:'majority'}` + `readConcern:{level:'majority'}`. A lock write that isn't majority-acked
+could be rolled back on a primary failover, letting a second run acquire it; majority on both sides
+closes that. (Still TTL/heartbeat-based, so it does *not* fully defend against cross-host **clock
+skew** — a fencing-token scheme would; noted as a known limitation.)
+
 > **Why TTL + heartbeat instead of just TTL?** TTL alone means a migration longer than `lockTTLSeconds`
 > would let its own lock go stale and be stolen mid-run. The heartbeat refreshes it; the TTL is only
 > the *crash-recovery* window (a dead holder's lock becomes reclaimable after TTL).
@@ -355,6 +382,10 @@ someone else. `forceRelease()` (for `mmk unlock`) deletes unconditionally by `_i
 - Records are upserted by `name`, so re-applying overwrites cleanly. Reverting flips `status` and
   stamps `revertedAt` but keeps the row — `status()` and `getAppliedNames()` filter on
   `status:'applied'`.
+- The record write happens through the runner's `persist` callback. With `useTransaction` it runs
+  **inside the transaction, before commit** (apply+record atomic); without one it runs right after the
+  body. Either way the migrator owns *what* the record is; the runner owns *when* (relative to commit).
+  Down's revert (`markReverted`) is persisted the same way.
 
 ### 6.4 The loader and the `.ts` runtime caveat
 File: [loader.ts](src/utils/loader.ts). It dynamic-`import()`s the migration via a `file://` URL and
@@ -423,6 +454,18 @@ The high-impact ones for code changes:
   mmk.config.json"). In JSON mode, human/progress output goes to stderr; stdout is one JSON doc.
 - **`down --steps` preserves selection order** (newest-first) via a `preserveOrder` flag, instead of
   the usual filename-desc sort.
+- **The changelog record is written *inside* the migration's transaction** (the `persist` callback on
+  `runMigration`), not after commit — so apply+record is atomic and a crash can't strand a
+  committed-but-unrecorded migration that re-runs next time. Atomicity only holds with `useTransaction`.
+- **`down` verifies checksums and blocks on drift regardless of `strict`** (unlike `up`, which skips).
+  Reverting edited code is the riskier case; `DownOptions.force` (CLI `--force`, confirmed) overrides.
+- **Transactions fail fast on a standalone** — `assertTransactionSupported` throws
+  `TransactionsUnsupportedError` before the body runs, instead of erroring at commit.
+- **Lock + changelog collections use `w:'majority'`** (lock also `readConcern:'majority'`) so durability
+  matches the correctness claims. This is scoped at the **collection** level on purpose — the client
+  gets *no* write-concern default (only safe timeouts + `retryWrites`, overridable via
+  `mongoClientOptions`), so the user's own migration writes and their URI's `w` are never overridden
+  (driver precedence is options-object > URI). Connection-error messages are credential-redacted.
 
 ---
 

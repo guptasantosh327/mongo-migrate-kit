@@ -62,6 +62,7 @@ const configSchema = z.object({
   sequential: z.boolean(),
   templatePath: z.string().min(1).optional(),
   mongoose: z.unknown().optional(),
+  mongoClientOptions: z.unknown().optional(),
   hooks: z.unknown().optional(),
   logger: z.unknown().optional(),
 });
