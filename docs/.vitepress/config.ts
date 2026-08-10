@@ -1,4 +1,118 @@
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { defineConfig } from 'vitepress';
+
+const authorName = 'Santosh Gupta';
+
+/** True for a publishable blog post page (excludes the /blog/ index). */
+function isBlogPost(relativePath: string): boolean {
+  return relativePath.startsWith('blog/') && relativePath !== 'blog/index.md';
+}
+
+/** Normalize a front-matter date (YAML may parse it as a Date or a string) to `YYYY-MM-DD`. */
+function toISODate(value: unknown): string | undefined {
+  if (!value) return undefined;
+  const d = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(+d) ? undefined : d.toISOString().slice(0, 10);
+}
+
+/** Estimate reading time (minutes) from a page's raw markdown, front-matter stripped. */
+function readingMinutes(relativePath: string): number | undefined {
+  try {
+    const src = readFileSync(join(process.cwd(), 'docs', relativePath), 'utf8');
+    const words = src
+      .replace(/^---[\s\S]*?---/, '')
+      .split(/\s+/)
+      .filter(Boolean).length;
+    return Math.max(1, Math.round(words / 200));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Escape the five XML predefined entities for safe inclusion in feed text. */
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+interface FeedItem {
+  title: string;
+  description: string;
+  slug: string;
+  date: Date;
+}
+
+/** Pull one front-matter value (unquoted, unescaped) from a raw markdown source. */
+function frontmatterValue(src: string, key: string): string | undefined {
+  const match = src.match(new RegExp(`^${key}:\\s*(.*)$`, 'm'));
+  if (!match) return undefined;
+  return match[1]
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/\\"/g, '"');
+}
+
+/** Read every publishable blog post's front-matter, newest first. */
+function collectBlogPosts(): FeedItem[] {
+  const dir = join(process.cwd(), 'docs', 'blog');
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.md') && f !== 'index.md')
+    .map((file) => {
+      const src = readFileSync(join(dir, file), 'utf8');
+      const rawDate = frontmatterValue(src, 'date');
+      return {
+        title: frontmatterValue(src, 'title') ?? file.replace(/\.md$/, ''),
+        description: frontmatterValue(src, 'description') ?? '',
+        slug: file.replace(/\.md$/, ''),
+        date: rawDate ? new Date(rawDate) : new Date(0),
+      };
+    })
+    .sort((a, b) => +b.date - +a.date);
+}
+
+/** Write an RSS 2.0 feed of the blog to <outDir>/blog/feed.xml at build time. */
+function writeRssFeed(outDir: string): void {
+  const posts = collectBlogPosts();
+  const blogUrl = `${hostname}blog/`;
+  const feedUrl = `${blogUrl}feed.xml`;
+  const now = new Date().toUTCString();
+
+  const items = posts
+    .map((post) => {
+      const url = `${hostname}blog/${post.slug}`;
+      return [
+        '    <item>',
+        `      <title>${escapeXml(post.title)}</title>`,
+        `      <link>${url}</link>`,
+        `      <guid isPermaLink="true">${url}</guid>`,
+        `      <pubDate>${post.date.toUTCString()}</pubDate>`,
+        `      <description>${escapeXml(post.description)}</description>`,
+        '    </item>',
+      ].join('\n');
+    })
+    .join('\n');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>mongo-migrate-kit blog</title>
+    <link>${blogUrl}</link>
+    <description>Articles on MongoDB migrations — rollbacks, locking, transactions, CI/CD, and best practices.</description>
+    <language>en-US</language>
+    <lastBuildDate>${now}</lastBuildDate>
+    <atom:link href="${feedUrl}" rel="self" type="application/rss+xml"/>
+${items}
+  </channel>
+</rss>
+`;
+
+  writeFileSync(join(outDir, 'blog', 'feed.xml'), xml, 'utf8');
+}
 
 const ogTitle = 'mongo-migrate-kit — MongoDB migrations for Node.js';
 const ogDescription =
@@ -73,17 +187,78 @@ export default defineConfig({
     ['meta', { name: 'twitter:description', content: ogDescription }],
     ['meta', { name: 'twitter:image', content: ogImage }],
     ['script', { type: 'application/ld+json' }, JSON.stringify(jsonLd)],
+    // RSS auto-discovery — lets feed readers find the blog feed from any page.
+    [
+      'link',
+      {
+        rel: 'alternate',
+        type: 'application/rss+xml',
+        title: 'mongo-migrate-kit blog',
+        href: `${hostname}blog/feed.xml`,
+      },
+    ],
   ],
 
   // Per-page canonical + og:url for clean SEO indexing
   transformPageData(pageData) {
     const path = pageData.relativePath.replace(/index\.md$/, '').replace(/\.md$/, '');
     const canonical = `${hostname}${path}`;
-    pageData.frontmatter.head ??= [];
-    pageData.frontmatter.head.push(
+    const fm = pageData.frontmatter;
+    fm.head ??= [];
+    fm.head.push(
       ['link', { rel: 'canonical', href: canonical }],
       ['meta', { property: 'og:url', content: canonical }],
     );
+
+    // ─── Blog posts: reading time + Article structured data (rich-result SEO) ──
+    if (!isBlogPost(pageData.relativePath)) return;
+
+    fm.readingTime = readingMinutes(pageData.relativePath);
+    const published = toISODate(fm.date);
+    const author = typeof fm.author === 'string' ? fm.author : authorName;
+
+    const articleLd = {
+      '@context': 'https://schema.org',
+      '@type': 'BlogPosting',
+      headline: fm.title,
+      description: fm.description,
+      url: canonical,
+      mainEntityOfPage: { '@type': 'WebPage', '@id': canonical },
+      image: ogImage,
+      inLanguage: 'en-US',
+      author: { '@type': 'Person', name: author },
+      publisher: {
+        '@type': 'Organization',
+        name: 'mongo-migrate-kit',
+        logo: { '@type': 'ImageObject', url: `${hostname}logo.png` },
+      },
+      ...(published ? { datePublished: published, dateModified: published } : {}),
+      keywords,
+    };
+
+    fm.head.push(
+      ['meta', { property: 'article:author', content: author }],
+      ['meta', { property: 'article:section', content: 'MongoDB' }],
+      ...(published
+        ? ([['meta', { property: 'article:published_time', content: published }]] as const)
+        : []),
+      ['script', { type: 'application/ld+json' }, JSON.stringify(articleLd)],
+    );
+  },
+
+  // Blog posts are articles, not the site's default `website` og:type.
+  transformHead({ pageData, head }) {
+    if (!isBlogPost(pageData.relativePath)) return head;
+    return head.map((tag) =>
+      tag[0] === 'meta' && tag[1]?.property === 'og:type'
+        ? (['meta', { property: 'og:type', content: 'article' }] as (typeof head)[number])
+        : tag,
+    );
+  },
+
+  // Emit the blog RSS feed into the built site.
+  buildEnd(siteConfig) {
+    writeRssFeed(siteConfig.outDir);
   },
 
   themeConfig: {
@@ -94,8 +269,9 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
       { text: 'Commands', link: '/commands/up', activeMatch: '/commands/' },
       { text: 'Reference', link: '/reference/cli', activeMatch: '/reference/' },
+      { text: 'Blog', link: '/blog/', activeMatch: '/blog/' },
       {
-        text: 'v1.2.2',
+        text: 'v1.2.3',
         items: [
           { text: 'Changelog', link: `${repo}/blob/main/CHANGELOG.md` },
           { text: 'npm', link: 'https://www.npmjs.com/package/mongo-migrate-kit' },
@@ -133,6 +309,46 @@ export default defineConfig({
             { text: 'Troubleshooting', link: '/guide/troubleshooting' },
             { text: 'Migrating from migrate-mongo', link: '/guide/migrate-mongo' },
             { text: 'FAQ', link: '/guide/faq' },
+          ],
+        },
+      ],
+      '/blog/': [
+        {
+          text: 'Blog',
+          items: [
+            { text: 'All posts', link: '/blog/' },
+            {
+              text: 'Why I built mongo-migrate-kit',
+              link: '/blog/why-i-built-mongo-migrate-kit',
+            },
+            {
+              text: 'Switching from migrate-mongo',
+              link: '/blog/switching-from-migrate-mongo',
+            },
+            {
+              text: "7 things migrate-mongo can't do",
+              link: '/blog/7-things-migrate-mongo-cant-do',
+            },
+            {
+              text: 'Roll back a single migration',
+              link: '/blog/rollback-specific-mongodb-migration',
+            },
+            {
+              text: 'Migration locking for concurrent deploys',
+              link: '/blog/mongodb-migration-locking-concurrent-deploys',
+            },
+            {
+              text: 'Migrations on startup & serverless',
+              link: '/blog/run-migrations-on-startup-serverless',
+            },
+            {
+              text: 'Migrations in CI/CD (GitHub Actions)',
+              link: '/blog/mongodb-migrations-ci-cd-github-actions',
+            },
+            {
+              text: 'Migration best practices',
+              link: '/blog/mongodb-migration-best-practices',
+            },
           ],
         },
       ],

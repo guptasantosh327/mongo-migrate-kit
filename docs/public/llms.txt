@@ -44,3 +44,15 @@ Key facts:
 
 - [CLI Cheatsheet](https://mongo-migrate-kit.vercel.app/reference/cli): Every command and flag on one page
 - [Error Codes](https://mongo-migrate-kit.vercel.app/reference/error-codes): All error codes, classes, causes, and fixes
+
+## Blog
+
+- [Blog index](https://mongo-migrate-kit.vercel.app/blog/): All articles on MongoDB migrations
+- [Why I Built a New MongoDB Migration Tool](https://mongo-migrate-kit.vercel.app/blog/why-i-built-mongo-migrate-kit): Origin story and how to switch off migrate-mongo in one command
+- [Switching from migrate-mongo](https://mongo-migrate-kit.vercel.app/blog/switching-from-migrate-mongo): A zero-downtime, non-destructive migration guide
+- [7 Things migrate-mongo Can't Do](https://mongo-migrate-kit.vercel.app/blog/7-things-migrate-mongo-cant-do): Real gaps that cost time in production
+- [How to Roll Back a Single MongoDB Migration](https://mongo-migrate-kit.vercel.app/blog/rollback-specific-mongodb-migration): Revert by file, batch, or last N — without nuking the rest
+- [MongoDB Migration Locking for Concurrent Deploys](https://mongo-migrate-kit.vercel.app/blog/mongodb-migration-locking-concurrent-deploys): Stop parallel deploys from corrupting the database
+- [Running Migrations on Startup and Serverless](https://mongo-migrate-kit.vercel.app/blog/run-migrations-on-startup-serverless): Safe app-start and serverless patterns
+- [MongoDB Migrations in CI/CD](https://mongo-migrate-kit.vercel.app/blog/mongodb-migrations-ci-cd-github-actions): A practical GitHub Actions setup
+- [MongoDB Migration Best Practices](https://mongo-migrate-kit.vercel.app/blog/mongodb-migration-best-practices): Ten lessons learned the hard way
