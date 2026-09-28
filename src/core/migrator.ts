@@ -31,6 +31,7 @@ import { didYouMean, explain, listOf, quote } from '../utils/explain.js';
 import { loadMigrationFile } from '../utils/loader.js';
 import { resolveLogger } from '../utils/logger.js';
 import { redactMongoUri } from '../utils/redact.js';
+import { detectService } from '../utils/service.js';
 import {
   type ConfigFormat,
   type ConfigValues,
@@ -541,6 +542,7 @@ export class MigratorKit {
     // counter, so --step never leaves gaps.
     const baseBatch = await this.nextBatch();
     let appliedCount = 0;
+    const service = detectService(config.migrationsDir, config.service);
 
     await config.hooks?.beforeAll?.(context);
 
@@ -608,6 +610,7 @@ export class MigratorKit {
               environment: process.env.NODE_ENV ?? 'development',
               executedBy: os.userInfo().username,
               ...(migration.description ? { description: migration.description } : {}),
+              ...(service ? { service } : {}),
             };
             await changelog.markApplied(db, record, session);
           },

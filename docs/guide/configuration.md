@@ -148,6 +148,7 @@ Every core option has an `MMK_*` variable. These **override the config file**:
 | `MMK_USE_TRANSACTION` | `useTransaction` |
 | `MMK_SEQUENTIAL` | `sequential` |
 | `MMK_CREATE_EXTENSION` | `createExtension` |
+| `MMK_SERVICE` | `service` (optional — defaults to the nearest `package.json` name) |
 
 `.env` files are loaded automatically (via `dotenv`) before env vars are read.
 

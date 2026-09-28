@@ -59,6 +59,11 @@ export interface MigrationRecord {
   /** Optional description from migration file */
   description?: string;
   /**
+   * Service that applied this migration — the `service` config key, else the
+   * nearest `package.json` name. Absent when neither was found.
+   */
+  service?: string;
+  /**
    * Origin of this record. Set to `'migrate-mongo'` for records adopted via
    * `mmk import` — these are not reversible by mmk. Absent for native records.
    */
@@ -114,6 +119,12 @@ export interface MmkConfig {
   sequential: boolean;
   /** Path to a custom migration template file */
   templatePath?: string;
+  /**
+   * Name recorded on each changelog record to show which service applied it.
+   * Optional — defaults to the nearest `package.json` name. Set it only when
+   * that name is missing or ambiguous (e.g. services sharing one package.json).
+   */
+  service?: string;
   /** Mongoose instance — required only if your migrations use Mongoose models */
   mongoose?: Mongoose;
   /**

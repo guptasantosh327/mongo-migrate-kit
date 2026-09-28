@@ -212,4 +212,21 @@ describe('MigratorKit.up (integration)', () => {
     await migrator.up();
     expect(calls).toEqual(['beforeAll', 'beforeEach:0001-a.ts', 'afterEach:0001-a.ts', 'afterAll']);
   });
+
+  it('should record the service from the nearest package.json', async () => {
+    setup(); // project dir lives under this repo, so its package.json is nearest
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await migrator.up();
+    const record = await mongo.db.collection('_mmk_migrations').findOne({ name: '0001-a.ts' });
+    expect(record?.service).toBe('mongo-migrate-kit');
+  });
+
+  it('should record an explicit service over the detected one', async () => {
+    project = makeProject();
+    migrator = makeMigrator(mongo.uri, DB, project.dir, { service: 'orders-service' });
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await migrator.up();
+    const record = await mongo.db.collection('_mmk_migrations').findOne({ name: '0001-a.ts' });
+    expect(record?.service).toBe('orders-service');
+  });
 });
