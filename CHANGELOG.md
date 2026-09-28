@@ -2,6 +2,59 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.3.0
+
+Know which service ran a migration, and errors that tell you exactly what to fix.
+
+### Added
+
+- **`service` on every changelog record** — shows which codebase applied a migration, useful when
+  several services share a cluster. No setup: mmk uses the `name` of the nearest `package.json`
+  above your migrations directory (or `npm_package_name` when run from an npm script). Override it
+  with the new optional `service` config key / `MMK_SERVICE` env var; if no name is found the field
+  is left out. Existing records are unaffected.
+- **`InvalidArgumentError`** (code `INVALID_ARGUMENT`) — raised for a missing, malformed, or
+  contradictory command argument/flag, distinct from `CONFIG_INVALID` so it always points at what
+  you typed. Exported, along with the new `ConfigIssue` type.
+- **CLI suggestions** — a mistyped command answers `(Did you mean status?)`, and argument errors
+  show the relevant help.
+
+### Changed
+
+- **Configuration errors list every problem at once**, each with the key, what is wrong, the value
+  received, where it was read from (flag / env var / config file), and every way to set it. The
+  structured list is on `error.context.issues` and in `--json` output.
+- **Clearer runtime errors** — `CONNECTION_FAILED` now includes the redacted URI and the driver's
+  reason; `MIGRATION_EXECUTION_FAILED` includes the migration's own error, where it was thrown, and
+  whether its writes were rolled back; checksum, file-not-found, not-applied, invalid-name, and
+  invalid-export errors now name the input, what exists instead, and how to fix it.
+- `--batch`, `--steps`, and the `dry-run` direction are validated **before connecting**.
+- A missing `migrationsDir` now logs a warning with the resolved path instead of silently reporting
+  nothing to migrate.
+
+### Behavior changes
+
+These inputs were silently ignored or misread before; they are now errors. They only affect setups
+that were already not doing what their author intended.
+
+- An **unknown key in a config file** (e.g. `migrationDir`) is an error with a "did you mean"
+  suggestion.
+- An **unparseable `MMK_*` value** (e.g. `MMK_STRICT=maybe`, `MMK_CREATE_EXTENSION=py`) is an error.
+  An empty value still means "unset"; an unknown `MMK_*` variable is only a warning.
+- New value checks: `uri` must start with `mongodb://` or `mongodb+srv://`; `dbName` must be a valid
+  MongoDB database name; `fileExtensions` entries must start with `.`; booleans must not be strings.
+- `mmk down --batch abc` / a nonexistent batch, `mmk create "   "`, `mmk create x --js --ts`, and
+  `mmk import` with the same `--from` and `--to` now fail instead of exiting 0 or writing a bogus
+  file.
+- Invalid `--steps` / `--batch` values now throw `InvalidArgumentError` instead of
+  `ConfigInvalidError` — update any `catch` that checks the class or `code`.
+
+### Documentation
+
+- New blog posts on MongoDB migrations and CI/CD practices, a "Runtime failures" troubleshooting
+  section, and a refreshed error-code reference.
+
+
 ## v1.2.2
 ### Documentation
 

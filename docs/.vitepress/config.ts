@@ -271,7 +271,7 @@ export default defineConfig({
       { text: 'Reference', link: '/reference/cli', activeMatch: '/reference/' },
       { text: 'Blog', link: '/blog/', activeMatch: '/blog/' },
       {
-        text: 'v1.2.3',
+        text: 'v1.3.0',
         items: [
           { text: 'Changelog', link: `${repo}/blob/main/CHANGELOG.md` },
           { text: 'npm', link: 'https://www.npmjs.com/package/mongo-migrate-kit' },
