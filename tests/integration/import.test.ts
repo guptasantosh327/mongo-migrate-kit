@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import type { MigratorKit } from '../../src/core/migrator.js';
 import {
   ImportTargetNotEmptyError,
+  InvalidArgumentError,
   IrreversibleMigrationError,
   MigrationInvalidNameError,
 } from '../../src/errors/index.js';
@@ -372,5 +373,13 @@ describe('MigratorKit.import (integration)', () => {
     const upResults = await migrator.up();
     expect(upResults.map((r) => r.file)).toEqual(['20260201000000-c.js', '20260201000001-d.js']);
     expect(await mongo.db.collection('things').countDocuments()).toBe(2);
+  });
+
+  it('should refuse to import a collection into itself', async () => {
+    setup();
+    const error = await migrator.import({ from: TARGET, to: TARGET }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(InvalidArgumentError);
+    expect((error as Error).message).toContain('into itself');
+    expect((error as Error).message).toContain('--from and --to must differ');
   });
 });

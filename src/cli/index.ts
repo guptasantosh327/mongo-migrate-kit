@@ -17,6 +17,10 @@ export function buildProgram(): Command {
   program
     .name('mmk')
     .description('Elegant, fast, TypeScript-first MongoDB migrations for Node.js')
+    // Turn `unknown command 'stauts'` into a message that names the real one,
+    // and point at --help rather than leaving the user to guess.
+    .showSuggestionAfterError(true)
+    .showHelpAfterError('(run `mmk --help`, or `mmk <command> --help`, for usage)')
     .option('--uri <uri>', 'MongoDB connection URI (overrides MMK_URI)')
     .option('--db <name>', 'Database name (overrides MMK_DB)')
     .option('--dir <path>', 'Migrations directory (overrides MMK_MIGRATIONS_DIR)')

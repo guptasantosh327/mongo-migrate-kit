@@ -3,7 +3,7 @@ import { Changelog } from '../../src/core/changelog.js';
 import type { MigratorKit } from '../../src/core/migrator.js';
 import {
   ChecksumMismatchError,
-  ConfigInvalidError,
+  InvalidArgumentError,
   MigrationInvalidNameError,
   NotAppliedError,
 } from '../../src/errors/index.js';
@@ -129,23 +129,83 @@ describe('MigratorKit.down (integration)', () => {
     expect(await mongo.db.collection('things').countDocuments()).toBe(0);
   });
 
-  it('should reject steps combined with a filename', async () => {
+  it('should explain a drifted file instead of only logging around the error', async () => {
     setup();
-    await expect(migrator.down('0001-a.ts', { steps: 1 })).rejects.toBeInstanceOf(
-      ConfigInvalidError,
-    );
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await migrator.up();
+    project.tamper('0001-a.ts');
+    const error = await migrator.down().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ChecksumMismatchError);
+    const message = (error as Error).message;
+    expect(message).toContain('0001-a.ts');
+    expect(message).toContain('changed since being applied');
+    expect(message).toContain('mmk down 0001-a.ts --force');
+  });
+
+  it('should name the rejected value when a filename is not a bare name', async () => {
+    setup();
+    const error = await migrator.down('../../etc/passwd').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(MigrationInvalidNameError);
+    expect((error as Error).message).toContain('Received: "../../etc/passwd"');
+    expect((error as Error).message).toContain('bare filename');
+  });
+
+  it('should list what is applied when rolling back an unapplied file', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await migrator.up();
+    const error = await migrator.down('0002-b.ts').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(NotAppliedError);
+    const message = (error as Error).message;
+    expect(message).toContain('0002-b.ts');
+    expect(message).toContain('Currently applied: 0001-a.ts');
+    expect(message).toContain('mmk status');
+  });
+
+  it('should reject an explicit batch that holds nothing, listing real batches', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await migrator.up();
+    const error = await migrator.down(undefined, { batch: 99 }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(InvalidArgumentError);
+    expect((error as Error).message).toContain('No applied migrations found in batch 99');
+    expect((error as Error).message).toContain('Batches that still have applied migrations: 1');
+  });
+
+  it('should reject steps combined with a filename, explaining both options', async () => {
+    setup();
+    const error = await migrator.down('0001-a.ts', { steps: 1 }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(InvalidArgumentError);
+    expect((error as Error).message).toContain('mmk down 0001-a.ts');
+    expect((error as Error).message).toContain('mmk down --steps 1');
   });
 
   it('should reject steps combined with batch', async () => {
     setup();
     await expect(migrator.down(undefined, { steps: 1, batch: 1 })).rejects.toBeInstanceOf(
-      ConfigInvalidError,
+      InvalidArgumentError,
     );
   });
 
-  it('should reject a non-positive steps value', async () => {
+  it('should reject a non-positive steps value, naming what it received', async () => {
     setup();
-    await expect(migrator.down(undefined, { steps: 0 })).rejects.toBeInstanceOf(ConfigInvalidError);
+    const error = await migrator.down(undefined, { steps: 0 }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(InvalidArgumentError);
+    expect((error as Error).message).toContain('Received: 0');
+  });
+
+  it('should reject a filename combined with batch', async () => {
+    setup();
+    await expect(migrator.down('0001-a.ts', { batch: 1 })).rejects.toBeInstanceOf(
+      InvalidArgumentError,
+    );
+  });
+
+  it('should reject a non-positive batch', async () => {
+    setup();
+    await expect(migrator.down(undefined, { batch: 0 })).rejects.toBeInstanceOf(
+      InvalidArgumentError,
+    );
   });
 
   it('should refuse to roll back a file whose checksum drifted', async () => {

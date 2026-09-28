@@ -1,7 +1,14 @@
 import type { Command } from 'commander';
-import { ConfigInvalidError } from '../../errors/index.js';
+import { InvalidArgumentError } from '../../errors/index.js';
+import { didYouMean, explain, quote } from '../../utils/explain.js';
 import { createLogger } from '../../utils/logger.js';
-import { type CliOptions, emitJson, withMigrator } from '../shared.js';
+import {
+  type CliOptions,
+  emitJson,
+  failPreflight,
+  parseCountOption,
+  withMigrator,
+} from '../shared.js';
 import { renderStatusTable } from '../table.js';
 
 /** Register the `dry-run` command */
@@ -15,14 +22,33 @@ export function registerDryRun(program: Command): void {
     .option('--json', 'Output machine-readable JSON instead of a table')
     .action(async (direction: string, file: string | undefined, _opts, command) => {
       const opts = command.optsWithGlobals() as CliOptions & { steps?: string };
+
+      // Checked before connecting: a bad direction or --steps should cost nothing.
+      let steps: number | undefined;
+      try {
+        if (direction !== 'up' && direction !== 'down') {
+          throw new InvalidArgumentError(
+            explain("dry-run direction must be 'up' or 'down'", [
+              `Received: ${quote(direction)}`,
+              didYouMean(direction, ['up', 'down']),
+              'Try: mmk dry-run up      (preview what would be applied)',
+              'Try: mmk dry-run down    (preview what would be rolled back)',
+            ]),
+            { direction },
+          );
+        }
+        steps = parseCountOption(opts.steps, '--steps', 'mmk dry-run down --steps 3');
+      } catch (error) {
+        failPreflight(opts, error);
+        return;
+      }
+      const chosen = direction;
+
       await withMigrator(
         opts,
         async (migrator) => {
-          if (direction !== 'up' && direction !== 'down') {
-            throw new ConfigInvalidError("Direction must be 'up' or 'down'", { direction });
-          }
-          const rows = await migrator.dryRun(direction, file, {
-            ...(opts.steps !== undefined ? { steps: Number(opts.steps) } : {}),
+          const rows = await migrator.dryRun(chosen, file, {
+            ...(steps !== undefined ? { steps } : {}),
           });
           if (opts.json) {
             emitJson(rows);

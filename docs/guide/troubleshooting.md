@@ -106,3 +106,94 @@ the reverse operation.
 - Run any command with `--json` to get a structured error object you can inspect.
 - Check the [Error Codes reference](/reference/error-codes) for the exact `code` and its meaning.
 - Open an issue: <https://github.com/guptasantosh327/mongo-migrate-kit/issues>.
+
+## Wrong command arguments
+
+Argument problems carry the `INVALID_ARGUMENT` code — distinct from `CONFIG_INVALID`, so you always
+know whether to fix your **command** or your **config**. Flags are validated before mmk connects, so
+a typo costs nothing and the message is never buried under the connection spinner.
+
+```
+$ mmk down --batch abc
+✖ INVALID_ARGUMENT: --batch must be a positive whole number
+  Received: "abc"
+  Try: mmk down --batch 3
+```
+
+Nothing is a silent no-op. Each of these used to exit 0 (or quietly do the wrong thing) and now
+fails with an explanation:
+
+| Command | What you get |
+|---|---|
+| `mmk down --batch abc` | Rejected before connecting, naming the value it received |
+| `mmk down --batch 99` (no such batch) | Rejected, listing the batches that still have applied migrations |
+| `mmk down <file> --steps 2` | Rejected, spelling out what each option would roll back |
+| `mmk up typo.js` | Names the directory searched, suggests the closest real filename, lists what is there |
+| `mmk down not-applied.js` | Lists what *is* currently applied |
+| `mmk dry-run sideways` | Rejected before connecting, showing both valid directions |
+| `mmk create "   "` | Rejected — the name slugifies to nothing (it used to write `<stamp>-.js`) |
+| `mmk create x --js --ts` | Rejected as contradictory (it used to silently pick `.ts`) |
+| `mmk create x --template ./missing.js` | Names the absolute path it resolved the template to |
+| `mmk import --from c --to c` | Rejected — importing a collection into itself would rewrite the source |
+| `mmk stauts` | `(Did you mean status?)` |
+| A migration missing `down()` | Says which export is missing or the wrong type, and lists the exports found |
+
+Catch them programmatically with `InvalidArgumentError`:
+
+```ts
+import { MigratorKit, InvalidArgumentError } from 'mongo-migrate-kit';
+
+try {
+  await new MigratorKit(config).down(undefined, { steps: 0 });
+} catch (error) {
+  if (error instanceof InvalidArgumentError) {
+    console.error(error.message); // includes the received value and a command to try
+  }
+  throw error;
+}
+```
+
+## Runtime failures
+
+These three carry everything you need in the message itself — nothing important is hidden in
+`error.context` any more.
+
+**A migration threw.** You get the migration's own error, the line it came from, and — critically —
+whether its writes survived:
+
+```
+✖ MIGRATION_EXECUTION_FAILED: Migration "0001-add-users.js" threw while running up()
+  Reason: E11000 duplicate key error collection: shop.users index: email_1
+  Thrown at: /app/migrations/0001-add-users.js:4:11
+  This migration did not run in a transaction, so any writes it already made are still in the database
+  The batch stopped here — later migrations were not run
+```
+
+Set `export const useTransaction = true` in the migration to make that last point read
+"rolled back" instead (requires a replica set or sharded cluster).
+
+**Couldn't connect.** The driver's reason is in the message, and any password in the URI is redacted
+before it reaches your logs, `--json` output, or the error context:
+
+```
+✖ CONNECTION_FAILED: Failed to connect to MongoDB at mongodb://***:***@db.internal:27017
+  Reason: getaddrinfo ENOTFOUND db.internal
+  Database: "shop"
+  Check the host/port is reachable, the credentials are right, and any TLS or IP allow-list requirement is met
+```
+
+**An applied migration was edited.** `down` always verifies checksums (not just under `--strict`),
+because reverting edited code is the riskier direction:
+
+```
+✖ CHECKSUM_MISMATCH: Refusing to roll back a file that changed since being applied: 0001-a.ts
+  Rolling back would run the CURRENT down(), which may not undo what the applied up() did
+  Restore the file to the version that was applied, then roll back
+  Or roll back with the current code anyway: mmk down 0001-a.ts --force
+```
+
+::: tip Detecting drift before it bites
+A plain `mmk up --strict` only checks the migrations it is about to run, so it will not flag drift in
+an **already-applied** file. Use `mmk status` (the `Checksum` column) for that, or name the file:
+`mmk up 0001-a.ts --strict`.
+:::

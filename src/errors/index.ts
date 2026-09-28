@@ -84,6 +84,21 @@ export class ConfigInvalidError extends MmkError {
   }
 }
 
+/**
+ * Thrown when a command argument or flag is missing, malformed, or contradicts
+ * another one — e.g. `--steps abc`, `--steps` together with `--batch`, or
+ * `mmk create` with a name that slugifies to nothing.
+ *
+ * Distinct from {@link ConfigInvalidError}, which is about `mmk.config.*` /
+ * `MMK_*` settings: this one always points at what the user just typed.
+ */
+export class InvalidArgumentError extends MmkError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super('INVALID_ARGUMENT', message, context);
+    this.name = 'InvalidArgumentError';
+  }
+}
+
 /** Thrown when creating a config file that already exists without `--force` */
 export class ConfigFileExistsError extends MmkError {
   constructor(message: string, context?: Record<string, unknown>) {

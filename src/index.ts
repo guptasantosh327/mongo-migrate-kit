@@ -18,6 +18,9 @@ export type {
 } from './core/run.js';
 export type { ConfigFormat } from './utils/template.js';
 
+// Structured detail attached to a ConfigInvalidError (`error.context.issues`)
+export type { ConfigIssue } from './core/config.js';
+
 // Types
 export type {
   ImportChecksumSource,
@@ -48,6 +51,7 @@ export {
   ChecksumMismatchError,
   ConfigFileExistsError,
   ConfigInvalidError,
+  InvalidArgumentError,
   ConnectionFailedError,
   ImportTargetNotEmptyError,
   IrreversibleMigrationError,

@@ -1,5 +1,7 @@
 import type { Command } from 'commander';
-import { type CliOptions, emitJson, withMigrator } from '../shared.js';
+import { InvalidArgumentError } from '../../errors/index.js';
+import { explain } from '../../utils/explain.js';
+import { type CliOptions, emitJson, failPreflight, withMigrator } from '../shared.js';
 
 /** Register the `create` command */
 export function registerCreate(program: Command): void {
@@ -17,6 +19,18 @@ export function registerCreate(program: Command): void {
         ts?: boolean;
         template?: string;
       };
+      if (opts.js && opts.ts) {
+        failPreflight(
+          opts,
+          new InvalidArgumentError(
+            explain('--js and --ts cannot be used together', [
+              'Received: both --js and --ts',
+              "Pass exactly one, or neither to use the config's createExtension setting",
+            ]),
+          ),
+        );
+        return;
+      }
       // Tri-state: explicit flag wins; otherwise leave undefined so config decides.
       const js = opts.ts ? false : opts.js ? true : undefined;
       await withMigrator(

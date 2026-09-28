@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { MigrationFileNotFoundError, MigrationInvalidExportError } from '../errors/index.js';
 import type { MigrationModule } from '../types/index.js';
+import { explain, listOf, quote } from './explain.js';
 
 /** TypeScript source extensions that require a TS-capable runtime to import */
 const TS_EXTENSIONS = new Set(['.ts', '.mts', '.cts']);
@@ -61,7 +62,12 @@ export function tsLoadErrorOrNull(
  */
 export async function loadMigrationFile(filepath: string): Promise<MigrationModule> {
   if (!existsSync(filepath)) {
-    throw new MigrationFileNotFoundError('Migration file not found', { filepath });
+    throw new MigrationFileNotFoundError(
+      explain(`Migration file not found: ${quote(path.basename(filepath))}`, [
+        `Looked for: ${filepath}`,
+      ]),
+      { filepath },
+    );
   }
 
   let imported: Record<string, unknown> & { default?: Record<string, unknown> };
@@ -80,9 +86,26 @@ export async function loadMigrationFile(filepath: string): Promise<MigrationModu
   const resolved = (imported.default ?? imported) as Record<string, unknown>;
 
   if (!isFunction(resolved.up) || !isFunction(resolved.down)) {
-    throw new MigrationInvalidExportError('Migration must export async up() and down() functions', {
-      filepath,
-    });
+    const name = path.basename(filepath);
+    // Name the specific export at fault — "up is missing" and "down is a string"
+    // point at very different mistakes.
+    const problems = (['up', 'down'] as const)
+      .filter((key) => !isFunction(resolved[key]))
+      .map((key) =>
+        resolved[key] === undefined
+          ? `${key}() is missing`
+          : `${key} is a ${typeof resolved[key]}, not a function`,
+      );
+    const found = Object.keys(resolved).filter((key) => key !== 'default');
+    throw new MigrationInvalidExportError(
+      explain(`Migration ${quote(name)} must export async up() and down() functions`, [
+        `Problem: ${problems.join(' and ')}`,
+        found.length > 0 ? `Exports found: ${listOf(found)}` : 'The file exports nothing',
+        'Expected: export async function up(ctx) {…} and export async function down(ctx) {…}',
+        '(CommonJS: module.exports = { async up(ctx) {…}, async down(ctx) {…} })',
+      ]),
+      { filepath, missing: problems, exports: found },
+    );
   }
 
   const migration: MigrationModule = {

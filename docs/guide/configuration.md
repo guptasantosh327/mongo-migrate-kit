@@ -171,3 +171,77 @@ These flags work on every command and have the **highest** precedence:
 ```bash
 mmk up --uri "mongodb://localhost:27017" --db my_app --dir ./db/migrations
 ```
+
+## When configuration is wrong
+
+`mmk` validates the fully merged configuration **before it connects to MongoDB**, and reports
+**every** problem at once rather than one per run. Each problem names the option, the value that was
+actually read, the layer it came from, and every accepted way to set it:
+
+```
+✖ CONFIG_INVALID: Invalid mongo-migrate-kit configuration — 2 problems found:
+
+  1. uri is required but was not set
+     Set it with: the --uri <uri> CLI flag, the MMK_URI environment variable,
+     "uri" in mmk.config.js (see `mmk init`), or the config object passed to MigratorKit
+
+  2. lockTTLSeconds must be a whole number, e.g. 60
+     Received: "abc"
+     Read from: the MMK_LOCK_TTL environment variable
+     Set it with: the MMK_LOCK_TTL environment variable, "lockTTLSeconds" in mmk.config.js, …
+```
+
+### Nothing is silently ignored
+
+The mistakes that used to fail quietly are all errors now:
+
+| Mistake | What happens |
+|---|---|
+| `uri` is `localhost:27017` | Rejected — must start with `mongodb://` or `mongodb+srv://` |
+| `dbName` contains `/ \ . " $ * < > : \| ?` or a space | Rejected before the driver sees it |
+| `MMK_STRICT=maybe`, `MMK_LOCK_TTL=abc`, `MMK_CREATE_EXTENSION=py` | Rejected naming the variable, the value, and the accepted format |
+| `migrationDir:` in a config file | Rejected — `rename it to "migrationsDir"` |
+| `MMK_MIGRATION_DIR` in the environment | Warned — `Did you mean MMK_MIGRATIONS_DIR?` |
+| `fileExtensions: ['ts']` | Rejected — extensions must start with a dot |
+| `strict: 'true'` | Rejected — must be a real boolean |
+| `hooks: { beforeALL }` | Rejected — `Did you mean "beforeAll"?` |
+| A `logger` missing methods | Rejected, listing exactly which ones |
+| `migrationsDir` points nowhere | Warned with the resolved path |
+
+An **empty** environment variable (`MMK_STRICT=`) counts as unset, so you can comment a value out in
+`.env` without deleting the line.
+
+### Reading the problems as data
+
+Every DB command accepts `--json`, which puts the same information on stdout:
+
+```jsonc
+{
+  "error": {
+    "code": "CONFIG_INVALID",
+    "message": "Invalid mongo-migrate-kit configuration — 1 problem found: …",
+    "details": {
+      "issues": [
+        { "key": "uri", "problem": "is required but was not set", "howToSet": "…" }
+      ]
+    }
+  }
+}
+```
+
+Programmatically the same array is on `error.context.issues`, typed as the exported `ConfigIssue`:
+
+```ts
+import { runMigrations, ConfigInvalidError, type ConfigIssue } from 'mongo-migrate-kit';
+
+try {
+  await runMigrations({ uri: process.env.MONGO_URL, dbName: 'my_app' });
+} catch (error) {
+  if (error instanceof ConfigInvalidError) {
+    for (const issue of (error.context?.issues ?? []) as ConfigIssue[]) {
+      console.error(issue.key, issue.problem, issue.source, issue.howToSet);
+    }
+  }
+  throw error;
+}
+```

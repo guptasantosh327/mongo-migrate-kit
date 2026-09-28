@@ -3,6 +3,7 @@ import type { MigratorKit } from '../../src/core/migrator.js';
 import {
   ChecksumMismatchError,
   MigrationExecutionFailedError,
+  MigrationFileNotFoundError,
   MigrationInvalidNameError,
 } from '../../src/errors/index.js';
 import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
@@ -42,6 +43,24 @@ function setup(): void {
 }
 
 describe('MigratorKit.up (integration)', () => {
+  it('should explain a mistyped filename with the directory and a suggestion', async () => {
+    setup();
+    project.write('0001-add-users.ts', insertMigration('things', 'a'));
+    const error = await migrator.up('0001-add-user.ts').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(MigrationFileNotFoundError);
+    const message = (error as Error).message;
+    expect(message).toContain('0001-add-user.ts');
+    expect(message).toContain(project.dir);
+    expect(message).toContain('Did you mean "0001-add-users.ts"?');
+    expect(message).toContain('Migrations in that directory: 0001-add-users.ts');
+  });
+
+  it('should say the directory is empty rather than suggest nothing', async () => {
+    setup();
+    const error = await migrator.up('nope.ts').catch((e: unknown) => e);
+    expect((error as Error).message).toContain('no migration files yet');
+  });
+
   it('should reject a path-traversing filename instead of loading outside the dir', async () => {
     setup();
     // A real secret a traversal could try to read/execute; it must never be touched.
@@ -149,7 +168,13 @@ describe('MigratorKit.up (integration)', () => {
     await migrator.disconnect();
     project.tamper('0001-a.ts');
     const strict = makeMigrator(mongo.uri, DB, project.dir, { strict: true });
-    await expect(strict.up('0001-a.ts')).rejects.toBeInstanceOf(ChecksumMismatchError);
+    const error = await strict.up('0001-a.ts').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ChecksumMismatchError);
+    const message = (error as Error).message;
+    expect(message).toContain('"0001-a.ts" has changed since it was applied');
+    expect(message).toContain('Applied checksum:');
+    expect(message).toContain('On-disk checksum:');
+    expect(message).toContain('mmk up 0001-a.ts --force');
     await strict.disconnect();
   });
 

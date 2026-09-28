@@ -1,3 +1,4 @@
+import { rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -35,6 +36,39 @@ describe('loadMigrationFile', () => {
     await expect(loadMigrationFile(path.join(fixtures, 'nope.ts'))).rejects.toBeInstanceOf(
       MigrationFileNotFoundError,
     );
+  });
+
+  it('should name the missing export, the file, and the expected shape', async () => {
+    const error = await loadMigrationFile(path.join(fixtures, 'invalid-no-down.ts')).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(MigrationInvalidExportError);
+    const message = (error as Error).message;
+    expect(message).toContain('invalid-no-down.ts');
+    expect(message).toContain('down() is missing');
+    // The exports that ARE there are listed, so the author can see what loaded.
+    expect(message).toContain('up');
+    expect(message).toContain('export async function down');
+  });
+
+  it('should say which export is the wrong type rather than just "missing"', async () => {
+    const file = path.join(fixtures, 'invalid-down-not-a-function.cjs');
+    writeFileSync(file, "module.exports = { async up() {}, down: 'nope' };\n");
+    try {
+      const error = await loadMigrationFile(file).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(MigrationInvalidExportError);
+      expect((error as Error).message).toContain('down is a string, not a function');
+    } finally {
+      rmSync(file, { force: true });
+    }
+  });
+
+  it('should name the path it looked for when the file does not exist', async () => {
+    const missing = path.join(fixtures, 'does-not-exist.js');
+    const error = await loadMigrationFile(missing).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(MigrationFileNotFoundError);
+    expect((error as Error).message).toContain('does-not-exist.js');
+    expect((error as Error).message).toContain(missing);
   });
 
   it('should throw MigrationInvalidExportError when down() is missing', async () => {

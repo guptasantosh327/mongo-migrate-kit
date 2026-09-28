@@ -618,7 +618,147 @@ export default {
 | `MMK_SEQUENTIAL` | `sequential` | `false` |
 | `MMK_CREATE_EXTENSION` | `createExtension` | `js` |
 
-`.env` files are loaded automatically.
+`.env` files are loaded automatically. An empty value (`MMK_STRICT=`) counts as unset, so you can
+comment a setting out without deleting the line. A value that can't be parsed is an error, not a
+silent fallback — see below.
+
+</details>
+
+<details>
+<summary><b>Configuration errors</b> — what you see when something is missing or wrong</summary>
+
+<br>
+
+Every configuration problem is reported up front, before `mmk` touches your database, and **all
+problems at once** rather than one per run. Each one names the option, the value that was actually
+read, the layer it came from, and every accepted way to set it:
+
+```
+✖ CONFIG_INVALID: Invalid mongo-migrate-kit configuration — 2 problems found:
+
+  1. uri is required but was not set
+     Set it with: the --uri <uri> CLI flag, the MMK_URI environment variable,
+     "uri" in mmk.config.js (see `mmk init`), or the config object passed to MigratorKit
+
+  2. lockTTLSeconds must be a whole number, e.g. 60
+     Received: "abc"
+     Read from: the MMK_LOCK_TTL environment variable
+     Set it with: the MMK_LOCK_TTL environment variable, "lockTTLSeconds" in mmk.config.js, …
+```
+
+What is checked:
+
+| Mistake | What you get |
+|---|---|
+| `uri` / `dbName` not set | Named as required, with all three ways to supply it |
+| `uri` isn't a connection string (`localhost:27017`) | Told it must start with `mongodb://` or `mongodb+srv://` |
+| `dbName` contains `/ \ . " $ * < > : \| ?` or a space | Named before the driver rejects it at connect time |
+| `MMK_LOCK_TTL=abc`, `MMK_STRICT=maybe`, `MMK_CREATE_EXTENSION=py` | Rejected naming the variable, the value, and the accepted format — never silently coerced or ignored |
+| A typo'd option in a config file (`migrationDir`) | Rejected with `rename it to "migrationsDir"` — an unknown key is otherwise silently inert |
+| A typo'd env var (`MMK_MIGRATION_DIR`) | Warned, with the real variable suggested |
+| `fileExtensions: ['ts']` (no leading dot) | Named per element, instead of silently matching no files |
+| `strict: 'true'` (string, not boolean) | Named as needing a real boolean |
+| A misspelled hook (`beforeALL`) or a non-function hook | Named with the valid hook list — a misspelled hook otherwise never fires |
+| An incomplete custom `logger` | Told exactly which methods are missing |
+| `migrationsDir` points nowhere | Warned with the resolved path, instead of a silent "nothing to migrate" |
+| Config file is malformed JSON, exports a non-object, or can't be imported | Named with the file path and the underlying reason |
+
+In `--json` mode the same information is machine-readable on stdout:
+
+```jsonc
+{
+  "error": {
+    "code": "CONFIG_INVALID",
+    "message": "Invalid mongo-migrate-kit configuration — 1 problem found: …",
+    "details": {
+      "issues": [
+        {
+          "key": "uri",
+          "problem": "is required but was not set",
+          "howToSet": "the --uri <uri> CLI flag, the MMK_URI environment variable, …"
+        }
+      ]
+    }
+  }
+}
+```
+
+Programmatically, the same array is on `error.context.issues`, typed as the exported `ConfigIssue`:
+
+```ts
+import { runMigrations, ConfigInvalidError, type ConfigIssue } from 'mongo-migrate-kit';
+
+try {
+  await runMigrations({ uri: process.env.MONGO_URL, dbName: 'my_app' });
+} catch (error) {
+  if (error instanceof ConfigInvalidError) {
+    for (const issue of (error.context?.issues ?? []) as ConfigIssue[]) {
+      console.error(`${issue.key} ${issue.problem}`, issue.source, issue.howToSet);
+    }
+  }
+  throw error;
+}
+```
+
+</details>
+
+<details>
+<summary><b>Argument errors</b> — what you see when a command is wrong</summary>
+
+<br>
+
+The same rule applies to what you type as to what you configure: **nothing is a silent no-op**. Bad
+flags are caught *before* mmk connects, so a typo costs nothing:
+
+```
+$ mmk down --batch abc
+✖ INVALID_ARGUMENT: --batch must be a positive whole number
+  Received: "abc"
+  Try: mmk down --batch 3
+
+$ mmk up 0001-add-user.ts
+✖ MIGRATION_FILE_NOT_FOUND: Migration file not found: "0001-add-user.ts"
+  Looked in: /app/migrations
+  Did you mean "0001-add-users.ts"?
+  Migrations in that directory: 0001-add-users.ts, 0002-backfill.ts
+  Run `mmk status` to see every migration mmk knows about
+
+$ mmk down 0002-backfill.ts
+✖ NOT_APPLIED: Cannot roll back "0002-backfill.ts" — it is not currently applied
+  It has no changelog record
+  Currently applied: 0001-add-users.ts
+  Run `mmk status` to see what is applied
+
+$ mmk stauts
+error: unknown command 'stauts'
+(Did you mean status?)
+```
+
+| Mistake | Before | Now |
+|---|---|---|
+| `mmk down --batch abc` | `Nothing to rollback`, **exit 0** | Rejected before connecting, naming the value |
+| `mmk down --batch 99` (no such batch) | `Nothing to rollback`, **exit 0** | Rejected, listing the batches that do have applied migrations |
+| `mmk create "   "` | Wrote a file named `20240526143021-.js` | Rejected — the name slugifies to nothing |
+| `mmk create x --js --ts` | Silently picked `.ts` | Rejected as contradictory |
+| `mmk import --from c --to c` | Read and rewrote the same collection | Rejected — `--from` and `--to` must differ |
+| `mmk up typo.js` | `Migration file not found` | Names the directory, suggests the real file, lists what's there |
+| `mmk down not-applied.js` | `Migration is not applied` | Lists what *is* applied |
+| `mmk dry-run sideways` | Connected first, then `CONFIG_INVALID` | Rejected before connecting, with both valid directions |
+| A migration missing `down()` | `must export async up() and down()` | Says which one is missing (or the wrong type) and lists the exports found |
+| `mmk down file --steps 2` | `Cannot combine a filename with --steps` | Spells out what each option would do instead |
+
+Argument problems carry the `INVALID_ARGUMENT` code, distinct from `CONFIG_INVALID` — so you always
+know whether to fix your command or your config. In `--json` mode they arrive the same way:
+
+```jsonc
+{
+  "error": {
+    "code": "INVALID_ARGUMENT",
+    "message": "--batch must be a positive whole number\n  Received: \"abc\"\n  Try: mmk down --batch 3",
+    "details": { "flag": "--batch", "received": "abc" }
+  }
+}
+```
 
 </details>
 

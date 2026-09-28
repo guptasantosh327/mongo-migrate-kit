@@ -99,6 +99,107 @@ describe('runMigration', () => {
     expect(session.endSession).toHaveBeenCalledOnce();
   });
 
+  it("should carry the migration's own error into the message, not just the context", async () => {
+    const { context } = makeContext();
+    const migration: MigrationModule = {
+      up: vi.fn().mockRejectedValue(new Error('E11000 duplicate key error')),
+      down: vi.fn().mockResolvedValue(undefined),
+    };
+    const error = await runMigration({
+      name: 'a.ts',
+      migration,
+      direction: 'up',
+      context,
+      useTransaction: false,
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(MigrationExecutionFailedError);
+    const message = (error as Error).message;
+    expect(message).toContain('"a.ts"');
+    expect(message).toContain('running up()');
+    expect(message).toContain('Reason: E11000 duplicate key error');
+    // Without a transaction, partial writes survive — say so.
+    expect(message).toContain('still in the database');
+    expect(message).toContain('later migrations were not run');
+  });
+
+  it('should say writes were rolled back when the migration ran in a transaction', async () => {
+    const { context } = makeContext();
+    const migration: MigrationModule = {
+      up: vi.fn().mockRejectedValue(new Error('boom')),
+      down: vi.fn().mockResolvedValue(undefined),
+    };
+    const error = await runMigration({
+      name: 'a.ts',
+      migration,
+      direction: 'up',
+      context,
+      useTransaction: true,
+    }).catch((e: unknown) => e);
+    expect((error as Error).message).toContain('rolled back');
+  });
+
+  it('should omit the location line when the error carries no usable stack', async () => {
+    const { context } = makeContext();
+    const bare = new Error('no stack here');
+    bare.stack = undefined;
+    const migration: MigrationModule = {
+      up: vi.fn().mockRejectedValue(bare),
+      down: vi.fn().mockResolvedValue(undefined),
+    };
+    const error = await runMigration({
+      name: 'a.ts',
+      migration,
+      direction: 'up',
+      context,
+      useTransaction: false,
+    }).catch((e: unknown) => e);
+    const message = (error as Error).message;
+    expect(message).toContain('Reason: no stack here');
+    expect(message).not.toContain('Thrown at:');
+    expect((error as MigrationExecutionFailedError).context?.location).toBeUndefined();
+  });
+
+  it('should skip mmk-internal frames when reporting where a migration threw', async () => {
+    const { context } = makeContext();
+    const err = new Error('from deep inside');
+    // Only library/internal frames: nothing here belongs to a migration file.
+    err.stack = [
+      'Error: from deep inside',
+      '    at Object.run (/app/node_modules/mongodb/lib/operations.js:12:9)',
+      '    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)',
+    ].join('\n');
+    const migration: MigrationModule = {
+      up: vi.fn().mockRejectedValue(err),
+      down: vi.fn().mockResolvedValue(undefined),
+    };
+    const error = await runMigration({
+      name: 'a.ts',
+      migration,
+      direction: 'up',
+      context,
+      useTransaction: false,
+    }).catch((e: unknown) => e);
+    expect((error as Error).message).not.toContain('Thrown at:');
+  });
+
+  it('should strip a file:// prefix from the reported location', async () => {
+    const { context } = makeContext();
+    const err = new Error('boom');
+    err.stack = ['Error: boom', '    at up (file:///app/migrations/0001-a.js:4:11)'].join('\n');
+    const migration: MigrationModule = {
+      up: vi.fn().mockRejectedValue(err),
+      down: vi.fn().mockResolvedValue(undefined),
+    };
+    const error = await runMigration({
+      name: 'a.ts',
+      migration,
+      direction: 'up',
+      context,
+      useTransaction: false,
+    }).catch((e: unknown) => e);
+    expect((error as Error).message).toContain('Thrown at: /app/migrations/0001-a.js:4:11');
+  });
+
   it('should wrap a non-Error throw in MigrationExecutionFailedError', async () => {
     const { context } = makeContext();
     const migration: MigrationModule = {

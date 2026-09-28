@@ -3,10 +3,12 @@ import path from 'node:path';
 import {
   ConfigFileExistsError,
   ConfigInvalidError,
+  InvalidArgumentError,
   MigrationFileNotFoundError,
 } from '../errors/index.js';
 import type { MigrationExtension } from '../types/index.js';
 import { formatStamp } from './date.js';
+import { explain, quote } from './explain.js';
 
 /** Convert an arbitrary migration name into a kebab-case slug */
 export function slugify(name: string): string {
@@ -75,7 +77,14 @@ export async function down({ db }) {
 export function resolveTemplateContent(templatePath: string | undefined, js: boolean): string {
   if (templatePath) {
     if (!existsSync(templatePath)) {
-      throw new MigrationFileNotFoundError('Template file not found', { templatePath });
+      throw new MigrationFileNotFoundError(
+        explain(`Template file not found: ${quote(templatePath)}`, [
+          `Resolved to: ${path.resolve(templatePath)}`,
+          'A relative --template path is resolved from the current working directory',
+          'Omit --template to use the built-in template',
+        ]),
+        { templatePath, resolved: path.resolve(templatePath) },
+      );
     }
     return readFileSync(templatePath, 'utf8');
   }
@@ -104,7 +113,18 @@ export function createMigrationFile(options: CreateMigrationFileOptions): string
   const ext = options.js ? '.js' : '.ts';
   const index = nextSequenceIndex(options.dir, ['.ts', '.js']);
   const prefix = buildPrefix({ sequential: options.sequential, index });
-  const filename = `${prefix}-${slugify(options.name)}${ext}`;
+  const slug = slugify(options.name);
+  if (slug === '') {
+    throw new InvalidArgumentError(
+      explain('Migration name must contain at least one letter or number', [
+        `Received: ${quote(options.name)}`,
+        'The name is slugified into the filename, and this one slugifies to nothing',
+        'Try: mmk create add-users-index',
+      ]),
+      { name: options.name },
+    );
+  }
+  const filename = `${prefix}-${slug}${ext}`;
   const filepath = path.join(options.dir, filename);
   const content = resolveTemplateContent(options.templatePath, options.js);
   writeFileSync(filepath, content, 'utf8');

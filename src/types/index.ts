@@ -260,6 +260,7 @@ export type MmkErrorCode =
   | 'MIGRATION_INVALID_EXPORT'
   | 'MIGRATION_EXECUTION_FAILED'
   | 'CONFIG_INVALID'
+  | 'INVALID_ARGUMENT' // a command argument or flag is missing, malformed, or contradictory
   | 'CONFIG_FILE_EXISTS'
   | 'CONNECTION_FAILED'
   | 'ALREADY_APPLIED'

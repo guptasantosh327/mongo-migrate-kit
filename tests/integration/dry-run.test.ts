@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MigratorKit } from '../../src/core/migrator.js';
-import { ConfigInvalidError } from '../../src/errors/index.js';
+import { InvalidArgumentError } from '../../src/errors/index.js';
 import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
 import { insertMigration, makeMigrator, makeProject } from '../helpers/project.js';
 
@@ -68,7 +68,7 @@ describe('MigratorKit.dryRun (integration)', () => {
   it('should reject dry-run down --steps combined with a filename', async () => {
     setup();
     await expect(migrator.dryRun('down', '0001-a.ts', { steps: 1 })).rejects.toBeInstanceOf(
-      ConfigInvalidError,
+      InvalidArgumentError,
     );
   });
 

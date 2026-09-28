@@ -1,6 +1,14 @@
 import type { Command } from 'commander';
+import { InvalidArgumentError } from '../../errors/index.js';
 import { createLogger } from '../../utils/logger.js';
-import { type CliOptions, confirm, emitJson, withMigrator } from '../shared.js';
+import {
+  type CliOptions,
+  confirm,
+  emitJson,
+  failPreflight,
+  parseCountOption,
+  withMigrator,
+} from '../shared.js';
 
 /** Register the `down` command */
 export function registerDown(program: Command): void {
@@ -25,20 +33,26 @@ export function registerDown(program: Command): void {
         yes?: boolean;
       };
 
-      // Pre-flight validation errors honour --json so scripted callers get structured output.
-      const failPreflight = (message: string): void => {
-        if (opts.json) {
-          emitJson({ error: { message } });
-        } else {
-          createLogger().error(`✖ ${message}`);
-        }
-        process.exitCode = 1;
-      };
+      // Parsed before connecting, so a typo'd flag never costs a connection.
+      let batch: number | undefined;
+      let steps: number | undefined;
+      try {
+        batch = parseCountOption(opts.batch, '--batch', 'mmk down --batch 3');
+        steps = parseCountOption(opts.steps, '--steps', 'mmk down --steps 3');
+      } catch (error) {
+        failPreflight(opts, error);
+        return;
+      }
 
       if (opts.force && !opts.yes) {
         // --json is non-interactive: refuse rather than hanging on a prompt.
         if (opts.json) {
-          failPreflight('--force needs confirmation — pass --yes to confirm in --json mode');
+          failPreflight(
+            opts,
+            new InvalidArgumentError(
+              '--force needs confirmation — pass --yes to confirm in --json mode',
+            ),
+          );
           return;
         }
         const what = file ?? 'the selected migration(s)';
@@ -56,8 +70,8 @@ export function registerDown(program: Command): void {
         async (migrator) => {
           const results = await migrator.down(file, {
             noLock: opts.lock === false,
-            ...(opts.batch ? { batch: Number(opts.batch) } : {}),
-            ...(opts.steps !== undefined ? { steps: Number(opts.steps) } : {}),
+            ...(batch !== undefined ? { batch } : {}),
+            ...(steps !== undefined ? { steps } : {}),
             ...(opts.force ? { force: true } : {}),
           });
           if (opts.json) {

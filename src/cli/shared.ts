@@ -1,8 +1,9 @@
 import { createInterface } from 'node:readline/promises';
 import ora from 'ora';
 import { MigratorKit, type MigratorKitOptions } from '../core/migrator.js';
-import { MmkError } from '../errors/index.js';
+import { InvalidArgumentError, MmkError } from '../errors/index.js';
 import type { MmkConfig, ProgressReporter, StatusRow } from '../types/index.js';
+import { explain, quote } from '../utils/explain.js';
 import { createLogger } from '../utils/logger.js';
 
 /** Shape of the merged global + command options provided by commander */
@@ -29,6 +30,55 @@ export function partialFromOpts(opts: CliOptions): Partial<MmkConfig> {
   if (opts.dir) partial.migrationsDir = opts.dir;
   if (opts.strict) partial.strict = true;
   return partial;
+}
+
+/**
+ * Report an input problem found *before* connecting to MongoDB and set exit 1.
+ *
+ * Pre-flight checks run first precisely so a typo'd flag never costs a
+ * connection attempt, and so the message is not buried under a spinner.
+ */
+export function failPreflight(opts: CliOptions, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  const code = error instanceof MmkError ? error.code : undefined;
+  if (opts.json) {
+    emitJson({
+      error: {
+        ...(code ? { code } : {}),
+        message,
+        ...(error instanceof MmkError && error.context ? { details: error.context } : {}),
+      },
+    });
+  } else {
+    createLogger().error(code ? `✖ ${code}: ${message}` : `✖ ${message}`);
+  }
+  process.exitCode = 1;
+}
+
+/**
+ * Parse a numeric CLI option, refusing anything that is not a positive whole
+ * number. Without this, `--batch abc` becomes `NaN` and quietly matches no
+ * migrations, which reads as a successful no-op.
+ */
+export function parseCountOption(
+  raw: string | undefined,
+  flag: string,
+  example: string,
+): number | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  const value = Number(raw);
+  if (!/^\d+$/.test(raw.trim()) || !Number.isInteger(value) || value < 1) {
+    throw new InvalidArgumentError(
+      explain(`${flag} must be a positive whole number`, [
+        `Received: ${quote(raw)}`,
+        `Try: ${example}`,
+      ]),
+      { flag, received: raw },
+    );
+  }
+  return value;
 }
 
 /** Extra behaviour for {@link withMigrator} */
@@ -102,7 +152,13 @@ export async function withMigrator(
     const message = error instanceof Error ? error.message : String(error);
     if (json) {
       emitJson({
-        error: { ...(error instanceof MmkError ? { code: error.code } : {}), message },
+        error: {
+          ...(error instanceof MmkError ? { code: error.code } : {}),
+          message,
+          // Structured detail (e.g. the per-key `issues` of a CONFIG_INVALID)
+          // so CI can act on the exact problem, not just the rendered text.
+          ...(error instanceof MmkError && error.context ? { details: error.context } : {}),
+        },
       });
     } else if (error instanceof MmkError) {
       logger.error(`✖ ${error.code}: ${error.message}`);

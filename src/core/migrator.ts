@@ -4,9 +4,9 @@ import path from 'node:path';
 import { type Db, MongoClient, type MongoClientOptions } from 'mongodb';
 import {
   ChecksumMismatchError,
-  ConfigInvalidError,
   ConnectionFailedError,
   ImportTargetNotEmptyError,
+  InvalidArgumentError,
   IrreversibleMigrationError,
   MigrationFileNotFoundError,
   MigrationInvalidNameError,
@@ -27,6 +27,7 @@ import type {
   StatusRow,
 } from '../types/index.js';
 import { computeChecksum } from '../utils/checksum.js';
+import { didYouMean, explain, listOf, quote } from '../utils/explain.js';
 import { loadMigrationFile } from '../utils/loader.js';
 import { resolveLogger } from '../utils/logger.js';
 import { redactMongoUri } from '../utils/redact.js';
@@ -207,9 +208,19 @@ export class MigratorKit {
       // Driver errors frequently embed the connection string verbatim — redact
       // any credentials before they reach a log, JSON output, or error context.
       const raw = error instanceof Error ? error.message : String(error);
-      throw new ConnectionFailedError('Failed to connect to MongoDB', {
-        cause: redactMongoUri(raw),
-      });
+      const cause = redactMongoUri(raw);
+      // The redacted driver message is the only clue to WHY the connection
+      // failed (bad host, auth, TLS, timeout), so it belongs in the message —
+      // not only in the context, where the terminal never shows it.
+      throw new ConnectionFailedError(
+        explain(`Failed to connect to MongoDB at ${redactMongoUri(config.uri)}`, [
+          `Reason: ${cause}`,
+          `Database: ${quote(config.dbName)}`,
+          'Check the host/port is reachable, the credentials are right, and any TLS or IP allow-list requirement is met',
+          'Set the connection with --uri, the MMK_URI environment variable, or "uri" in your config file',
+        ]),
+        { cause, uri: redactMongoUri(config.uri), dbName: config.dbName },
+      );
     }
   }
 
@@ -329,16 +340,27 @@ export class MigratorKit {
       name.includes('\0')
     ) {
       throw new MigrationInvalidNameError(
-        'Invalid migration name — must be a bare filename with no path segments',
+        explain('Invalid migration name — it must be a bare filename', [
+          `Received: ${quote(name)}`,
+          'A name may not contain "/", "\\", a NUL byte, or be "." / ".." — this blocks reading code from outside the migrations directory',
+          'Pass just the filename as `mmk status` lists it, e.g. mmk up 20240526143021-add-users-index.js',
+        ]),
         { name },
       );
     }
     const resolved = path.join(dir, name);
     const relative = path.relative(dir, resolved);
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
-      throw new MigrationInvalidNameError('Migration name escapes the migrations directory', {
-        name,
-      });
+      throw new MigrationInvalidNameError(
+        explain('Migration name escapes the migrations directory', [
+          `Received: ${quote(name)}`,
+          `Migrations directory: ${dir}`,
+          'Pass just the filename as `mmk status` lists it',
+        ]),
+        {
+          name,
+        },
+      );
     }
     return resolved;
   }
@@ -347,6 +369,12 @@ export class MigratorKit {
   private listMigrationFiles(): string[] {
     const dir = this.migrationsPath();
     if (!existsSync(dir)) {
+      // Silently returning [] here reads as "nothing to migrate", which hides a
+      // mistyped migrationsDir. Say which path was looked at and where it came from.
+      const hint =
+        'set it with --dir <path>, the MMK_MIGRATIONS_DIR environment variable, ' +
+        'or "migrationsDir" in your config file';
+      this.logger.warn(`⚠ Migrations directory not found: ${dir} — ${hint}`);
       return [];
     }
     const extensions = this.config?.fileExtensions ?? ['.ts', '.js'];
@@ -371,14 +399,90 @@ export class MigratorKit {
       return;
     }
     if (filename) {
-      throw new ConfigInvalidError('Cannot combine a filename with --steps', { filename });
+      throw new InvalidArgumentError(
+        explain('Cannot combine a migration filename with --steps — they select different things', [
+          `Received: file ${quote(filename)} and --steps ${steps}`,
+          `To roll back just that file:      mmk down ${filename}`,
+          `To roll back the last ${steps} migration(s): mmk down --steps ${steps}`,
+        ]),
+        { filename, steps },
+      );
     }
     if (batch !== undefined) {
-      throw new ConfigInvalidError('Cannot combine --batch with --steps', { batch, steps });
+      throw new InvalidArgumentError(
+        explain('Cannot combine --batch with --steps — they select different things', [
+          `Received: --batch ${batch} and --steps ${steps}`,
+          `--batch ${batch} rolls back everything applied in batch ${batch}`,
+          `--steps ${steps} rolls back the last ${steps} migration(s), ignoring batches`,
+        ]),
+        { batch, steps },
+      );
     }
     if (!Number.isInteger(steps) || steps < 1) {
-      throw new ConfigInvalidError('--steps must be a positive integer', { steps });
+      throw new InvalidArgumentError(
+        explain('--steps must be a positive whole number', [
+          `Received: ${quote(steps)}`,
+          'Try: mmk down --steps 3   (roll back the 3 most recently applied migrations)',
+        ]),
+        { steps },
+      );
     }
+  }
+
+  /**
+   * Validate the `--batch` option for `down`: a positive integer, and not
+   * combined with a filename (which would select a different set silently).
+   */
+  private assertBatchValid(batch: number | undefined, filename?: string): void {
+    if (batch === undefined) {
+      return;
+    }
+    if (filename) {
+      throw new InvalidArgumentError(
+        explain('Cannot combine a migration filename with --batch — they select different things', [
+          `Received: file ${quote(filename)} and --batch ${batch}`,
+          `To roll back just that file:        mmk down ${filename}`,
+          `To roll back everything in a batch: mmk down --batch ${batch}`,
+        ]),
+        { filename, batch },
+      );
+    }
+    if (!Number.isInteger(batch) || batch < 1) {
+      throw new InvalidArgumentError(
+        explain('--batch must be a positive whole number', [
+          `Received: ${quote(batch)}`,
+          'Try: mmk down --batch 3   (roll back every migration applied in batch 3)',
+          'Run `mmk status` to see the batch number of each applied migration',
+        ]),
+        { batch },
+      );
+    }
+  }
+
+  /**
+   * Resolve a migration filename to an existing file, or explain what is wrong.
+   *
+   * A name that does not exist is the most common typo, so the error names the
+   * directory that was searched, suggests the closest real filename, and lists
+   * what is actually there.
+   */
+  private requireMigrationFile(filename: string): string {
+    const filepath = this.filepath(filename);
+    if (existsSync(filepath)) {
+      return filepath;
+    }
+    const available = this.listMigrationFiles();
+    throw new MigrationFileNotFoundError(
+      explain(`Migration file not found: ${quote(filename)}`, [
+        `Looked in: ${this.migrationsPath()}`,
+        didYouMean(filename, available),
+        available.length > 0
+          ? `Migrations in that directory: ${listOf(available)}`
+          : 'That directory has no migration files yet — create one with `mmk create <name>`',
+        'Run `mmk status` to see every migration mmk knows about',
+      ]),
+      { filename, migrationsDir: this.migrationsPath(), available },
+    );
   }
 
   /**
@@ -418,9 +522,7 @@ export class MigratorKit {
 
     let targets: string[];
     if (filename) {
-      if (!existsSync(this.filepath(filename))) {
-        throw new MigrationFileNotFoundError('Migration file not found', { filename });
-      }
+      this.requireMigrationFile(filename);
       targets = [filename];
     } else {
       targets = this.listMigrationFiles().filter((file) => !appliedNames.has(file));
@@ -452,11 +554,16 @@ export class MigratorKit {
           const existing = await changelog.getByName(db, name);
           const mismatch = existing !== null && existing.checksum !== checksum;
           if (mismatch && config.strict) {
-            throw new ChecksumMismatchError(`Checksum mismatch for ${name}`, {
-              name,
-              expected: existing?.checksum,
-              actual: checksum,
-            });
+            throw new ChecksumMismatchError(
+              explain(`${quote(name)} has changed since it was applied`, [
+                `Applied checksum: ${(existing?.checksum ?? '').slice(0, 12)}…`,
+                `On-disk checksum: ${checksum.slice(0, 12)}…`,
+                'strict mode refuses to continue when an applied migration is edited',
+                'Revert the file to the version that was applied, or write a new migration for the change',
+                `To re-run this file against the database on purpose: mmk up ${name} --force`,
+              ]),
+              { name, expected: existing?.checksum, actual: checksum },
+            );
           }
           if (mismatch) {
             logger.warn(`⚠ Warning  Checksum mismatch: ${name}`);
@@ -530,7 +637,13 @@ export class MigratorKit {
   /** Rollback the last batch, a specific batch, a specific file, or the last N steps */
   async down(filename?: string, options: DownOptions = {}): Promise<RunResult[]> {
     this.assertStepsValid(options.steps, filename, options.batch);
+    this.assertBatchValid(options.batch, filename);
     const config = await this.ensureConfig();
+    // Validate the name before the changelog lookup, so a traversing name is
+    // reported as an invalid name rather than as "not applied".
+    if (filename) {
+      this.filepath(filename);
+    }
     await this.connect();
     const lock = new MigrationLock(this.requireDb(), config.lockCollection, config.lockTTLSeconds);
     return runWithLock(
@@ -553,7 +666,22 @@ export class MigratorKit {
     if (filename) {
       const record = await changelog.getByName(db, filename);
       if (!record || record.status !== 'applied') {
-        throw new NotAppliedError('Migration is not applied', { filename });
+        const applied = (await changelog.getAll(db))
+          .filter((candidate) => candidate.status === 'applied')
+          .map((candidate) => candidate.name);
+        throw new NotAppliedError(
+          explain(`Cannot roll back ${quote(filename)} — it is not currently applied`, [
+            record
+              ? `Its last recorded status is "${record.status}"`
+              : 'It has no changelog record',
+            didYouMean(filename, applied),
+            applied.length > 0
+              ? `Currently applied: ${listOf(applied)}`
+              : 'No migrations are currently applied',
+            'Run `mmk status` to see what is applied',
+          ]),
+          { filename, applied },
+        );
       }
       toRevert = [record];
     } else if (options.steps !== undefined) {
@@ -568,6 +696,26 @@ export class MigratorKit {
       }
       const records = await changelog.getByBatch(db, batch);
       toRevert = records.filter((record) => record.status === 'applied');
+      // An explicit --batch that matches nothing is a mistake, not a no-op:
+      // silently reporting "Nothing to rollback" reads as success.
+      if (options.batch !== undefined && toRevert.length === 0) {
+        const batches = [
+          ...new Set(
+            (await changelog.getAll(db))
+              .filter((record) => record.status === 'applied')
+              .map((record) => record.batch),
+          ),
+        ].sort((a, b) => a - b);
+        throw new InvalidArgumentError(
+          explain(`No applied migrations found in batch ${batch}`, [
+            batches.length > 0
+              ? `Batches that still have applied migrations: ${batches.join(', ')}`
+              : 'No migrations are currently applied',
+            'Run `mmk status` to see the batch number of each migration',
+          ]),
+          { batch, batches },
+        );
+      }
     }
 
     if (toRevert.length === 0) {
@@ -693,16 +841,17 @@ export class MigratorKit {
     if (mismatched.length === 0) {
       return;
     }
-    this.logger.error(
-      `✖ Checksum mismatch — refusing to roll back drifted file(s): ${mismatched.join(', ')}`,
+    throw new ChecksumMismatchError(
+      explain(
+        `Refusing to roll back ${mismatched.length === 1 ? 'a file' : 'files'} that changed since being applied: ${listOf(mismatched)}`,
+        [
+          'Rolling back would run the CURRENT down(), which may not undo what the applied up() did',
+          'Restore the file to the version that was applied, then roll back',
+          `Or roll back with the current code anyway: mmk down ${mismatched[0] ?? '<file>'} --force`,
+        ],
+      ),
+      { names: mismatched },
     );
-    this.logger.dim(
-      'The on-disk migration differs from the version that was applied. Re-run with --force to ' +
-        "roll back anyway (this runs the current file's down()).",
-    );
-    throw new ChecksumMismatchError(`Checksum mismatch for ${mismatched.join(', ')}`, {
-      names: mismatched,
-    });
   }
 
   /**
@@ -765,9 +914,13 @@ export class MigratorKit {
       const applied = new Set(
         records.filter((record) => record.status === 'applied').map((record) => record.name),
       );
-      names = filename
-        ? [filename]
-        : this.listMigrationFiles().filter((file) => !applied.has(file));
+      if (filename) {
+        // Mirror `up`: a typo'd filename must not render a plausible-looking row.
+        this.requireMigrationFile(filename);
+        names = [filename];
+      } else {
+        names = this.listMigrationFiles().filter((file) => !applied.has(file));
+      }
     } else if (options.steps !== undefined) {
       // Mirror `down --steps`: the last N applied migrations, newest first.
       names = this.selectLastApplied(records, options.steps).map((record) => record.name);
@@ -896,6 +1049,20 @@ export class MigratorKit {
     const source = options.from ?? MIGRATE_MONGO_COLLECTION;
     const target = options.to ?? config.migrationsCollection;
     const dryRun = options.dryRun ?? false;
+
+    // Importing a collection into itself would rewrite the source it is reading.
+    if (source === target) {
+      throw new InvalidArgumentError(
+        explain(`Cannot import ${quote(source)} into itself — --from and --to must differ`, [
+          `Source (--from): ${quote(source)}`,
+          options.to === undefined
+            ? `Target (--to): ${quote(target)} — defaulted from your config's migrationsCollection`
+            : `Target (--to): ${quote(target)}`,
+          'Point --from at your migrate-mongo changelog, or --to at a different collection',
+        ]),
+        { source, target },
+      );
+    }
 
     // Records are written to `target`; reuse the connected changelog when it
     // already points there, otherwise bind a fresh one (and ensure its index).

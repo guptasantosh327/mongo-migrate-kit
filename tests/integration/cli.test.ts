@@ -71,6 +71,137 @@ function baseArgs(extra: string[]): string[] {
   return ['--uri', mongo.uri, '--db', DB, '--dir', project.dir, ...extra];
 }
 
+describe('mmk CLI config diagnostics (integration)', () => {
+  // Empty values are treated as unset, which is how these tests hide the
+  // MMK_* variables the parent process may carry.
+  const unset = { MMK_URI: '', MMK_DB: '' };
+
+  it('should name the missing parameter and every way to set it', async () => {
+    // cwd is the throwaway project dir, so no config file is discovered.
+    const result = await runCli(['status'], unset, project.dir);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('uri is required but was not set');
+    expect(result.stderr).toContain('dbName is required but was not set');
+    expect(result.stderr).toContain('--uri <uri>');
+    expect(result.stderr).toContain('MMK_DB');
+  });
+
+  it('should name the offending env var and value for a malformed setting', async () => {
+    const result = await runCli(
+      ['status'],
+      { ...unset, MMK_URI: mongo.uri, MMK_DB: DB, MMK_LOCK_TTL: 'soon' },
+      project.dir,
+    );
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('lockTTLSeconds');
+    expect(result.stderr).toContain('the MMK_LOCK_TTL environment variable');
+    expect(result.stderr).toContain('"soon"');
+  });
+
+  it('should emit the structured issues on stdout in --json mode', async () => {
+    const result = await runCli(['status', '--json'], unset, project.dir);
+    expect(result.code).toBe(1);
+    const payload = JSON.parse(result.stdout) as {
+      error: { code: string; details: { issues: Array<{ key: string; problem: string }> } };
+    };
+    expect(payload.error.code).toBe('CONFIG_INVALID');
+    expect(payload.error.details.issues.map((issue) => issue.key)).toContain('uri');
+    expect(payload.error.details.issues[0]?.problem).toBe('is required but was not set');
+  });
+
+  it('should reject an unrecognized key in a config file with a suggestion', async () => {
+    writeFileSync(
+      path.join(project.dir, 'mmk.config.json'),
+      JSON.stringify({ uri: mongo.uri, dbName: DB, migrationDir: './migrations' }),
+    );
+    const result = await runCli(['status'], unset, project.dir);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('migrationDir is not a recognized option');
+    expect(result.stderr).toContain('rename it to "migrationsDir"');
+  });
+
+  it('should warn when the migrations directory does not exist', async () => {
+    const missing = path.join(project.dir, 'no-such-dir');
+    const result = await runCli(
+      ['--uri', mongo.uri, '--db', DB, '--dir', missing, 'status'],
+      unset,
+      project.dir,
+    );
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain('Migrations directory not found');
+    expect(result.stderr).toContain('MMK_MIGRATIONS_DIR');
+  });
+});
+
+describe('mmk CLI argument diagnostics (integration)', () => {
+  it('should reject a non-numeric --batch before it ever connects', async () => {
+    const result = await runCli(baseArgs(['down', '--batch', 'abc']));
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('INVALID_ARGUMENT');
+    expect(result.stderr).toContain('--batch must be a positive whole number');
+    expect(result.stderr).toContain('Received: "abc"');
+    // Pre-flight means no connection was attempted.
+    expect(result.stdout).not.toContain('Connecting');
+  });
+
+  it('should reject a non-numeric --steps with an example to copy', async () => {
+    const result = await runCli(baseArgs(['down', '--steps', 'two']));
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('Try: mmk down --steps 3');
+  });
+
+  it('should reject a dry-run direction that is not up or down', async () => {
+    const result = await runCli(baseArgs(['dry-run', 'sideways']));
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("dry-run direction must be 'up' or 'down'");
+    expect(result.stderr).toContain('Received: "sideways"');
+  });
+
+  it('should reject contradictory --js and --ts on create', async () => {
+    const result = await runCli(baseArgs(['create', 'thing', '--js', '--ts']));
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('--js and --ts cannot be used together');
+  });
+
+  it('should reject a migration name that slugifies to nothing', async () => {
+    const result = await runCli(baseArgs(['create', '   ']));
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('must contain at least one letter or number');
+    expect(readdirSync(project.dir)).toHaveLength(0);
+  });
+
+  it('should explain --force with no file instead of just refusing', async () => {
+    const result = await runCli(baseArgs(['up', '--force']));
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('--force requires a specific migration file');
+    expect(result.stderr).toContain('Try: mmk up');
+  });
+
+  it('should emit a coded, structured argument error in --json mode', async () => {
+    const result = await runCli(baseArgs(['down', '--batch', 'abc', '--json']));
+    expect(result.code).toBe(1);
+    const payload = JSON.parse(result.stdout) as {
+      error: { code: string; details: { flag: string; received: string } };
+    };
+    expect(payload.error.code).toBe('INVALID_ARGUMENT');
+    expect(payload.error.details).toMatchObject({ flag: '--batch', received: 'abc' });
+  });
+
+  it('should suggest the real command when one is misspelled', async () => {
+    const result = await runCli(['stauts']);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('Did you mean status?');
+  });
+
+  it('should name the file, the directory, and a suggestion for a bad up target', async () => {
+    project.write('0001-add-users.ts', insertMigration('things', 'a'));
+    const result = await runCli(baseArgs(['up', '0001-add-user.ts']));
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('Did you mean "0001-add-users.ts"?');
+    expect(result.stderr).toContain(project.dir);
+  });
+});
+
 describe('mmk CLI (integration)', () => {
   it('should exit 0 when up succeeds', async () => {
     project.write('0001-a.ts', insertMigration('things', 'a'));
@@ -162,7 +293,7 @@ describe('mmk CLI (integration)', () => {
     await runCli(baseArgs(['up']));
     const result = await runCli(baseArgs(['down', '--steps', '1', '--batch', '1']));
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain('CONFIG_INVALID');
+    expect(result.stderr).toContain('INVALID_ARGUMENT');
   });
 
   it('should resolve an async function config file (simulating a fetched secret)', async () => {

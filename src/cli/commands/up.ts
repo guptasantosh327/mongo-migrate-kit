@@ -1,6 +1,8 @@
 import type { Command } from 'commander';
+import { InvalidArgumentError } from '../../errors/index.js';
+import { explain } from '../../utils/explain.js';
 import { createLogger } from '../../utils/logger.js';
-import { type CliOptions, confirm, emitJson, withMigrator } from '../shared.js';
+import { type CliOptions, confirm, emitJson, failPreflight, withMigrator } from '../shared.js';
 
 /** Register the `up` command */
 export function registerUp(program: Command): void {
@@ -22,18 +24,17 @@ export function registerUp(program: Command): void {
         step?: boolean;
       };
 
-      // Pre-flight validation errors honour --json so scripted callers get structured output.
-      const failPreflight = (message: string): void => {
-        if (opts.json) {
-          emitJson({ error: { message } });
-        } else {
-          createLogger().error(`✖ ${message}`);
-        }
-        process.exitCode = 1;
-      };
-
       if (opts.force && !file) {
-        failPreflight('--force requires a specific migration file');
+        failPreflight(
+          opts,
+          new InvalidArgumentError(
+            explain('--force requires a specific migration file', [
+              '--force re-runs an already-applied migration, so it needs to know which one',
+              'A plain `mmk up` only has pending migrations to run, so there is nothing to force',
+              'Try: mmk up 20240526143021-add-users-index.js --force',
+            ]),
+          ),
+        );
         return;
       }
 
@@ -41,7 +42,12 @@ export function registerUp(program: Command): void {
         // --json is non-interactive: refuse rather than silently re-running or hanging
         // on a prompt that can't be answered. --yes is the explicit opt-in.
         if (opts.json) {
-          failPreflight('--force needs confirmation — pass --yes to confirm in --json mode');
+          failPreflight(
+            opts,
+            new InvalidArgumentError(
+              '--force needs confirmation — pass --yes to confirm in --json mode',
+            ),
+          );
           return;
         }
         const proceed = await confirm(`are you sure you want to re-run "${file}"? [y/N] `);
