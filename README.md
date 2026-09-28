@@ -465,8 +465,17 @@ A typical pipeline gate:
 <br>
 
 Every record in `_mmk_migrations` stores `batch`, `status`, `appliedAt`, `revertedAt`, `duration`,
-`checksum`, `environment`, and `executedBy`. Rolling back **updates** a record's status to `reverted`
-and stamps `revertedAt` — it is **never deleted**, so the full history stays intact for compliance.
+`checksum`, `environment`, `executedBy`, and `service`. Rolling back **updates** a record's status to
+`reverted` and stamps `revertedAt` — it is **never deleted**, so the full history stays intact for
+compliance.
+
+`service` records which codebase applied the migration — no setup needed. mmk uses the `name` of the
+nearest `package.json` above your migrations directory (or `npm_package_name` when run from an npm
+script). Set `service` / `MMK_SERVICE` only if that name is missing or shared by several services;
+if nothing is found, the field is simply left out.
+
+> **Several services, one database?** Give each service its own `migrationsCollection` (e.g.
+> `_mmk_migrations_orders`). Batches, rollbacks, and the lock then stay scoped to that service.
 
 </details>
 
@@ -617,6 +626,7 @@ export default {
 | `MMK_USE_TRANSACTION` | `useTransaction` | `false` |
 | `MMK_SEQUENTIAL` | `sequential` | `false` |
 | `MMK_CREATE_EXTENSION` | `createExtension` | `js` |
+| `MMK_SERVICE` | `service` | nearest `package.json` name |
 
 `.env` files are loaded automatically. An empty value (`MMK_STRICT=`) counts as unset, so you can
 comment a setting out without deleting the line. A value that can't be parsed is an error, not a

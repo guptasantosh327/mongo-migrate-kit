@@ -103,6 +103,7 @@ const KEY_SPECS: Record<keyof MmkConfig, ConfigKeySpec> = {
   createExtension: { flag: '--ts / --js (on `mmk create`)', env: 'MMK_CREATE_EXTENSION' },
   sequential: { env: 'MMK_SEQUENTIAL' },
   templatePath: { flag: '--template <path> (on `mmk create`)' },
+  service: { env: 'MMK_SERVICE' },
   mongoose: { codeOnly: true },
   mongoClientOptions: { codeOnly: true },
   hooks: { codeOnly: true },
@@ -264,6 +265,7 @@ const ENV_ENTRIES: ReadonlyArray<{
   { env: 'MMK_STRICT', key: 'strict', parse: parseBooleanEnv },
   { env: 'MMK_USE_TRANSACTION', key: 'useTransaction', parse: parseBooleanEnv },
   { env: 'MMK_SEQUENTIAL', key: 'sequential', parse: parseBooleanEnv },
+  { env: 'MMK_SERVICE', key: 'service', parse: (raw) => ({ ok: true, value: raw.trim() }) },
   {
     env: 'MMK_CREATE_EXTENSION',
     key: 'createExtension',
@@ -527,6 +529,11 @@ function buildSchema(requireDb: boolean) {
       invalid_type_error: 'must be a boolean (true or false, not a string)',
     }),
     templatePath: z.string({ invalid_type_error: 'must be a path string' }).min(1).optional(),
+    service: z
+      .string({ invalid_type_error: 'must be a string, e.g. "orders-service"' })
+      .trim()
+      .min(1, 'must not be empty — remove it to use the package.json name')
+      .optional(),
     // Validated by hand in validateObjectOptions so the messages can name the
     // exact missing method or misspelled hook.
     mongoose: z.unknown().optional(),

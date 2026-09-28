@@ -17,6 +17,7 @@ const MMK_ENV_KEYS = [
   'MMK_USE_TRANSACTION',
   'MMK_SEQUENTIAL',
   'MMK_CREATE_EXTENSION',
+  'MMK_SERVICE',
   // Typo'd / unrelated variables used by the diagnostics tests — cleaned up like the rest
   'MMK_MIGRATION_DIR',
   'MMK_SOMETHING_ENTIRELY_ELSE',
@@ -391,6 +392,33 @@ describe('loadConfig diagnostics', () => {
   });
 
   describe('value validation', () => {
+    it('should read service from MMK_SERVICE, trimmed', async () => {
+      process.env.MMK_URI = VALID.uri;
+      process.env.MMK_DB = VALID.dbName;
+      process.env.MMK_SERVICE = '  orders-service ';
+      const config = await loadConfig({ cwd: tmp, flags: { logger: null } });
+      expect(config.service).toBe('orders-service');
+    });
+
+    it('should leave service unset by default', async () => {
+      const config = await loadConfig({ cwd: tmp, flags: { ...VALID, logger: null } });
+      expect(config.service).toBeUndefined();
+    });
+
+    it('should reject an empty or non-string service and say how to set it', async () => {
+      const empty = await expectConfigError({ cwd: tmp, flags: { ...VALID, service: '  ' } });
+      expect(empty.issues[0]?.key).toBe('service');
+      expect(empty.issues[0]?.problem).toContain('package.json');
+      expect(empty.issues[0]?.howToSet).toContain('MMK_SERVICE');
+
+      const wrongType = await expectConfigError({
+        cwd: tmp,
+        flags: { ...VALID, service: 42 as unknown as string },
+      });
+      expect(wrongType.issues[0]?.key).toBe('service');
+      expect(wrongType.issues[0]?.problem).toContain('must be a string');
+    });
+
     it('should reject a uri that is not a MongoDB connection string', async () => {
       const { issues } = await expectConfigError({
         cwd: tmp,
