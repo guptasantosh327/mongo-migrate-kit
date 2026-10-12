@@ -11,17 +11,21 @@ mmk status [options]
 ```
 
 ```
-┌──────────────────────────────────────────┬─────────┬───────┬─────────────────────┬──────────┬──────────┐
-│ Migration                                │ Status  │ Batch │ Applied At          │ Duration │ Checksum │
-├──────────────────────────────────────────┼─────────┼───────┼─────────────────────┼──────────┼──────────┤
-│ 20260605120000-add-users-index.js        │ applied │ 1     │ 2026-06-05 12:00:00 │ 42ms     │ ok       │
-│ 20260605120500-backfill-status.js        │ applied │ 1     │ 2026-06-05 12:05:00 │ 128ms    │ MISMATCH │
-│ 20260606093000-add-orders-collection.js  │ pending │       │                     │          │ —        │
-└──────────────────────────────────────────┴─────────┴───────┴─────────────────────┴──────────┴──────────┘
+┌─────────────────────────────────────────┬─────────┬───────┬─────────────────────┬──────────┬──────────┬──────────────────────┐
+│ Migration                               │ Status  │ Batch │ Applied At          │ Duration │ Checksum │ Author               │
+├─────────────────────────────────────────┼─────────┼───────┼─────────────────────┼──────────┼──────────┼──────────────────────┤
+│ 20260605120000-add-users-index.js       │ applied │ 1     │ 2026-06-05 12:00:00 │ 42ms     │ ok       │ Jane <jane@acme.io>  │
+│ 20260605120500-backfill-status.js       │ applied │ 1     │ 2026-06-05 12:05:00 │ 128ms    │ MISMATCH │ Raj <raj@acme.io>    │
+│ 20260606093000-add-orders-collection.js │ pending │       │                     │          │ —        │                      │
+└─────────────────────────────────────────┴─────────┴───────┴─────────────────────┴──────────┴──────────┴──────────────────────┘
 ```
 
 The **Checksum** column shows `ok` when the file is unchanged since it was applied, `MISMATCH` when
 it was edited, and `—` for pending files.
+
+The **Author** column shows who wrote each applied migration, as recorded from the file's
+[`author` export](/guide/writing-migrations#author) when it was applied. It is blank for pending
+files and for migrations applied without an author (including ones adopted via `mmk import`).
 
 ### Options
 

@@ -52,6 +52,7 @@ Available on every command, highest precedence:
 | `mmk create <name> --ts` | Create a `.ts` migration |
 | `mmk create <name> --js` | Create a `.js` migration |
 | `mmk create <name> --template <path>` | Use a custom template |
+| `mmk create <name> --author <name>` | Set the file's author (default: git `user.name <user.email>`) |
 | [`mmk init`](/commands/create#mmk-init) | Generate `mmk.config.js` |
 | `mmk init --ts` / `--json` | Generate `.ts` / `.json` config |
 | `mmk init --secret-provider` | Generate a secret-manager config |

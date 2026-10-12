@@ -4,6 +4,7 @@ import {
   ChecksumMismatchError,
   MigrationExecutionFailedError,
   MigrationFileNotFoundError,
+  MigrationInvalidExportError,
   MigrationInvalidNameError,
 } from '../../src/errors/index.js';
 import { type TestMongo, startTestMongo } from '../helpers/mongo.js';
@@ -228,5 +229,92 @@ describe('MigratorKit.up (integration)', () => {
     await migrator.up();
     const record = await mongo.db.collection('_mmk_migrations').findOne({ name: '0001-a.ts' });
     expect(record?.service).toBe('orders-service');
+  });
+
+  // ── author ──────────────────────────────────────────────────────────────────
+  /** insertMigration with an `author` export prepended */
+  function authored(author: string, value: string): string {
+    return `export const author = '${author}';\n${insertMigration('things', value)}`;
+  }
+
+  it('should copy the file author onto the changelog record and status row', async () => {
+    setup();
+    project.write('0001-a.ts', authored('Jane Doe <jane@example.com>', 'a'));
+    await migrator.up();
+    const record = await mongo.db.collection('_mmk_migrations').findOne({ name: '0001-a.ts' });
+    expect(record?.author).toBe('Jane Doe <jane@example.com>');
+    expect(record?.executedBy).toBeTruthy(); // who ran it stays separate from who wrote it
+    const [row] = await migrator.status();
+    expect(row?.author).toBe('Jane Doe <jane@example.com>');
+  });
+
+  it('should omit author from the record when the file declares none', async () => {
+    setup();
+    project.write('0001-a.ts', authored('', 'a'));
+    await migrator.up();
+    const record = await mongo.db.collection('_mmk_migrations').findOne({ name: '0001-a.ts' });
+    expect(record).not.toBeNull();
+    expect(record).not.toHaveProperty('author');
+  });
+
+  it('should refuse the whole run under requireAuthor, naming every file without an author', async () => {
+    project = makeProject();
+    migrator = makeMigrator(mongo.uri, DB, project.dir, { requireAuthor: true });
+    project.write('0001-a.ts', authored('Jane', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    project.write('0003-c.ts', authored('  ', 'c'));
+
+    const error = await migrator.up().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(MigrationInvalidExportError);
+    const message = (error as Error).message;
+    expect(message).toContain('2 migrations have no author');
+    expect(message).toContain('0002-b.ts');
+    expect(message).toContain('0003-c.ts');
+    expect(message).not.toContain('0001-a.ts');
+    expect(message).toContain('Nothing was applied');
+    // The preflight runs before anything — not even the authored first file applied.
+    expect(await mongo.db.collection('things').countDocuments()).toBe(0);
+    expect(await mongo.db.collection('_mmk_migrations').countDocuments()).toBe(0);
+  });
+
+  it('should use the singular form when one file lacks an author', async () => {
+    project = makeProject();
+    migrator = makeMigrator(mongo.uri, DB, project.dir, { requireAuthor: true });
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    const error = await migrator.up().catch((e: unknown) => e);
+    expect((error as Error).message).toContain('A migration has no author');
+  });
+
+  it('should apply normally under requireAuthor when every file has an author', async () => {
+    project = makeProject();
+    migrator = makeMigrator(mongo.uri, DB, project.dir, { requireAuthor: true });
+    project.write('0001-a.ts', authored('Jane', 'a'));
+    project.write('0002-b.ts', authored('Raj', 'b'));
+    const results = await migrator.up();
+    expect(results.map((r) => r.status)).toEqual(['applied', 'applied']);
+  });
+
+  it('should not block on already-applied files that predate requireAuthor', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a')); // legacy, no author
+    await migrator.up();
+    await migrator.disconnect();
+
+    migrator = makeMigrator(mongo.uri, DB, project.dir, { requireAuthor: true });
+    project.write('0002-b.ts', authored('Jane', 'b'));
+    const results = await migrator.up();
+    expect(results.map((r) => r.status)).toEqual(['applied']);
+  });
+
+  it('should check an already-applied file under requireAuthor when it is forced', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await migrator.up();
+    await migrator.disconnect();
+
+    migrator = makeMigrator(mongo.uri, DB, project.dir, { requireAuthor: true });
+    await expect(migrator.up('0001-a.ts', { force: true })).rejects.toBeInstanceOf(
+      MigrationInvalidExportError,
+    );
   });
 });

@@ -22,6 +22,7 @@ import {
   secretConfigJs,
   secretConfigTs,
   slugify,
+  toSingleQuoted,
 } from '../../src/utils/template.js';
 
 let tmp: string;
@@ -79,6 +80,45 @@ describe('default templates', () => {
     const tpl = defaultTemplateJs();
     expect(tpl).toContain('export async function up');
     expect(tpl).toContain('export async function down');
+  });
+});
+
+describe('migration template author', () => {
+  it('should write the given author into both built-in templates', () => {
+    expect(defaultTemplateTs('Jane Doe <jane@example.com>')).toContain(
+      "export const author = 'Jane Doe <jane@example.com>';",
+    );
+    expect(defaultTemplateJs('Jane Doe <jane@example.com>')).toContain(
+      "export const author = 'Jane Doe <jane@example.com>';",
+    );
+  });
+
+  it('should leave an empty author placeholder when none is known', () => {
+    expect(defaultTemplateJs()).toContain("export const author = '';");
+    expect(defaultTemplateTs()).toContain("export const author = '';");
+  });
+
+  it('should escape quotes, backslashes, and newlines so the file stays valid', () => {
+    expect(toSingleQuoted("Conan O'Brien")).toBe("'Conan O\\'Brien'");
+    expect(toSingleQuoted('a\\b')).toBe("'a\\\\b'");
+    expect(toSingleQuoted('line1\nline2')).toBe("'line1 line2'");
+  });
+
+  it('should pass the author through createMigrationFile', () => {
+    const file = createMigrationFile({
+      dir: tmp,
+      name: 'with author',
+      sequential: true,
+      js: true,
+      author: 'Jane',
+    });
+    expect(readFileSync(file, 'utf8')).toContain("export const author = 'Jane';");
+  });
+
+  it('should copy a custom template verbatim, without injecting an author', () => {
+    const custom = path.join(tmp, 'custom-tpl.js');
+    writeFileSync(custom, '// custom');
+    expect(resolveTemplateContent(custom, true, 'Jane')).toBe('// custom');
   });
 });
 
@@ -157,6 +197,14 @@ describe('config templates', () => {
     ]) {
       expect(tpl).toContain(key);
     }
+  });
+
+  it('should document author and requireAuthor in every config template', () => {
+    expect(defaultConfigJs()).toContain('requireAuthor: false');
+    expect(defaultConfigJs()).toContain("// author: 'Jane Doe <jane@example.com>'");
+    expect(defaultConfigTs()).toContain('requireAuthor: false');
+    expect(JSON.parse(defaultConfigJson()).requireAuthor).toBe(false);
+    expect(secretConfigJs()).toContain('requireAuthor: false');
   });
 
   it('should include createExtension in the JSON template', () => {

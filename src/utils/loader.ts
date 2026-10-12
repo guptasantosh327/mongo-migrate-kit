@@ -119,6 +119,10 @@ export async function loadMigrationFile(filepath: string): Promise<MigrationModu
   if (typeof resolved.description === 'string') {
     migration.description = resolved.description;
   }
+  // A blank author (the template's unfilled placeholder) counts as no author.
+  if (typeof resolved.author === 'string' && resolved.author.trim() !== '') {
+    migration.author = resolved.author.trim();
+  }
 
   return migration;
 }

@@ -71,6 +71,14 @@ mmk up 20260605120000-add-users-index.js --force --yes
 `--force` without `--yes` is refused so automation never silently re-applies a migration.
 :::
 
+## Requiring an author
+
+With `requireAuthor: true` (or `MMK_REQUIRE_AUTHOR=true`), `mmk up` checks that every file it is
+about to apply exports a non-empty `author` — **before** running any of them. If any are missing,
+nothing is applied and the error lists every offending file (`MIGRATION_INVALID_EXPORT`). Already
+applied files are skipped, so they are not checked unless you re-run one with `--force`. See
+[Writing migrations → Author](/guide/writing-migrations#author).
+
 ## Checksum behavior
 
 Each file's SHA-256 is verified against what was recorded when it was applied. If a file changed:

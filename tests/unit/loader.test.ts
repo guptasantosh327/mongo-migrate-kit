@@ -63,6 +63,33 @@ describe('loadMigrationFile', () => {
     }
   });
 
+  it('should read a trimmed author export', async () => {
+    const file = path.join(fixtures, 'tmp-with-author.cjs');
+    writeFileSync(
+      file,
+      "module.exports = { author: '  Jane <j@x.io> ', async up() {}, async down() {} };\n",
+    );
+    try {
+      expect((await loadMigrationFile(file)).author).toBe('Jane <j@x.io>');
+    } finally {
+      rmSync(file, { force: true });
+    }
+  });
+
+  it('should treat a blank or non-string author as no author', async () => {
+    const blank = path.join(fixtures, 'tmp-blank-author.cjs');
+    const numeric = path.join(fixtures, 'tmp-numeric-author.cjs');
+    writeFileSync(blank, "module.exports = { author: '  ', async up() {}, async down() {} };\n");
+    writeFileSync(numeric, 'module.exports = { author: 42, async up() {}, async down() {} };\n');
+    try {
+      expect((await loadMigrationFile(blank)).author).toBeUndefined();
+      expect((await loadMigrationFile(numeric)).author).toBeUndefined();
+    } finally {
+      rmSync(blank, { force: true });
+      rmSync(numeric, { force: true });
+    }
+  });
+
   it('should name the path it looked for when the file does not exist', async () => {
     const missing = path.join(fixtures, 'does-not-exist.js');
     const error = await loadMigrationFile(missing).catch((e: unknown) => e);

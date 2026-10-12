@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 import { InvalidArgumentError } from '../../errors/index.js';
-import { explain } from '../../utils/explain.js';
+import { explain, quote } from '../../utils/explain.js';
 import { type CliOptions, emitJson, failPreflight, withMigrator } from '../shared.js';
 
 /** Register the `create` command */
@@ -12,13 +12,29 @@ export function registerCreate(program: Command): void {
     .option('--js', 'Force a .js file (overrides config createExtension)')
     .option('--ts', 'Force a .ts file (overrides config createExtension)')
     .option('--template <path>', 'Use a custom template file')
+    .option('--author <name>', 'Author written into the file (default: git user.name <user.email>)')
     .option('--json', 'Output machine-readable JSON ({ path })')
     .action(async (name: string, _opts, command) => {
       const opts = command.optsWithGlobals() as CliOptions & {
         js?: boolean;
         ts?: boolean;
         template?: string;
+        author?: string;
       };
+      if (opts.author !== undefined && opts.author.trim() === '') {
+        failPreflight(
+          opts,
+          new InvalidArgumentError(
+            explain('--author must not be empty', [
+              `Received: ${quote(opts.author)}`,
+              "Try: mmk create add-users-index --author 'Jane Doe <jane@example.com>'",
+              'Or omit --author to use your git user.name and user.email',
+            ]),
+            { author: opts.author },
+          ),
+        );
+        return;
+      }
       if (opts.js && opts.ts) {
         failPreflight(
           opts,
@@ -39,6 +55,7 @@ export function registerCreate(program: Command): void {
           const path = await migrator.create(name, {
             ...(js !== undefined ? { js } : {}),
             ...(opts.template ? { template: opts.template } : {}),
+            ...(opts.author ? { author: opts.author } : {}),
           });
           if (opts.json) {
             emitJson({ path });

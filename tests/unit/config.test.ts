@@ -18,6 +18,8 @@ const MMK_ENV_KEYS = [
   'MMK_SEQUENTIAL',
   'MMK_CREATE_EXTENSION',
   'MMK_SERVICE',
+  'MMK_AUTHOR',
+  'MMK_REQUIRE_AUTHOR',
   // Typo'd / unrelated variables used by the diagnostics tests — cleaned up like the rest
   'MMK_MIGRATION_DIR',
   'MMK_SOMETHING_ENTIRELY_ELSE',
@@ -417,6 +419,44 @@ describe('loadConfig diagnostics', () => {
       });
       expect(wrongType.issues[0]?.key).toBe('service');
       expect(wrongType.issues[0]?.problem).toContain('must be a string');
+    });
+
+    it('should read author from MMK_AUTHOR and requireAuthor from MMK_REQUIRE_AUTHOR', async () => {
+      process.env.MMK_URI = VALID.uri;
+      process.env.MMK_DB = VALID.dbName;
+      process.env.MMK_AUTHOR = '  Jane Doe <jane@example.com> ';
+      process.env.MMK_REQUIRE_AUTHOR = 'yes';
+      const config = await loadConfig({ cwd: tmp, flags: { logger: null } });
+      expect(config.author).toBe('Jane Doe <jane@example.com>');
+      expect(config.requireAuthor).toBe(true);
+    });
+
+    it('should default requireAuthor to false and leave author unset', async () => {
+      const config = await loadConfig({ cwd: tmp, flags: { ...VALID, logger: null } });
+      expect(config.requireAuthor).toBe(false);
+      expect(config.author).toBeUndefined();
+    });
+
+    it('should reject an unparseable MMK_REQUIRE_AUTHOR rather than coerce it', async () => {
+      process.env.MMK_REQUIRE_AUTHOR = 'maybe';
+      const { issues } = await expectConfigError({ cwd: tmp, flags: VALID });
+      expect(issues[0]?.key).toBe('requireAuthor');
+      expect(issues[0]?.received).toContain('maybe');
+    });
+
+    it('should reject an empty or non-string author and say how to set it', async () => {
+      const empty = await expectConfigError({ cwd: tmp, flags: { ...VALID, author: '  ' } });
+      expect(empty.issues[0]?.key).toBe('author');
+      expect(empty.issues[0]?.problem).toContain('git user.name');
+      expect(empty.issues[0]?.howToSet).toContain('MMK_AUTHOR');
+      expect(empty.issues[0]?.howToSet).toContain('--author');
+
+      const wrongType = await expectConfigError({
+        cwd: tmp,
+        flags: { ...VALID, requireAuthor: 'yes' as unknown as boolean },
+      });
+      expect(wrongType.issues[0]?.key).toBe('requireAuthor');
+      expect(wrongType.issues[0]?.problem).toContain('must be a boolean');
     });
 
     it('should reject a uri that is not a MongoDB connection string', async () => {

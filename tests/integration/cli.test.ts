@@ -163,6 +163,24 @@ describe('mmk CLI argument diagnostics (integration)', () => {
     expect(result.stderr).toContain('--js and --ts cannot be used together');
   });
 
+  it('should reject an empty --author on create without writing a file', async () => {
+    const result = await runCli(baseArgs(['create', 'thing', '--author', '  ']));
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('--author must not be empty');
+    expect(readdirSync(project.dir)).toHaveLength(0);
+  });
+
+  it('should write --author into the created migration', async () => {
+    const result = await runCli(
+      baseArgs(['create', 'authored', '--author', 'Jane Doe <jane@example.com>']),
+    );
+    expect(result.code).toBe(0);
+    const [file] = readdirSync(project.dir);
+    expect(readFileSync(path.join(project.dir, file as string), 'utf8')).toContain(
+      "export const author = 'Jane Doe <jane@example.com>';",
+    );
+  });
+
   it('should reject a migration name that slugifies to nothing', async () => {
     const result = await runCli(baseArgs(['create', '   ']));
     expect(result.code).toBe(1);
@@ -320,12 +338,14 @@ describe('mmk CLI (integration)', () => {
   });
 
   it('should render a status table', async () => {
-    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0001-a.ts', `export const author = 'Jane';\n${insertMigration('things', 'a')}`);
     await runCli(baseArgs(['up']));
     const result = await runCli(baseArgs(['status']));
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('Migration');
     expect(result.stdout).toContain('0001-a.ts');
+    expect(result.stdout).toContain('Author');
+    expect(result.stdout).toContain('Jane');
   });
 
   it('should print a dry-run plan and exit 0', async () => {

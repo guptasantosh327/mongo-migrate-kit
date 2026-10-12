@@ -98,6 +98,7 @@ A migration is just an `up` and a `down`:
 import type { MigrationContext } from 'mongo-migrate-kit';
 
 export const description = 'Add unique index on users.email';
+export const author = 'Jane Doe <jane@example.com>'; // filled in by `mmk create`
 
 export async function up({ db }: MigrationContext): Promise<void> {
   await db.collection('users').createIndex({ email: 1 }, { unique: true });
@@ -123,6 +124,7 @@ Full docs, guides, and the API reference live at
 - [Configuration](https://mongo-migrate-kit.vercel.app/guide/configuration) · [Writing Migrations](https://mongo-migrate-kit.vercel.app/guide/writing-migrations) · [Transactions](https://mongo-migrate-kit.vercel.app/guide/transactions) · [Hooks](https://mongo-migrate-kit.vercel.app/guide/hooks)
 - [Programmatic API](https://mongo-migrate-kit.vercel.app/guide/api) · [CI/CD](https://mongo-migrate-kit.vercel.app/guide/ci-cd) · [Troubleshooting](https://mongo-migrate-kit.vercel.app/guide/troubleshooting)
 - Reference: [CLI Cheatsheet](https://mongo-migrate-kit.vercel.app/reference/cli) · [Error Codes](https://mongo-migrate-kit.vercel.app/reference/error-codes)
+- [Ideas](https://github.com/guptasantosh327/mongo-migrate-kit/blob/main/IDEAS.md) — directions being explored (not a roadmap or a commitment); feedback welcome
 
 ---
 
@@ -174,6 +176,7 @@ mmk create <name>            # file type follows config `createExtension` (defau
 mmk create <name> --ts       # force a .ts file
 mmk create <name> --js       # force a .js file
 mmk create <name> --template <path>   # use a custom template
+mmk create <name> --author "Jane <jane@example.com>"  # set the author (default: your git identity)
 mmk create <name> --json     # machine-readable output ({ "path": "..." })
 
 # up — apply migrations
@@ -465,7 +468,7 @@ A typical pipeline gate:
 <br>
 
 Every record in `_mmk_migrations` stores `batch`, `status`, `appliedAt`, `revertedAt`, `duration`,
-`checksum`, `environment`, `executedBy`, and `service`. Rolling back **updates** a record's status to
+`checksum`, `environment`, `executedBy`, `author`, and `service`. Rolling back **updates** a record's status to
 `reverted` and stamps `revertedAt` — it is **never deleted**, so the full history stays intact for
 compliance.
 
@@ -473,6 +476,21 @@ compliance.
 nearest `package.json` above your migrations directory (or `npm_package_name` when run from an npm
 script). Set `service` / `MMK_SERVICE` only if that name is missing or shared by several services;
 if nothing is found, the field is simply left out.
+
+`author` records **who wrote** the migration; `executedBy` records **who ran** it. `mmk create`
+writes an `export const author = '…'` line into every new file, using `--author`, then the `author`
+config key / `MMK_AUTHOR`, then your git `user.name <user.email>`, then your OS username. It is
+looked up once, on your machine, and committed with the file — so `mmk up` never needs git, and
+because the line is part of the file it is covered by the checksum like any other change. `mmk
+status` shows it in an `Author` column.
+
+To make authorship mandatory, set `requireAuthor: true` (or `MMK_REQUIRE_AUTHOR=true`). `mmk up`
+then checks every file it is about to apply **before running any of them**, and refuses the run
+with a list of the files that have no author. Files that were already applied before you turned it
+on are not checked.
+
+> Custom `--template` files are copied as-is, so add an `export const author = '…'` line to your
+> template yourself.
 
 > **Several services, one database?** Give each service its own `migrationsCollection` (e.g.
 > `_mmk_migrations_orders`). Batches, rollbacks, and the lock then stay scoped to that service.
@@ -579,6 +597,7 @@ export default {
   createExtension: 'js',            // default type for `mmk create` ('js' | 'ts'); --js/--ts override
   sequential: false,                // true → 0001-style numbering instead of timestamps
   // templatePath: './migration.template.ts', // custom template for `mmk create`
+  // author: 'Jane Doe <jane@example.com>',    // author for `mmk create` (default: git identity)
 
   // ── Bookkeeping collections ─────────────────────────────────────────────
   migrationsCollection: '_mmk_migrations', // the append-only audit trail
@@ -588,6 +607,7 @@ export default {
   // ── Safety ──────────────────────────────────────────────────────────────
   strict: false,        // true → abort on a checksum mismatch (instead of warn + skip)
   useTransaction: false, // true → wrap every migration in a transaction (override per file)
+  requireAuthor: false,  // true → `mmk up` refuses files without an `author` export
 
   // ── Code-only options (omit in mmk.config.json) ─────────────────────────
   // hooks: { beforeAll, afterAll, beforeEach, afterEach, onError },
@@ -627,6 +647,8 @@ export default {
 | `MMK_SEQUENTIAL` | `sequential` | `false` |
 | `MMK_CREATE_EXTENSION` | `createExtension` | `js` |
 | `MMK_SERVICE` | `service` | nearest `package.json` name |
+| `MMK_AUTHOR` | `author` | git `user.name <user.email>`, then OS username |
+| `MMK_REQUIRE_AUTHOR` | `requireAuthor` | `false` |
 
 `.env` files are loaded automatically. An empty value (`MMK_STRICT=`) counts as unset, so you can
 comment a setting out without deleting the line. A value that can't be parsed is an error, not a
@@ -792,7 +814,8 @@ module.exports = {
 };
 ```
 
-Optional per-file exports: `description` (shown in `status`) and `useTransaction`. Note that `up`/`down`
+Optional per-file exports: `description` (shown in `status`), `author` (who wrote it — recorded on
+the changelog record), and `useTransaction`. Note that `up`/`down`
 receive a **single context object** (`{ db, client, mongoose?, session? }`) — not `migrate-mongo`'s
 positional `(db, client)`.
 

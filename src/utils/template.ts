@@ -41,11 +41,25 @@ export function nextSequenceIndex(dir: string, extensions: string[]): number {
   return count + 1;
 }
 
-/** The built-in TypeScript migration template */
-export function defaultTemplateTs(): string {
+/** Escape a value for embedding in a single-quoted JS/TS string literal */
+export function toSingleQuoted(value: string): string {
+  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ')}'`;
+}
+
+/** The `export const author = …` line shared by both built-in templates */
+function authorLine(author: string | undefined): string {
+  return `export const author = ${toSingleQuoted(author ?? '')};`;
+}
+
+/**
+ * The built-in TypeScript migration template. `author` is written into the
+ * file (and so covered by its checksum) — see `detectAuthor()`.
+ */
+export function defaultTemplateTs(author?: string): string {
   return `import type { MigrationContext } from 'mongo-migrate-kit';
 
 export const description = '';
+${authorLine(author)}
 
 export async function up({ db }: MigrationContext): Promise<void> {
   // TODO: implement migration
@@ -58,8 +72,9 @@ export async function down({ db }: MigrationContext): Promise<void> {
 }
 
 /** The built-in JavaScript (ESM) migration template */
-export function defaultTemplateJs(): string {
+export function defaultTemplateJs(author?: string): string {
   return `export const description = '';
+${authorLine(author)}
 
 /** @param {import('mongo-migrate-kit').MigrationContext} ctx */
 export async function up({ db }) {
@@ -73,8 +88,15 @@ export async function down({ db }) {
 `;
 }
 
-/** Resolve template file contents — a custom template if provided, else the built-in */
-export function resolveTemplateContent(templatePath: string | undefined, js: boolean): string {
+/**
+ * Resolve template file contents — a custom template if provided (copied
+ * verbatim, so it must declare its own `author` export), else the built-in.
+ */
+export function resolveTemplateContent(
+  templatePath: string | undefined,
+  js: boolean,
+  author?: string,
+): string {
   if (templatePath) {
     if (!existsSync(templatePath)) {
       throw new MigrationFileNotFoundError(
@@ -88,7 +110,7 @@ export function resolveTemplateContent(templatePath: string | undefined, js: boo
     }
     return readFileSync(templatePath, 'utf8');
   }
-  return js ? defaultTemplateJs() : defaultTemplateTs();
+  return js ? defaultTemplateJs(author) : defaultTemplateTs(author);
 }
 
 /** Options controlling how a migration file is created */
@@ -103,6 +125,8 @@ export interface CreateMigrationFileOptions {
   js: boolean;
   /** Path to a custom template file */
   templatePath?: string;
+  /** Value written to the built-in template's `author` export */
+  author?: string;
 }
 
 /**
@@ -126,7 +150,7 @@ export function createMigrationFile(options: CreateMigrationFileOptions): string
   }
   const filename = `${prefix}-${slug}${ext}`;
   const filepath = path.join(options.dir, filename);
-  const content = resolveTemplateContent(options.templatePath, options.js);
+  const content = resolveTemplateContent(options.templatePath, options.js, options.author);
   writeFileSync(filepath, content, 'utf8');
   return filepath;
 }
@@ -180,6 +204,9 @@ function configBody(values: ConfigValues, createExtension: MigrationExtension): 
   sequential: false,
   // Path to a custom template used by \`mmk create\`.
   // templatePath: './migration.template.ts',
+  // Author \`mmk create\` writes into new migrations. Defaults to your git
+  // \`user.name <user.email>\`; override per run with --author.
+  // author: 'Jane Doe <jane@example.com>',
 
   // ── Bookkeeping collections ─────────────────────────────────
   migrationsCollection: '_mmk_migrations',
@@ -193,6 +220,8 @@ function configBody(values: ConfigValues, createExtension: MigrationExtension): 
   // Wrap every migration in a transaction. Override per file with
   // \`export const useTransaction = true\`.
   useTransaction: false,
+  // Refuse to apply any migration that does not export a non-empty \`author\`.
+  requireAuthor: false,
 
   // ── Lifecycle hooks (code only — not available in JSON config) ──
   // hooks: {
@@ -257,6 +286,7 @@ export function defaultConfigJson(values: ConfigValues = {}): string {
     lockTTLSeconds: 60,
     strict: false,
     useTransaction: false,
+    requireAuthor: false,
   };
   return `${JSON.stringify(config, null, 2)}\n`;
 }
@@ -307,7 +337,8 @@ function secretConfigOptions(createExtension: MigrationExtension, migrationsDir:
 
     // ── Behavior ────────────────────────────────────────────
     strict: false,
-    useTransaction: false,`;
+    useTransaction: false,
+    requireAuthor: false,`;
 }
 
 /** Secret-provider JavaScript (ESM) config template */

@@ -91,6 +91,9 @@ for Google/Vault/Azure/any source — it just must return `{ uri, dbName }`).
 | `createExtension` | `'ts' \| 'js'` | `'js'` | Default file type for `mmk create` |
 | `sequential` | `boolean` | `false` | Use `0001-` numbering instead of timestamps |
 | `templatePath` | `string` | — | Path to a custom migration template |
+| `author` | `string` | git `user.name <user.email>`, then OS username | Author `mmk create` writes into new files ([details](/guide/writing-migrations#author)) |
+| `requireAuthor` | `boolean` | `false` | `mmk up` refuses files without a non-empty `author` export |
+| `service` | `string` | nearest `package.json` name | Service recorded on each changelog record |
 | `mongoose` | `Mongoose` | — | Mongoose instance, if your migrations use it |
 | `mongoClientOptions` | `MongoClientOptions` | — | Extra options merged into the `MongoClient` (TLS, timeouts, auth, read/write prefs) |
 | `hooks` | `MigrationHooks` | — | [Lifecycle hooks](/guide/hooks) |
@@ -149,6 +152,8 @@ Every core option has an `MMK_*` variable. These **override the config file**:
 | `MMK_SEQUENTIAL` | `sequential` |
 | `MMK_CREATE_EXTENSION` | `createExtension` |
 | `MMK_SERVICE` | `service` (optional — defaults to the nearest `package.json` name) |
+| `MMK_AUTHOR` | `author` (optional — defaults to your git identity) |
+| `MMK_REQUIRE_AUTHOR` | `requireAuthor` |
 
 `.env` files are loaded automatically (via `dotenv`) before env vars are read.
 
