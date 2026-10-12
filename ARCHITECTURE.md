@@ -83,6 +83,7 @@ src/
 │   ├── checksum.ts          # SHA-256 file hashing
 │   ├── loader.ts            # Dynamic-import a migration file (.ts/.js, ESM/CJS)
 │   ├── template.ts          # Generate migration files & config files
+│   ├── author.ts            # detectAuthor(): who `mmk create` writes into a new file
 │   └── date.ts              # Dependency-free timestamp formatting
 └── cli/
     ├── index.ts             # commander root: registers commands + global flags
@@ -291,6 +292,11 @@ Each entry: **responsibility · key exports · nuances you must know.**
 - **template.ts** — generates migration files (`createMigrationFile`) and config files
   (`createConfigFile`), including the secret-provider template. Owns filename stamping (timestamp vs
   sequential) and the inline-commented config output.
+- **author.ts** — `detectAuthor({ explicit, configured, cwd })`: `--author` → config `author` /
+  `MMK_AUTHOR` → git `user.name <user.email>` (via `readGitConfig`, best-effort, 2s timeout, never
+  throws) → OS username → undefined. Called **only by `create`**; the result is baked into the file
+  via the template's `export const author = '…'`. `up` reads it back through the loader and copies it
+  onto the record — it never runs git.
 - **date.ts** — `formatStamp`/`formatDateTime`, dependency-free (replaced `date-fns`).
 - **redact.ts** — `redactMongoUri(text)`: scrubs `user:pass@` from any connection string embedded in a
   string. Used on driver error messages before they reach `ConnectionFailedError` / logs / `--json`.
@@ -452,6 +458,12 @@ The high-impact ones for code changes:
   one read back from a tampered changelog) is validated there.
 - **`--json` is per-command, not global**, and is *not* on `init` (where `--json` means "generate
   mmk.config.json"). In JSON mode, human/progress output goes to stderr; stdout is one JSON doc.
+- **`author` is resolved at create time, not run time.** git is only consulted by `mmk create` on the
+  developer's machine; the value is committed in the file (and so checksummed). `mmk up` copies the
+  file's `author` export onto the record and never shells out — containers/CI have no `.git`. Custom
+  `--template` files are copied verbatim (no author injection). `requireAuthor` is a **preflight** in
+  `runUp`: it loads every target that will actually run (applied-and-not-forced targets are excluded)
+  and throws one `MigrationInvalidExportError` listing all offenders before `beforeAll` or any write.
 - **`down --steps` preserves selection order** (newest-first) via a `preserveOrder` flag, instead of
   the usual filename-desc sort.
 - **The changelog record is written *inside* the migration's transaction** (the `persist` callback on

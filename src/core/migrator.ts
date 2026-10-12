@@ -9,6 +9,7 @@ import {
   InvalidArgumentError,
   IrreversibleMigrationError,
   MigrationFileNotFoundError,
+  MigrationInvalidExportError,
   MigrationInvalidNameError,
   NotAppliedError,
   TransactionsUnsupportedError,
@@ -26,6 +27,7 @@ import type {
   RunResult,
   StatusRow,
 } from '../types/index.js';
+import { detectAuthor } from '../utils/author.js';
 import { computeChecksum } from '../utils/checksum.js';
 import { didYouMean, explain, listOf, quote } from '../utils/explain.js';
 import { loadMigrationFile } from '../utils/loader.js';
@@ -94,6 +96,11 @@ export interface CreateOptions {
   template?: string;
   /** Generate a `.js` file instead of `.ts` */
   js?: boolean;
+  /**
+   * Author written into the file. Default: config `author`, then git
+   * `user.name <user.email>`, then the OS username.
+   */
+  author?: string;
 }
 
 /** Options for {@link MigratorKit.init} */
@@ -544,6 +551,11 @@ export class MigratorKit {
     let appliedCount = 0;
     const service = detectService(config.migrationsDir, config.service);
 
+    if (config.requireAuthor) {
+      // Files that will only be skipped (already applied, no --force) are not checked.
+      await this.assertAuthors(force ? targets : targets.filter((name) => !appliedNames.has(name)));
+    }
+
     await config.hooks?.beforeAll?.(context);
 
     for (const name of targets) {
@@ -610,6 +622,7 @@ export class MigratorKit {
               environment: process.env.NODE_ENV ?? 'development',
               executedBy: os.userInfo().username,
               ...(migration.description ? { description: migration.description } : {}),
+              ...(migration.author ? { author: migration.author } : {}),
               ...(service ? { service } : {}),
             };
             await changelog.markApplied(db, record, session);
@@ -635,6 +648,36 @@ export class MigratorKit {
 
     await config.hooks?.afterAll?.(context);
     return results;
+  }
+
+  /**
+   * `requireAuthor` preflight: load every file about to run and reject the whole
+   * run — before any hook or write — if one lacks a non-empty `author` export.
+   * All offenders are reported at once.
+   */
+  private async assertAuthors(names: string[]): Promise<void> {
+    const missing: string[] = [];
+    for (const name of names) {
+      const migration = await loadMigrationFile(this.filepath(name));
+      if (!migration.author) {
+        missing.push(name);
+      }
+    }
+    if (missing.length === 0) {
+      return;
+    }
+    throw new MigrationInvalidExportError(
+      explain(
+        `${missing.length === 1 ? 'A migration has' : `${missing.length} migrations have`} no author, and requireAuthor is on`,
+        [
+          `Missing an author: ${listOf(missing)}`,
+          "Add to each file: export const author = 'Jane Doe <jane@example.com>';",
+          'Nothing was applied — the check runs before any migration starts',
+          'To allow migrations without an author, set requireAuthor: false (or MMK_REQUIRE_AUTHOR=false)',
+        ],
+      ),
+      { missing },
+    );
   }
 
   /** Rollback the last batch, a specific batch, a specific file, or the last N steps */
@@ -984,6 +1027,7 @@ export class MigratorKit {
       duration: isApplied && record ? record.duration : null,
       checksumOk,
       ...(record?.description ? { description: record.description } : {}),
+      ...(isApplied && record?.author ? { author: record.author } : {}),
     };
   }
 
@@ -996,12 +1040,18 @@ export class MigratorKit {
     }
     const templatePath = options.template ?? config.templatePath;
     const js = options.js ?? config.createExtension === 'js';
+    const author = detectAuthor({
+      cwd: dir,
+      ...(options.author !== undefined ? { explicit: options.author } : {}),
+      ...(config.author ? { configured: config.author } : {}),
+    });
     const filepath = createMigrationFile({
       dir,
       name,
       sequential: config.sequential,
       js,
       ...(templatePath ? { templatePath } : {}),
+      ...(author ? { author } : {}),
     });
     this.logger.success(`✔ Created  ${path.basename(filepath)}`);
     return filepath;

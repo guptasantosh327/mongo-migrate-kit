@@ -26,6 +26,11 @@ export interface MigrationModule {
   useTransaction?: boolean;
   /** Optional description shown in status table */
   description?: string;
+  /**
+   * Who wrote this migration, e.g. `'Jane Doe <jane@example.com>'`. Filled in by
+   * `mmk create` and copied onto the changelog record when the migration is applied.
+   */
+  author?: string;
 }
 
 // ─── Changelog ────────────────────────────────────────────────────────────────
@@ -58,6 +63,11 @@ export interface MigrationRecord {
   executedBy: string;
   /** Optional description from migration file */
   description?: string;
+  /**
+   * Who wrote the migration — the file's `author` export. Distinct from
+   * `executedBy` (who ran it). Absent when the file declares no author.
+   */
+  author?: string;
   /**
    * Service that applied this migration — the `service` config key, else the
    * nearest `package.json` name. Absent when neither was found.
@@ -119,6 +129,17 @@ export interface MmkConfig {
   sequential: boolean;
   /** Path to a custom migration template file */
   templatePath?: string;
+  /**
+   * Author `mmk create` writes into new migration files. Overridden per run by
+   * `--author`. Optional — defaults to git `user.name <user.email>`, then the OS
+   * username.
+   */
+  author?: string;
+  /**
+   * If true, `mmk up` refuses to apply any migration that does not export a
+   * non-empty `author`, before running anything. Default: false
+   */
+  requireAuthor?: boolean;
   /**
    * Name recorded on each changelog record to show which service applied it.
    * Optional — defaults to the nearest `package.json` name. Set it only when
@@ -201,6 +222,8 @@ export interface StatusRow {
   /** null = never applied, true = match, false = mismatch */
   checksumOk: boolean | null;
   description?: string;
+  /** Who wrote the migration, as recorded when it was applied */
+  author?: string;
 }
 
 // ─── Import (migrate-mongo adoption) ────────────────────────────────────────────

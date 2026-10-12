@@ -24,7 +24,8 @@ Each migration has two halves:
 is never applied twice.
 
 Each record stores an audit trail: when it ran, how long it took, its checksum, the environment, who
-ran it, and its batch.
+ran it (`executedBy`), who wrote it (`author`, from the file's
+[`author` export](/guide/writing-migrations#author)), and its batch.
 
 ::: tip History is never deleted
 Rolling a migration back doesn't remove its record — it sets the record's status to `reverted` and

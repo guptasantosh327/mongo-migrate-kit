@@ -110,6 +110,7 @@ interface StatusRow {
   duration: number | null;
   checksumOk: boolean | null; // null = pending, true = match, false = mismatch
   description?: string;
+  author?: string; // who wrote it — from the file's `author` export, applied rows only
 }
 ```
 

@@ -59,4 +59,25 @@ describe('MigratorKit.create (in-process)', () => {
     const filepath = await migrator({ templatePath: customTemplate }).create('config templated');
     expect(readFileSync(filepath, 'utf8')).toContain('CUSTOM TEMPLATE');
   });
+
+  it('should write the --author option into the new file', async () => {
+    const filepath = await migrator({ author: 'Config Person' }).create('flagged', {
+      author: 'Flag Person <flag@example.com>',
+    });
+    expect(readFileSync(filepath, 'utf8')).toContain(
+      "export const author = 'Flag Person <flag@example.com>';",
+    );
+  });
+
+  it('should fall back to the configured author when no option is given', async () => {
+    const filepath = await migrator({ author: 'Config Person' }).create('configured');
+    expect(readFileSync(filepath, 'utf8')).toContain("export const author = 'Config Person';");
+  });
+
+  it('should always write an author export with the built-in template', async () => {
+    // With no flag or config, the value comes from git or the OS user —
+    // environment-dependent, so only the presence of the export is asserted.
+    const filepath = await migrator().create('detected');
+    expect(readFileSync(filepath, 'utf8')).toMatch(/^export const author = '.*';$/m);
+  });
 });

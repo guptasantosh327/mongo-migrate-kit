@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+Know who wrote a migration, not just who ran it.
+
+### Added
+
+- **`author` on migrations and changelog records** — `mmk create` now writes an
+  `export const author = '…'` line into every new file, resolved from `--author`, then the new
+  `author` config key / `MMK_AUTHOR`, then your git `user.name <user.email>`, then your OS username.
+  `mmk up` copies it onto the changelog record (`MigrationRecord.author`), separate from
+  `executedBy` (who ran it). It is captured once on your machine and committed with the file, so
+  `mmk up` never needs git, and it is covered by the file checksum. Files without an author keep
+  working; the field is simply left out.
+- **`requireAuthor`** (config / `MMK_REQUIRE_AUTHOR`, default `false`) — when on, `mmk up` checks
+  every file it is about to apply before running any of them, and refuses the run with
+  `MIGRATION_INVALID_EXPORT`, listing every file without an author. Already-applied files are not
+  checked unless re-run with `--force`.
+- **`mmk create --author <name>`** — set the author for one file. An empty value is rejected.
+- **`Author` column** in `mmk status` / `mmk list`, and `author` on `StatusRow` (`--json` output).
+- `mmk init` templates document `author` and `requireAuthor`.
+
 ## v1.3.0
 
 Know which service ran a migration, and errors that tell you exactly what to fix.

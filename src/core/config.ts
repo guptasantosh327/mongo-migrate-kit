@@ -20,6 +20,7 @@ export const DEFAULT_CONFIG: Pick<
   | 'fileExtensions'
   | 'createExtension'
   | 'sequential'
+  | 'requireAuthor'
 > = {
   migrationsDir: './migrations',
   migrationsCollection: '_mmk_migrations',
@@ -30,6 +31,7 @@ export const DEFAULT_CONFIG: Pick<
   fileExtensions: ['.ts', '.js'],
   createExtension: 'js',
   sequential: false,
+  requireAuthor: false,
 };
 
 /** Candidate config file names, checked in priority order within the cwd */
@@ -103,6 +105,8 @@ const KEY_SPECS: Record<keyof MmkConfig, ConfigKeySpec> = {
   createExtension: { flag: '--ts / --js (on `mmk create`)', env: 'MMK_CREATE_EXTENSION' },
   sequential: { env: 'MMK_SEQUENTIAL' },
   templatePath: { flag: '--template <path> (on `mmk create`)' },
+  author: { flag: '--author <name> (on `mmk create`)', env: 'MMK_AUTHOR' },
+  requireAuthor: { env: 'MMK_REQUIRE_AUTHOR' },
   service: { env: 'MMK_SERVICE' },
   mongoose: { codeOnly: true },
   mongoClientOptions: { codeOnly: true },
@@ -266,6 +270,8 @@ const ENV_ENTRIES: ReadonlyArray<{
   { env: 'MMK_USE_TRANSACTION', key: 'useTransaction', parse: parseBooleanEnv },
   { env: 'MMK_SEQUENTIAL', key: 'sequential', parse: parseBooleanEnv },
   { env: 'MMK_SERVICE', key: 'service', parse: (raw) => ({ ok: true, value: raw.trim() }) },
+  { env: 'MMK_AUTHOR', key: 'author', parse: (raw) => ({ ok: true, value: raw.trim() }) },
+  { env: 'MMK_REQUIRE_AUTHOR', key: 'requireAuthor', parse: parseBooleanEnv },
   {
     env: 'MMK_CREATE_EXTENSION',
     key: 'createExtension',
@@ -529,6 +535,14 @@ function buildSchema(requireDb: boolean) {
       invalid_type_error: 'must be a boolean (true or false, not a string)',
     }),
     templatePath: z.string({ invalid_type_error: 'must be a path string' }).min(1).optional(),
+    author: z
+      .string({ invalid_type_error: 'must be a string, e.g. "Jane Doe <jane@example.com>"' })
+      .trim()
+      .min(1, 'must not be empty — remove it to use your git user.name and user.email')
+      .optional(),
+    requireAuthor: z.boolean({
+      invalid_type_error: 'must be a boolean (true or false, not a string)',
+    }),
     service: z
       .string({ invalid_type_error: 'must be a string, e.g. "orders-service"' })
       .trim()

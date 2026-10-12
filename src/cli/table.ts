@@ -17,7 +17,7 @@ function statusCell(status: 'applied' | 'pending'): string {
 /** Render status rows as a human-readable table string */
 export function renderStatusTable(rows: StatusRow[]): string {
   const table = new Table({
-    head: ['Migration', 'Status', 'Batch', 'Applied At', 'Duration', 'Checksum'],
+    head: ['Migration', 'Status', 'Batch', 'Applied At', 'Duration', 'Checksum', 'Author'],
     style: { head: ['cyan'] },
   });
 
@@ -29,6 +29,7 @@ export function renderStatusTable(rows: StatusRow[]): string {
       row.appliedAt ? formatDateTime(row.appliedAt) : '',
       row.duration === null ? '' : `${row.duration}ms`,
       checksumCell(row.checksumOk),
+      row.author ?? '',
     ]);
   }
 
