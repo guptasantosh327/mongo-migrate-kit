@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="927" height="402" viewBox="0 0 927 402" role="img" aria-label="Installing mongo-migrate-kit and running a first migration">
+<title>Installing mongo-migrate-kit and running a first migration</title>
+<style>
+svg{font-family:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','DejaVu Sans Mono',monospace;font-size:14px}
+text{white-space:pre;fill:#d5dde3}
+.k{fill:#7f8b93}.r{fill:#ff7b72}.g{fill:#4fd27f}.y{fill:#e6b84f}.b{fill:#79b8ff}.m{fill:#d2a8ff}.c{fill:#5fd0dc}.w{fill:#f3f6f8}
+.d{fill-opacity:.62}.o{font-weight:700}
+.p{fill:#3ddc84;font-weight:700}.cm{fill:#7d8a92}
+.t{fill:#8a969e;font-size:12.5px}.lb{fill:#8a969e;font-size:12px}
+.cur{fill:#d5dde3;animation:blink 1.05s step-end infinite}
+@keyframes blink{0%{opacity:1}50%{opacity:0}}
+.sp{opacity:0;animation:spin .8s step-end infinite}
+@keyframes spin{0%{opacity:1}10%{opacity:0}100%{opacity:0}}
+
+@media (prefers-reduced-motion:reduce){.sc0{transform:translateY(-0px)}}
+.s0{opacity:0;animation:s0 29134ms step-end infinite}@keyframes s0{0%{opacity:0}1.716%{opacity:1}100%{opacity:1}}
+.ty1{opacity:0;animation:ty1 29134ms step-end infinite}@keyframes ty1{0%{opacity:0;transform:translateX(0)}1.716%{opacity:1;transform:translateX(0)}3.604%{opacity:1;transform:translateX(0);animation-timing-function:steps(12,end)}5.334%{opacity:1;transform:translateX(100.80000000000001px)}6.226%{opacity:0;transform:translateX(100.80000000000001px)}100%{opacity:0;transform:translateX(100.80000000000001px)}}
+.s2{opacity:0;animation:s2 29134ms step-end infinite}@keyframes s2{0%{opacity:0}6.226%{opacity:1}100%{opacity:1}}
+.s3{opacity:0;animation:s3 29134ms step-end infinite}@keyframes s3{0%{opacity:0}10.970%{opacity:1}100%{opacity:1}}
+.ty4{opacity:0;animation:ty4 29134ms step-end infinite}@keyframes ty4{0%{opacity:0;transform:translateX(0)}10.970%{opacity:1;transform:translateX(0)}12.858%{opacity:1;transform:translateX(0);animation-timing-function:steps(36,end)}18.048%{opacity:1;transform:translateX(302.40000000000003px)}18.940%{opacity:0;transform:translateX(302.40000000000003px)}100%{opacity:0;transform:translateX(302.40000000000003px)}}
+.s5{opacity:0;animation:s5 29134ms step-end infinite}@keyframes s5{0%{opacity:0}18.940%{opacity:1}100%{opacity:1}}
+.s6{opacity:0;animation:s6 29134ms step-end infinite}@keyframes s6{0%{opacity:0}18.981%{opacity:1}100%{opacity:1}}
+.s7{opacity:0;animation:s7 29134ms step-end infinite}@keyframes s7{0%{opacity:0}23.965%{opacity:1}100%{opacity:1}}
+.ty8{opacity:0;animation:ty8 29134ms step-end infinite}@keyframes ty8{0%{opacity:0;transform:translateX(0)}23.965%{opacity:1;transform:translateX(0)}25.853%{opacity:1;transform:translateX(0);animation-timing-function:steps(45,end)}32.340%{opacity:1;transform:translateX(378px)}33.233%{opacity:0;transform:translateX(378px)}100%{opacity:0;transform:translateX(378px)}}
+.s9{opacity:0;animation:s9 29134ms step-end infinite}@keyframes s9{0%{opacity:0}36.322%{opacity:1}100%{opacity:1}}
+.ty10{opacity:0;animation:ty10 29134ms step-end infinite}@keyframes ty10{0%{opacity:0;transform:translateX(0)}36.322%{opacity:1;transform:translateX(0)}38.210%{opacity:1;transform:translateX(0);animation-timing-function:steps(10,end)}39.651%{opacity:1;transform:translateX(84px)}40.544%{opacity:0;transform:translateX(84px)}100%{opacity:0;transform:translateX(84px)}}
+.s11{opacity:0;animation:s11 29134ms step-end infinite}@keyframes s11{0%{opacity:0}40.544%{opacity:1}100%{opacity:1}}
+.s12{opacity:0;animation:s12 29134ms step-end infinite}@keyframes s12{0%{opacity:0}40.544%{opacity:1}42.775%{opacity:0}100%{opacity:0}}
+.s13{opacity:0;animation:s13 29134ms step-end infinite}@keyframes s13{0%{opacity:0}42.775%{opacity:1}45.006%{opacity:0}100%{opacity:0}}
+.s14{opacity:0;animation:s14 29134ms step-end infinite}@keyframes s14{0%{opacity:0}45.047%{opacity:1}100%{opacity:1}}
+.s15{opacity:0;animation:s15 29134ms step-end infinite}@keyframes s15{0%{opacity:0}50.031%{opacity:1}100%{opacity:1}}
+.ty16{opacity:0;animation:ty16 29134ms step-end infinite}@keyframes ty16{0%{opacity:0;transform:translateX(0)}50.031%{opacity:1;transform:translateX(0)}51.919%{opacity:1;transform:translateX(0);animation-timing-function:steps(14,end)}53.937%{opacity:1;transform:translateX(117.60000000000001px)}54.829%{opacity:0;transform:translateX(117.60000000000001px)}100%{opacity:0;transform:translateX(117.60000000000001px)}}
+.s17{opacity:0;animation:s17 29134ms step-end infinite}@keyframes s17{0%{opacity:0}54.829%{opacity:1}100%{opacity:1}}
+.s18{opacity:0;animation:s18 29134ms step-end infinite}@keyframes s18{0%{opacity:0}54.829%{opacity:1}57.060%{opacity:0}100%{opacity:0}}
+.s19{opacity:0;animation:s19 29134ms step-end infinite}@keyframes s19{0%{opacity:0}57.102%{opacity:1}100%{opacity:1}}
+.s20{opacity:0;animation:s20 29134ms step-end infinite}@keyframes s20{0%{opacity:0}57.143%{opacity:1}100%{opacity:1}}
+.s21{opacity:0;animation:s21 29134ms step-end infinite}@keyframes s21{0%{opacity:0}57.184%{opacity:1}100%{opacity:1}}
+.s22{opacity:0;animation:s22 29134ms step-end infinite}@keyframes s22{0%{opacity:0}57.225%{opacity:1}100%{opacity:1}}
+.s23{opacity:0;animation:s23 29134ms step-end infinite}@keyframes s23{0%{opacity:0}57.266%{opacity:1}100%{opacity:1}}
+.s24{opacity:0;animation:s24 29134ms step-end infinite}@keyframes s24{0%{opacity:0}66.232%{opacity:1}100%{opacity:1}}
+.ty25{opacity:0;animation:ty25 29134ms step-end infinite}@keyframes ty25{0%{opacity:0;transform:translateX(0)}66.232%{opacity:1;transform:translateX(0)}68.120%{opacity:1;transform:translateX(0);animation-timing-function:steps(12,end)}69.850%{opacity:1;transform:translateX(100.80000000000001px)}70.742%{opacity:0;transform:translateX(100.80000000000001px)}100%{opacity:0;transform:translateX(100.80000000000001px)}}
+.s26{opacity:0;animation:s26 29134ms step-end infinite}@keyframes s26{0%{opacity:0}70.742%{opacity:1}100%{opacity:1}}
+.s27{opacity:0;animation:s27 29134ms step-end infinite}@keyframes s27{0%{opacity:0}70.742%{opacity:1}72.973%{opacity:0}100%{opacity:0}}
+.s28{opacity:0;animation:s28 29134ms step-end infinite}@keyframes s28{0%{opacity:0}72.973%{opacity:1}75.204%{opacity:0}100%{opacity:0}}
+.s29{opacity:0;animation:s29 29134ms step-end infinite}@keyframes s29{0%{opacity:0}75.245%{opacity:1}100%{opacity:1}}
+.s30{opacity:0;animation:s30 29134ms step-end infinite}@keyframes s30{0%{opacity:0}85.584%{opacity:1}100%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.l,.cg,.sp{animation:none!important}.fin{opacity:1}.spl,.cg{opacity:0}}</style>
+<rect x=".5" y=".5" width="926" height="401" rx="10" fill="#0f1417" stroke="#2a3238"/>
+<path d="M10.5 .5h906a10 10 0 0 1 10 10v23.5h-926v-23.5a10 10 0 0 1 10-10z" fill="#1a2024"/>
+<circle cx="20" cy="17" r="6" fill="#ff5f57"/><circle cx="40" cy="17" r="6" fill="#febc2e"/><circle cx="60" cy="17" r="6" fill="#28c840"/>
+<text class="t" x="463.5" y="21.5" text-anchor="middle">~/shop-api</text>
+<clipPath id="clip0"><rect x="0" y="34" width="926.4000000000001" height="365"/></clipPath>
+<g clip-path="url(#clip0)"><g class="sc0">
+<g class="l s0 fin"><text x="18" y="61"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk init</tspan></tspan></text></g>
+<g class="ty1 cg"><rect x="34.8" y="48" width="109.20000000000002" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="49" width="8.4" height="16"/></g>
+<g class="l s2 fin"><text y="78"><tspan x="18.0" class="g">✔ Created  mmk.config.js</tspan></text></g>
+<g class="l s3 fin"><text x="18" y="95"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk create add-users-email-index</tspan></tspan></text></g>
+<g class="ty4 cg"><rect x="34.8" y="82" width="310.8" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="83" width="8.4" height="16"/></g>
+<g class="l s5 fin"><text y="112"><tspan x="18.0" class="d">Loaded config from mmk.config.js</tspan></text></g>
+<g class="l s6 fin"><text y="129"><tspan x="18.0" class="g">✔ Created  20261015225003-add-users-email-index.js</tspan></text></g>
+<g class="l s7 fin"><text x="18" y="146"><tspan class="p">$</tspan><tspan x="34.8"><tspan class="cm"># fill in up() and down() in that file, then:</tspan></tspan></text></g>
+<g class="ty8 cg"><rect x="34.8" y="133" width="386.4" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="134" width="8.4" height="16"/></g>
+<g class="l s9 fin"><text x="18" y="163"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk up</tspan></tspan></text></g>
+<g class="ty10 cg"><rect x="34.8" y="150" width="92.4" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="151" width="8.4" height="16"/></g>
+<g class="l s11 fin"><text y="180"><tspan x="18.0" class="d">Loaded config from mmk.config.js</tspan></text></g>
+<g class="l s12 spl"><text class="sp c" x="18" y="197" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="197" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="197" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="197" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="197" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="197" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="197" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="197" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="197" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="197" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="197">Connecting to MongoDB…</text></g>
+<g class="l s13 spl"><text class="sp c" x="18" y="197" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="197" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="197" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="197" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="197" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="197" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="197" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="197" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="197" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="197" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="197">Applying 20261015225003-add-users-email-index.js…</text></g>
+<g class="l s14 fin"><text y="197"><tspan x="18.0" class="g">✔ Applied  20261015225003-add-users-email-index.js   [114ms]</tspan></text></g>
+<g class="l s15 fin"><text x="18" y="214"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk status</tspan></tspan></text></g>
+<g class="ty16 cg"><rect x="34.8" y="201" width="126.00000000000001" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="202" width="8.4" height="16"/></g>
+<g class="l s17 fin"><text y="231"><tspan x="18.0" class="d">Loaded config from mmk.config.js</tspan></text></g>
+<g class="l s18 spl"><text class="sp c" x="18" y="248" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="248" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="248" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="248" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="248" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="248" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="248" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="248" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="248" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="248" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="248">Connecting to MongoDB…</text></g>
+<g class="l s19 fin"><text y="248"><tspan x="18.0" class="k">┌─────────────────────────────────────────┬─────────┬───────┬─────────────────────┬──────────┬──────────┐</tspan></text></g>
+<g class="l s20 fin"><text y="265"><tspan x="18.0" class="k">│</tspan><tspan x="26.4" class="c"> Migration                               </tspan><tspan x="370.8" class="k">│</tspan><tspan x="379.2" class="c"> Status  </tspan><tspan x="454.8" class="k">│</tspan><tspan x="463.2" class="c"> Batch </tspan><tspan x="522.0" class="k">│</tspan><tspan x="530.4" class="c"> Applied At          </tspan><tspan x="706.8" class="k">│</tspan><tspan x="715.2" class="c"> Checksum </tspan><tspan x="799.2" class="k">│</tspan><tspan x="807.6" class="c"> Author   </tspan><tspan x="891.6" class="k">│</tspan></text></g>
+<g class="l s21 fin"><text y="282"><tspan x="18.0" class="k">├─────────────────────────────────────────┼─────────┼───────┼─────────────────────┼──────────┼──────────┤</tspan></text></g>
+<g class="l s22 fin"><text y="299"><tspan x="18.0" class="k">│</tspan><tspan x="26.4"> 20261015225003-add-users-email-index.js </tspan><tspan x="370.8" class="k">│</tspan><tspan x="379.2"> </tspan><tspan x="387.6" class="g">applied</tspan><tspan x="446.4"> </tspan><tspan x="454.8" class="k">│</tspan><tspan x="463.2"> 1     </tspan><tspan x="522.0" class="k">│</tspan><tspan x="530.4"> 2026-10-15 22:50:04 </tspan><tspan x="706.8" class="k">│</tspan><tspan x="715.2"> </tspan><tspan x="723.6" class="g">ok</tspan><tspan x="740.4">       </tspan><tspan x="799.2" class="k">│</tspan><tspan x="807.6"> Asha Rao </tspan><tspan x="891.6" class="k">│</tspan></text></g>
+<g class="l s23 fin"><text y="316"><tspan x="18.0" class="k">└─────────────────────────────────────────┴─────────┴───────┴─────────────────────┴──────────┴──────────┘</tspan></text></g>
+<g class="l s24 fin"><text x="18" y="333"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk down</tspan></tspan></text></g>
+<g class="ty25 cg"><rect x="34.8" y="320" width="109.20000000000002" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="321" width="8.4" height="16"/></g>
+<g class="l s26 fin"><text y="350"><tspan x="18.0" class="d">Loaded config from mmk.config.js</tspan></text></g>
+<g class="l s27 spl"><text class="sp c" x="18" y="367" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="367" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="367" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="367" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="367" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="367" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="367" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="367" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="367" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="367" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="367">Connecting to MongoDB…</text></g>
+<g class="l s28 spl"><text class="sp c" x="18" y="367" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="367" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="367" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="367" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="367" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="367" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="367" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="367" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="367" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="367" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="367">Reverting 20261015225003-add-users-email-index.js…</text></g>
+<g class="l s29 fin"><text y="367"><tspan x="18.0" class="g">↩ Reverted 20261015225003-add-users-email-index.js   [6ms]</tspan></text></g>
+<g class="l s30 fin"><text x="18" y="384"><tspan class="p">$</tspan><tspan x="34.8"><tspan></tspan></tspan></text></g>
+<g class="s30 cg"><rect class="cur" x="34.8" y="372" width="8.4" height="16"/></g>
+</g></g>
+</svg>

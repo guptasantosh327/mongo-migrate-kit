@@ -1,59 +1,71 @@
+---
+title: mmk unlock
+description: Release a stuck MongoDB migration lock with mmk unlock after a crashed or cancelled deploy. Shows who holds the lock and asks before removing it.
+---
+
 # mmk unlock
 
-Force-release a stuck concurrency lock left behind by a crashed migration run.
+Removes the migration lock by hand, for when a run crashed and left it behind.
 
 ```bash
-mmk unlock [options]
+npx mmk unlock [options]
 ```
 
-## Why it exists
+## When you need it
 
-Every write command acquires an atomic MongoDB lock (in the `_mmk_locks` collection) so two deploys
-can't run migrations at once. The lock auto-expires after `lockTTLSeconds` and renews on a heartbeat
-while a migration runs. But if a process is killed mid-run, a lock can linger until its TTL elapses —
-`mmk unlock` clears it immediately.
+Every `mmk up`, `down`, `redo`, `import` and `namespace adopt` takes a lock first, so two runs can't
+overlap. Normally the lock is released when the run ends, even if it fails. But if the process is
+killed outright (a cancelled CI job, an out-of-memory pod), it never gets the chance.
 
-## Usage
+The lock frees itself after `lockTTLSeconds` (60 by default), so often you can just wait a minute.
+`mmk unlock` is for when you can't wait.
 
-```bash
-mmk unlock          # show the current holder, then prompt for confirmation
-mmk unlock --yes    # force-release without prompting
-mmk unlock --json   # machine-readable { released, holder }
+## What it looks like
+
+It shows who holds the lock and asks before removing it:
+
+```text
+$ npx mmk unlock
+⚠ Lock held by namespace "orders-worker": pid 48213 on deploy-runner-7 (ci) since 2026-06-05T12:01:33.000Z
+Force-release this lock? [y/N]
 ```
 
-It first shows who holds the lock:
+If nobody holds it:
 
+```text
+$ npx mmk unlock
+No migration lock is currently held
 ```
-Lock held by:
-  pid:   48213
-  host:  deploy-runner-7
-  user:  ci
-  since: 2026-06-05 12:01:33
 
-Release this lock? [y/N]
+On a database that several repos share, the holder might be **another repo**. mmk says so:
+
+```text
+⚠ This lock belongs to "billing-api", not this repo ("orders-api") — releasing it may let two migrations run at once
 ```
 
 ## Options
 
-| Option | Description |
-|---|---|
-| `--yes` | Skip the confirmation prompt and release immediately. |
-| `--json` | Emit `{ released, holder }` as JSON. |
+| Option | What it does |
+| --- | --- |
+| `--yes` | Don't ask, just release it. |
+| `--json` | Print `{ "released": …, "holder": … }`. Doesn't ask. |
 
-Plus the [global flags](/guide/configuration#global-cli-flags).
+The [global flags](/guide/configuration#command-line-flags) work here too.
 
-::: warning Only when you're sure
-Force-releasing a lock that another process still holds can let two runs proceed concurrently. Only
-unlock when you've confirmed the holding process is actually dead.
+::: danger Check first
+If the holder is still running, removing its lock lets a second run start alongside it. Before you
+unlock, make sure the process named in the message has really stopped (the host and pid are there
+for exactly that).
 :::
 
-## Programmatic API
-
-The same capability is available on `MigratorKit`:
+## From code
 
 ```ts
-const info = await migrator.lockInfo();   // → LockInfo | null
-if (info) {
+const holder = await migrator.lockInfo();   // LockInfo | null, changes nothing
+if (holder) {
   await migrator.forceUnlock();
 }
 ```
+
+`LockInfo` includes `namespace`, `acquiredAt` and `expiresAt` (when the lock frees itself if the
+holder stops renewing it) for holders running 1.5 or newer.

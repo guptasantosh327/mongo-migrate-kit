@@ -1,6 +1,7 @@
 // Main class
 export { MigratorKit } from './core/migrator.js';
 export type {
+  AdoptOptions,
   CreateOptions,
   DownOptions,
   ImportOptions,
@@ -23,6 +24,8 @@ export type { ConfigIssue } from './core/config.js';
 
 // Types
 export type {
+  AdoptResult,
+  AdoptRow,
   ImportChecksumSource,
   ImportResult,
   ImportRow,
@@ -39,6 +42,7 @@ export type {
   MmkConfigInput,
   MmkErrorCode,
   MmkLogger,
+  NamespaceStatusRow,
   ProgressReporter,
   RunResult,
   RunResultStatus,
@@ -61,7 +65,10 @@ export {
   MigrationFileNotFoundError,
   MigrationInvalidExportError,
   MigrationInvalidNameError,
+  MigrationNameConflictError,
   MmkError,
+  NamespaceUnadoptedError,
   NotAppliedError,
+  SchemaTooNewError,
   TransactionsUnsupportedError,
 } from './errors/index.js';

@@ -17,6 +17,8 @@ export default defineConfig([
     shims: true,
     sourcemap: true,
     treeshake: true,
+    // The storage-format marker records which mmk version last wrote to a database.
+    define: { 'process.env.MMK_VERSION': JSON.stringify(version) },
   },
   // CLI build (CJS only — Node CLI must be CJS for broadest compat)
   {

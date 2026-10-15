@@ -136,6 +136,10 @@ export async function withMigrator(
   const logger = createLogger(json ? process.stderr : process.stdout);
   try {
     if (spinner) {
+      // Resolve the config before the spinner starts: loading it can print
+      // lines ("Loaded config from …", warnings), and a line written while the
+      // spinner is drawing lands on the spinner's own line.
+      await migrator.resolveConfig();
       spinner.start('Connecting to MongoDB…');
       try {
         await migrator.connect();

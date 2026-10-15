@@ -7,6 +7,7 @@ import { ConfigInvalidError } from '../errors/index.js';
 import type { MmkConfig, MmkConfigInput } from '../types/index.js';
 import { explain, suggest } from '../utils/explain.js';
 import { resolveLogger } from '../utils/logger.js';
+import { namespaceProblem } from '../utils/namespace.js';
 
 /** Default values applied when no flag, env var, or config-file value is present */
 export const DEFAULT_CONFIG: Pick<
@@ -108,6 +109,7 @@ const KEY_SPECS: Record<keyof MmkConfig, ConfigKeySpec> = {
   author: { flag: '--author <name> (on `mmk create`)', env: 'MMK_AUTHOR' },
   requireAuthor: { env: 'MMK_REQUIRE_AUTHOR' },
   service: { env: 'MMK_SERVICE' },
+  namespace: { env: 'MMK_NAMESPACE' },
   mongoose: { codeOnly: true },
   mongoClientOptions: { codeOnly: true },
   hooks: { codeOnly: true },
@@ -270,6 +272,7 @@ const ENV_ENTRIES: ReadonlyArray<{
   { env: 'MMK_USE_TRANSACTION', key: 'useTransaction', parse: parseBooleanEnv },
   { env: 'MMK_SEQUENTIAL', key: 'sequential', parse: parseBooleanEnv },
   { env: 'MMK_SERVICE', key: 'service', parse: (raw) => ({ ok: true, value: raw.trim() }) },
+  { env: 'MMK_NAMESPACE', key: 'namespace', parse: (raw) => ({ ok: true, value: raw.trim() }) },
   { env: 'MMK_AUTHOR', key: 'author', parse: (raw) => ({ ok: true, value: raw.trim() }) },
   { env: 'MMK_REQUIRE_AUTHOR', key: 'requireAuthor', parse: parseBooleanEnv },
   {
@@ -548,6 +551,15 @@ function buildSchema(requireDb: boolean) {
       .trim()
       .min(1, 'must not be empty — remove it to use the package.json name')
       .optional(),
+    namespace: z
+      .string({ invalid_type_error: 'must be a string, e.g. "orders-api"' })
+      .superRefine((value, ctx) => {
+        const problem = namespaceProblem(value);
+        if (problem !== undefined) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+        }
+      })
+      .optional(),
     // Validated by hand in validateObjectOptions so the messages can name the
     // exact missing method or misspelled hook.
     mongoose: z.unknown().optional(),
@@ -768,11 +780,21 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<MmkCo
   const config = merged as MmkConfig;
 
   const logger = resolveLogger(config.logger);
+  // Say which file was read first, so the warnings below read as being about it.
+  if (configFilePath) {
+    logger.dim(`Loaded config from ${path.basename(configFilePath)}`);
+  }
   for (const warning of env.warnings) {
     logger.warn(warning);
   }
-  if (configFilePath) {
-    logger.dim(`Loaded config from ${path.basename(configFilePath)}`);
+  // `service` is auto-detected when unset, so only an explicit value (config
+  // file, MMK_SERVICE, or the config object) gets the notice — never the
+  // detection itself.
+  const serviceSource = origins.get('service');
+  if (serviceSource !== undefined) {
+    logger.warn(
+      `⚠ "service" (from ${serviceSource}) is deprecated and will be removed in 2.0. To separate repos sharing a database, use "namespace" — they are not the same: changing "namespace" changes which migrations count as applied`,
+    );
   }
 
   return config;

@@ -1,4 +1,4 @@
-import type { ClientSession, Collection, Db } from 'mongodb';
+import type { ClientSession, Collection, Db, Filter } from 'mongodb';
 import type { MigrationRecord } from '../types/index.js';
 
 /**
@@ -7,12 +7,24 @@ import type { MigrationRecord } from '../types/index.js';
  *
  * Records are an append-mostly audit trail: reverting a migration updates its
  * status to `'reverted'` and stamps `revertedAt` — it never deletes the record.
+ *
+ * A changelog is bound to one **namespace** (usually one per repo), so several
+ * repos can share a collection without seeing each other's history. Every
+ * per-namespace query is built from {@link Changelog.scope} — no method writes
+ * its own namespace filter, so a new query cannot forget it. The default
+ * namespace (no `namespace` configured) is the *absence* of the field, which is
+ * why records written before namespaces existed belong to it unchanged. The few
+ * reads that deliberately look across namespaces are named `…OtherNamespaces`,
+ * `…Unnamespaced` or `…AllNamespaces`.
  */
 export class Changelog {
   private readonly collectionName: string;
+  /** The namespace this changelog reads and writes; undefined = the default one */
+  readonly namespace: string | undefined;
 
-  constructor(collectionName: string) {
+  constructor(collectionName: string, namespace?: string) {
     this.collectionName = collectionName;
+    this.namespace = namespace;
   }
 
   private coll(db: Db): Collection<MigrationRecord> {
@@ -26,14 +38,36 @@ export class Changelog {
     });
   }
 
-  /** Create the unique index on `name`. Safe to call repeatedly */
+  /** The filter selecting this changelog's namespace — the only place it is built */
+  private scope(): Filter<MigrationRecord> {
+    return this.namespace === undefined
+      ? { namespace: { $exists: false } }
+      : { namespace: this.namespace };
+  }
+
+  /**
+   * The record as stored for this namespace: stamped with it, or without the
+   * field for the default namespace — whatever the caller passed.
+   */
+  private stamp(record: MigrationRecord): MigrationRecord {
+    const { namespace: _ignored, ...rest } = record;
+    return this.namespace === undefined ? rest : { ...rest, namespace: this.namespace };
+  }
+
+  /**
+   * Create the unique index on `name`. Safe to call repeatedly.
+   *
+   * Deliberately unique across the whole collection, not per namespace: it is
+   * stricter than `(namespace, name)`, every pre-namespace version recreates it
+   * on connect anyway, and dropping it would need index privileges.
+   */
   async ensureIndexes(db: Db): Promise<void> {
     await this.coll(db).createIndex({ name: 1 }, { unique: true });
   }
 
-  /** Count records currently in the changelog collection */
+  /** Count this namespace's records */
   async count(db: Db): Promise<number> {
-    return this.coll(db).countDocuments();
+    return this.coll(db).countDocuments(this.scope());
   }
 
   /**
@@ -45,67 +79,128 @@ export class Changelog {
     return db.collection(collectionName).find().toArray();
   }
 
-  /** Return every changelog record, sorted by name ascending */
+  /** Return every record in this namespace, sorted by name ascending */
   async getAll(db: Db): Promise<MigrationRecord[]> {
-    return this.coll(db).find().sort({ name: 1 }).toArray();
+    return this.coll(db).find(this.scope()).sort({ name: 1 }).toArray();
   }
 
-  /** Return the names of all currently-applied migrations */
+  /** Return the names of this namespace's currently-applied migrations */
   async getAppliedNames(db: Db): Promise<string[]> {
     const docs = await this.coll(db)
-      .find({ status: 'applied' })
+      .find({ ...this.scope(), status: 'applied' })
       .sort({ name: 1 })
       .project<{ name: string }>({ name: 1, _id: 0 })
       .toArray();
     return docs.map((doc) => doc.name);
   }
 
-  /** Return a single record by migration name, or null */
+  /** Return this namespace's record for a migration name, or null */
   async getByName(db: Db, name: string): Promise<MigrationRecord | null> {
-    return this.coll(db).findOne({ name });
+    return this.coll(db).findOne({ ...this.scope(), name });
   }
 
-  /** Return the highest batch number among currently-applied migrations, or null */
+  /** Return the highest batch number among this namespace's applied migrations, or null */
   async getLastBatch(db: Db): Promise<number | null> {
     const docs = await this.coll(db)
-      .find({ status: 'applied' })
+      .find({ ...this.scope(), status: 'applied' })
       .sort({ batch: -1 })
       .limit(1)
       .toArray();
     return docs[0]?.batch ?? null;
   }
 
-  /** Return all records belonging to a given batch */
+  /** Return this namespace's records belonging to a given batch */
   async getByBatch(db: Db, batch: number): Promise<MigrationRecord[]> {
-    return this.coll(db).find({ batch }).sort({ name: 1 }).toArray();
+    return this.coll(db)
+      .find({ ...this.scope(), batch })
+      .sort({ name: 1 })
+      .toArray();
   }
 
   /**
-   * Record a migration as applied. Uses an upsert keyed on `name` so that
-   * re-applying a previously-reverted migration (e.g. via `redo`) overwrites
-   * its record without violating the unique index.
+   * Record a migration as applied in this namespace. Uses an upsert keyed on
+   * `name` so that re-applying a previously-reverted migration (e.g. via `redo`)
+   * overwrites its record without violating the unique index. The filter is
+   * namespace-scoped, so a name owned by another namespace is never overwritten:
+   * the upsert collides on the unique index and fails instead.
    *
    * Pass `session` to enrol the write in a migration's transaction, so the
    * record and the migration's own writes commit (or roll back) atomically.
    */
   async markApplied(db: Db, record: MigrationRecord, session?: ClientSession): Promise<void> {
-    await this.coll(db).replaceOne({ name: record.name }, record, {
+    await this.coll(db).replaceOne({ ...this.scope(), name: record.name }, this.stamp(record), {
       upsert: true,
       ...(session ? { session } : {}),
     });
   }
 
   /**
-   * Mark a migration as reverted. Sets `status='reverted'` and `revertedAt=now`.
-   * Never deletes the record — preserves the full audit history.
+   * Mark a migration in this namespace as reverted. Sets `status='reverted'` and
+   * `revertedAt=now`. Never deletes the record — preserves the full audit history.
    *
    * Pass `session` to enrol the write in the rollback's transaction.
    */
   async markReverted(db: Db, name: string, session?: ClientSession): Promise<void> {
     await this.coll(db).updateOne(
-      { name, status: 'applied' },
+      { ...this.scope(), name, status: 'applied' },
       { $set: { status: 'reverted', revertedAt: new Date() } },
       session ? { session } : {},
     );
+  }
+
+  /**
+   * Records with one of `names` that belong to a *named* namespace other than
+   * this one, in any status. Unnamespaced records are excluded: from a named
+   * namespace they are "not yet adopted" (see {@link getUnnamespaced}), and from
+   * the default namespace they are this namespace's own.
+   */
+  async getInOtherNamespaces(db: Db, names: string[]): Promise<MigrationRecord[]> {
+    if (names.length === 0) {
+      return [];
+    }
+    const others =
+      this.namespace === undefined ? { $exists: true } : { $exists: true, $ne: this.namespace };
+    return this.coll(db)
+      .find({ name: { $in: names }, namespace: others })
+      .sort({ name: 1 })
+      .toArray();
+  }
+
+  /**
+   * Records with no namespace (written before namespaces existed, or by a repo
+   * without one), in any status — optionally only those with one of `names`.
+   */
+  async getUnnamespaced(db: Db, names?: string[]): Promise<MigrationRecord[]> {
+    return this.coll(db)
+      .find({
+        namespace: { $exists: false },
+        ...(names === undefined ? {} : { name: { $in: names } }),
+      })
+      .sort({ name: 1 })
+      .toArray();
+  }
+
+  /**
+   * Move unnamespaced records with one of `names` into this changelog's
+   * namespace. Returns how many moved. A no-op for the default namespace.
+   */
+  async adoptUnnamespaced(db: Db, names: string[]): Promise<number> {
+    if (this.namespace === undefined || names.length === 0) {
+      return 0;
+    }
+    const result = await this.coll(db).updateMany(
+      { name: { $in: names }, namespace: { $exists: false } },
+      { $set: { namespace: this.namespace } },
+    );
+    return result.modifiedCount;
+  }
+
+  /**
+   * Every record in the collection, whatever its namespace — for the read-only
+   * `status --all-namespaces` overview. Sorted by namespace (default first),
+   * then name.
+   */
+  async getAllNamespaces(db: Db): Promise<MigrationRecord[]> {
+    return this.coll(db).find().sort({ namespace: 1, name: 1 }).toArray();
   }
 }

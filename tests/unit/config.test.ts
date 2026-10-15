@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type ConfigIssue, DEFAULT_CONFIG, loadConfig } from '../../src/core/config.js';
 import { ConfigInvalidError } from '../../src/errors/index.js';
 import type { MmkLogger } from '../../src/types/index.js';
+import { defaultConfigJs } from '../../src/utils/template.js';
 
 const MMK_ENV_KEYS = [
   'MMK_URI',
@@ -20,6 +21,7 @@ const MMK_ENV_KEYS = [
   'MMK_SERVICE',
   'MMK_AUTHOR',
   'MMK_REQUIRE_AUTHOR',
+  'MMK_NAMESPACE',
   // Typo'd / unrelated variables used by the diagnostics tests — cleaned up like the rest
   'MMK_MIGRATION_DIR',
   'MMK_SOMETHING_ENTIRELY_ELSE',
@@ -768,5 +770,114 @@ describe('loadConfig diagnostics', () => {
       expect(message).toContain('(from --config)');
       expect(message).toContain('mmk init');
     });
+  });
+});
+
+describe('loadConfig namespace', () => {
+  it('should leave namespace unset by default (the default namespace)', async () => {
+    const config = await loadConfig({ cwd: tmp, flags: VALID });
+    expect(config.namespace).toBeUndefined();
+  });
+
+  it('should read MMK_NAMESPACE, trimmed', async () => {
+    process.env.MMK_NAMESPACE = '  orders-api ';
+    const config = await loadConfig({ cwd: tmp, flags: VALID });
+    expect(config.namespace).toBe('orders-api');
+  });
+
+  it('should read namespace from a config file', async () => {
+    writeFileSync(path.join(tmp, 'mmk.config.json'), JSON.stringify({ namespace: 'billing.cron' }));
+    const config = await loadConfig({ cwd: tmp, flags: VALID });
+    expect(config.namespace).toBe('billing.cron');
+  });
+
+  it('should treat an empty MMK_NAMESPACE as unset', async () => {
+    process.env.MMK_NAMESPACE = '   ';
+    const config = await loadConfig({ cwd: tmp, flags: VALID });
+    expect(config.namespace).toBeUndefined();
+  });
+
+  it('should reject an invalid namespace, naming the source and every way to set it', async () => {
+    process.env.MMK_NAMESPACE = 'Orders API';
+    const { issues } = await expectConfigError({ cwd: tmp, flags: VALID });
+    expect(issues[0]).toMatchObject({
+      key: 'namespace',
+      received: '"Orders API"',
+      source: 'the MMK_NAMESPACE environment variable',
+    });
+    expect(issues[0]?.problem).toContain('lowercase letters');
+    expect(issues[0]?.howToSet).toContain('MMK_NAMESPACE');
+  });
+
+  it('should reject a non-string namespace from a config file', async () => {
+    writeFileSync(path.join(tmp, 'mmk.config.json'), JSON.stringify({ namespace: 42 }));
+    const { issues } = await expectConfigError({ cwd: tmp, flags: VALID });
+    expect(issues[0]?.key).toBe('namespace');
+    expect(issues[0]?.problem).toContain('must be a string');
+  });
+
+  it('should suggest namespace for a misspelled config-file key', async () => {
+    writeFileSync(path.join(tmp, 'mmk.config.json'), JSON.stringify({ namespce: 'orders-api' }));
+    const { issues } = await expectConfigError({ cwd: tmp, flags: VALID });
+    expect(issues[0]?.howToSet).toContain('rename it to "namespace"');
+  });
+});
+
+describe('loadConfig service deprecation', () => {
+  it('should warn when service is set explicitly in a config file', async () => {
+    writeFileSync(path.join(tmp, 'mmk.config.json'), JSON.stringify({ service: 'orders' }));
+    const capture = captureLogger();
+    await loadConfig({ cwd: tmp, flags: { ...VALID, logger: capture.logger } });
+    const text = capture.warnings.join('\n');
+    expect(text).toContain('"service" (from the config file mmk.config.json) is deprecated');
+    expect(text).toContain('use "namespace"');
+    expect(text).toContain('not the same');
+  });
+
+  it('should name MMK_SERVICE when the value came from the environment', async () => {
+    process.env.MMK_SERVICE = 'orders';
+    const capture = captureLogger();
+    await loadConfig({ cwd: tmp, flags: { ...VALID, logger: capture.logger } });
+    expect(capture.warnings.join('\n')).toContain('the MMK_SERVICE environment variable');
+  });
+
+  it('should not warn when service is left to auto-detection', async () => {
+    const capture = captureLogger();
+    await loadConfig({ cwd: tmp, flags: { ...VALID, logger: capture.logger } });
+    expect(capture.warnings.join('\n')).not.toContain('deprecated');
+  });
+});
+
+describe('loadConfig with a generated config file', () => {
+  it('should load the documented JS template mmk init writes, with its values', async () => {
+    const file = path.join(tmp, 'mmk.config.mjs');
+    writeFileSync(
+      file,
+      defaultConfigJs({
+        uri: 'mongodb://localhost:27017',
+        dbName: 'shop',
+        namespace: 'orders-api',
+      }),
+    );
+    const config = await loadConfig({ cwd: tmp, configPath: file, flags: { logger: null } });
+    expect(config).toMatchObject({
+      uri: 'mongodb://localhost:27017',
+      dbName: 'shop',
+      namespace: 'orders-api',
+      migrationsCollection: '_mmk_migrations',
+      lockCollection: '_mmk_locks',
+      lockTTLSeconds: 60,
+      createExtension: 'js',
+    });
+  });
+
+  it('should leave the commented-out options unset', async () => {
+    const file = path.join(tmp, 'mmk.config.mjs');
+    writeFileSync(file, defaultConfigJs({ dbName: 'shop' }));
+    const config = await loadConfig({ cwd: tmp, configPath: file, flags: { logger: null } });
+    expect(config.namespace).toBeUndefined();
+    expect(config.author).toBeUndefined();
+    expect(config.templatePath).toBeUndefined();
+    expect(config.hooks).toBeUndefined();
   });
 });

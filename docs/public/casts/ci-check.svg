@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="927" height="300" viewBox="0 0 927 300" role="img" aria-label="mmk status --check failing a CI job because a migration is pending">
+<title>mmk status --check failing a CI job because a migration is pending</title>
+<style>
+svg{font-family:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','DejaVu Sans Mono',monospace;font-size:14px}
+text{white-space:pre;fill:#d5dde3}
+.k{fill:#7f8b93}.r{fill:#ff7b72}.g{fill:#4fd27f}.y{fill:#e6b84f}.b{fill:#79b8ff}.m{fill:#d2a8ff}.c{fill:#5fd0dc}.w{fill:#f3f6f8}
+.d{fill-opacity:.62}.o{font-weight:700}
+.p{fill:#3ddc84;font-weight:700}.cm{fill:#7d8a92}
+.t{fill:#8a969e;font-size:12.5px}.lb{fill:#8a969e;font-size:12px}
+.cur{fill:#d5dde3;animation:blink 1.05s step-end infinite}
+@keyframes blink{0%{opacity:1}50%{opacity:0}}
+.sp{opacity:0;animation:spin .8s step-end infinite}
+@keyframes spin{0%{opacity:1}10%{opacity:0}100%{opacity:0}}
+
+@media (prefers-reduced-motion:reduce){.sc0{transform:translateY(-0px)}}
+.s0{opacity:0;animation:s0 13210ms step-end infinite}@keyframes s0{0%{opacity:0}3.785%{opacity:1}100%{opacity:1}}
+.ty1{opacity:0;animation:ty1 13210ms step-end infinite}@keyframes ty1{0%{opacity:0;transform:translateX(0)}3.785%{opacity:1;transform:translateX(0)}7.949%{opacity:1;transform:translateX(0);animation-timing-function:steps(65,end)}28.615%{opacity:1;transform:translateX(546px)}30.583%{opacity:0;transform:translateX(546px)}100%{opacity:0;transform:translateX(546px)}}
+.s2{opacity:0;animation:s2 13210ms step-end infinite}@keyframes s2{0%{opacity:0}30.583%{opacity:1}100%{opacity:1}}
+.s3{opacity:0;animation:s3 13210ms step-end infinite}@keyframes s3{0%{opacity:0}30.583%{opacity:1}35.503%{opacity:0}100%{opacity:0}}
+.s4{opacity:0;animation:s4 13210ms step-end infinite}@keyframes s4{0%{opacity:0}35.594%{opacity:1}100%{opacity:1}}
+.s5{opacity:0;animation:s5 13210ms step-end infinite}@keyframes s5{0%{opacity:0}35.685%{opacity:1}100%{opacity:1}}
+.s6{opacity:0;animation:s6 13210ms step-end infinite}@keyframes s6{0%{opacity:0}35.776%{opacity:1}100%{opacity:1}}
+.s7{opacity:0;animation:s7 13210ms step-end infinite}@keyframes s7{0%{opacity:0}35.867%{opacity:1}100%{opacity:1}}
+.s8{opacity:0;animation:s8 13210ms step-end infinite}@keyframes s8{0%{opacity:0}35.958%{opacity:1}100%{opacity:1}}
+.s9{opacity:0;animation:s9 13210ms step-end infinite}@keyframes s9{0%{opacity:0}36.048%{opacity:1}100%{opacity:1}}
+.s10{opacity:0;animation:s10 13210ms step-end infinite}@keyframes s10{0%{opacity:0}36.139%{opacity:1}100%{opacity:1}}
+.s11{opacity:0;animation:s11 13210ms step-end infinite}@keyframes s11{0%{opacity:0}36.230%{opacity:1}100%{opacity:1}}
+.s12{opacity:0;animation:s12 13210ms step-end infinite}@keyframes s12{0%{opacity:0}36.321%{opacity:1}100%{opacity:1}}
+.s13{opacity:0;animation:s13 13210ms step-end infinite}@keyframes s13{0%{opacity:0}68.206%{opacity:1}100%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.l,.cg,.sp{animation:none!important}.fin{opacity:1}.spl,.cg{opacity:0}}</style>
+<rect x=".5" y=".5" width="926" height="299" rx="10" fill="#0f1417" stroke="#2a3238"/>
+<path d="M10.5 .5h906a10 10 0 0 1 10 10v23.5h-926v-23.5a10 10 0 0 1 10-10z" fill="#1a2024"/>
+<circle cx="20" cy="17" r="6" fill="#ff5f57"/><circle cx="40" cy="17" r="6" fill="#febc2e"/><circle cx="60" cy="17" r="6" fill="#28c840"/>
+<text class="t" x="463.5" y="21.5" text-anchor="middle">CI · deploy job</text>
+<clipPath id="clip0"><rect x="0" y="34" width="926.4000000000001" height="263"/></clipPath>
+<g clip-path="url(#clip0)"><g class="sc0">
+<g class="l s0 fin"><text x="18" y="61"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk status --check || echo "Deploy blocked: run mmk up first"</tspan></tspan></text></g>
+<g class="ty1 cg"><rect x="34.8" y="48" width="554.4" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="49" width="8.4" height="16"/></g>
+<g class="l s2 fin"><text y="78"><tspan x="18.0" class="d">Loaded config from mmk.config.js</tspan></text></g>
+<g class="l s3 spl"><text class="sp c" x="18" y="95" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="95" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="95" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="95" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="95" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="95" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="95" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="95" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="95" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="95" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="95">Connecting to MongoDB…</text></g>
+<g class="l s4 fin"><text y="95"><tspan x="18.0" class="k">┌─────────────────────────────────────────┬─────────┬───────┬─────────────────────┬──────────┬──────────┐</tspan></text></g>
+<g class="l s5 fin"><text y="112"><tspan x="18.0" class="k">│</tspan><tspan x="26.4" class="c"> Migration                               </tspan><tspan x="370.8" class="k">│</tspan><tspan x="379.2" class="c"> Status  </tspan><tspan x="454.8" class="k">│</tspan><tspan x="463.2" class="c"> Batch </tspan><tspan x="522.0" class="k">│</tspan><tspan x="530.4" class="c"> Applied At          </tspan><tspan x="706.8" class="k">│</tspan><tspan x="715.2" class="c"> Checksum </tspan><tspan x="799.2" class="k">│</tspan><tspan x="807.6" class="c"> Author   </tspan><tspan x="891.6" class="k">│</tspan></text></g>
+<g class="l s6 fin"><text y="129"><tspan x="18.0" class="k">├─────────────────────────────────────────┼─────────┼───────┼─────────────────────┼──────────┼──────────┤</tspan></text></g>
+<g class="l s7 fin"><text y="146"><tspan x="18.0" class="k">│</tspan><tspan x="26.4"> 20261012090000-add-users-email-index.js </tspan><tspan x="370.8" class="k">│</tspan><tspan x="379.2"> </tspan><tspan x="387.6" class="g">applied</tspan><tspan x="446.4"> </tspan><tspan x="454.8" class="k">│</tspan><tspan x="463.2"> 1     </tspan><tspan x="522.0" class="k">│</tspan><tspan x="530.4"> 2026-10-15 22:50:19 </tspan><tspan x="706.8" class="k">│</tspan><tspan x="715.2"> </tspan><tspan x="723.6" class="g">ok</tspan><tspan x="740.4">       </tspan><tspan x="799.2" class="k">│</tspan><tspan x="807.6"> Asha Rao </tspan><tspan x="891.6" class="k">│</tspan></text></g>
+<g class="l s8 fin"><text y="163"><tspan x="18.0" class="k">├─────────────────────────────────────────┼─────────┼───────┼─────────────────────┼──────────┼──────────┤</tspan></text></g>
+<g class="l s9 fin"><text y="180"><tspan x="18.0" class="k">│</tspan><tspan x="26.4"> 20261012091500-backfill-order-status.js </tspan><tspan x="370.8" class="k">│</tspan><tspan x="379.2"> </tspan><tspan x="387.6" class="y">pending</tspan><tspan x="446.4"> </tspan><tspan x="454.8" class="k">│</tspan><tspan x="463.2">       </tspan><tspan x="522.0" class="k">│</tspan><tspan x="530.4">                     </tspan><tspan x="706.8" class="k">│</tspan><tspan x="715.2"> </tspan><tspan x="723.6" class="d">—</tspan><tspan x="732.0">        </tspan><tspan x="799.2" class="k">│</tspan><tspan x="807.6">          </tspan><tspan x="891.6" class="k">│</tspan></text></g>
+<g class="l s10 fin"><text y="197"><tspan x="18.0" class="k">└─────────────────────────────────────────┴─────────┴───────┴─────────────────────┴──────────┴──────────┘</tspan></text></g>
+<g class="l s11 fin"><text y="214"><tspan x="18.0" class="r">✖ 1 pending migration(s)</tspan></text></g>
+<g class="l s12 fin"><text y="231"><tspan x="18.0">Deploy blocked: run mmk up first</tspan></text></g>
+<g class="l s13 fin"><text x="18" y="248"><tspan class="p">$</tspan><tspan x="34.8"><tspan></tspan></tspan></text></g>
+<g class="s13 cg"><rect class="cur" x="34.8" y="236" width="8.4" height="16"/></g>
+</g></g>
+</svg>

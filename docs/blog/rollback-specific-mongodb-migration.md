@@ -1,136 +1,130 @@
 ---
-title: "How to Roll Back a Single MongoDB Migration (Without Nuking the Rest)"
-description: "migrate-mongo only rolls back the last migration. Here's how to roll back one specific MongoDB migration safely — by file, by batch, or the last N — without nuking the rest."
+title: "How to roll back a single MongoDB migration"
+description: "Most MongoDB migration tools only undo the last migration. Here's how to roll back one specific migration, one old batch, or the last few, and how to preview it first."
 date: 2026-07-01
 author: Santosh Gupta
 ---
 
-# How to Roll Back a Single MongoDB Migration (Without Nuking the Rest)
+# How to roll back a single MongoDB migration
 
-If you've searched for this, I can probably guess your afternoon: you ran a few migrations, one of
-them was wrong, and now you want to undo *that one*. Not all of them. Just the bad one.
+If you searched for this, I can guess your afternoon. You ran a few migrations, one of them was
+wrong, and now you want to undo that one. Not all of them, just the bad one. And your migration tool
+isn't making it easy.
 
-And you've discovered that your migration tool doesn't really want to let you.
+I've been there. This post covers why it's awkward with most tools, and how I do it now.
 
-I've been exactly there. This post is the straight answer to "how do I roll back a single MongoDB
-migration," why the usual tools make it hard, and how I do it now.
+## Why "undo the last one" isn't enough
 
-## Why "just roll back the last one" isn't enough
+Most MongoDB migration tools treat rollback like a stack. `down` undoes the most recently applied
+migration. Run it again and it undoes the one before.
 
-Most MongoDB migration tools — `migrate-mongo` being the common one — model rollback as a stack:
-`down` reverts the **most recently applied** migration. Run it again, it reverts the next one up.
+That's tidy in theory and awkward in real projects:
 
-That's clean in theory. It breaks down the moment your project is real:
+- You shipped **three** migrations in one release and only the third is broken. If anything ran
+  after it, you have to peel good migrations off to reach the bad one.
+- Several people deploy to several environments. "The last applied migration" is different on
+  staging, on production and on your laptop.
+- The broken migration isn't the most recent one at all.
 
-- You deployed **three** migrations in one release and only the third is broken. Rolling back "the
-  last one" is fine *if* you catch it immediately — but if anything else applied after it, you're
-  now peeling back good migrations to reach the bad one.
-- You have **multiple environments and teammates** deploying. "The last applied migration" on
-  staging isn't the same as on production, and neither matches your local. "Last" stops being
-  obvious.
-- You want to undo a migration that **isn't** the most recent one at all.
+Each time, you end up choosing between rolling back more than you wanted, or fixing it by hand in
+the database. I did the by-hand version once, on production, and that's the reason I
+[built a different tool](./why-i-built-mongo-migrate-kit).
 
-In every one of these cases the stack model forces a choice: roll back *more than you wanted*, or
-go into the database and fix it **by hand**. I did the by-hand thing once, on production, and that
-incident is the reason I [built a different tool](./why-i-built-mongo-migrate-kit).
+## Roll back by name
 
-## The fix: roll back by name
-
-The capability you actually want is "roll back this specific file." With **mongo-migrate-kit** (the
-CLI is `mmk`), that's the default:
+What you actually want is "undo this file". With mongo-migrate-kit (the command is `mmk`), you pass
+the file name:
 
 ```bash
-mmk down 20260101120000-the-broken-one.js
+npx mmk down 20261014103000-add-orders-customer-index.js
 ```
 
-That reverts exactly that migration — it runs *its* `down()` function and nothing else. The two
-good migrations from the same release stay applied. No stack-peeling, no manual surgery.
+That runs that file's `down()` and nothing else. The other migrations from the same release stay as
+they are.
 
-If you *do* want to undo the whole release, you can — by batch number:
+If the whole release was bad, undo it as a unit. Each `mmk up` run gets a batch number, so:
 
 ```bash
-mmk down --batch 3
+npx mmk down             # the last batch
+npx mmk down --batch 3   # an older batch, by number
 ```
 
-A "batch" is everything that ran together in one `mmk up`. So `--batch 3` cleanly reverts that one
-deploy as a unit. This is the right tool when the whole release was bad, not just one file.
-
-And if you think in terms of "undo the last N things, whatever batch they were in":
+And if you think in terms of "the last few changes, whatever release they came from":
 
 ```bash
-mmk down --steps 2     # revert the last 2 applied migrations, newest first
+npx mmk down --steps 2   # the last two migrations, newest first
 ```
 
-Three different questions — "this file," "this release," "the last N" — three precise answers.
-That's the whole point.
+Here's what each of those undoes, side by side:
 
-## Look before you leap
+<Diagram name="batches" />
 
-The genuinely scary part of any rollback is not knowing what it'll do until it's done. So preview
-it first — this touches nothing in the database:
+And a real session, undoing a batch and then one more file:
+
+<Cast name="rollback" alt="Terminal: mmk status shows four migrations in two batches; mmk down reverts batch 2; mmk down --steps 1 reverts one more; mmk status shows the result" />
+
+## Preview it first
+
+The scary part of any rollback is not knowing what it'll do until it's done. So ask first. This
+writes nothing:
 
 ```bash
-mmk dry-run down 20260101120000-the-broken-one.js
+npx mmk dry-run down 20261014103000-add-orders-customer-index.js
 ```
 
-It prints exactly which migration(s) would be reverted and in what order, and writes nothing. I run
-this before every production rollback now. It costs two seconds.
+It lists exactly which migrations would be rolled back, in order. I do this before every production
+rollback. It takes two seconds.
 
-## The safety net you didn't know you needed
+## A safety check you might not think of
 
-Here's a failure mode that's easy to miss: someone **edits** a migration file after it was applied,
-then later you try to roll it back. Now the `down()` you're about to run doesn't match the `up()`
-that actually ran. You'd be reverting code that never executed against this database.
+Here's a failure that's easy to miss. Someone edits a migration after it ran. Later you try to roll
+it back. Now the `down()` you're about to run was written for different code than the `up()` that
+actually changed your data.
 
-`mmk` guards against this. Before a rollback it compares each file's current SHA-256 checksum
-against the checksum recorded when it was applied. If they don't match, it **aborts the whole
-rollback** rather than running a `down()` that doesn't correspond to reality:
+mmk saves a checksum of each file when it runs, and checks it again before a rollback. If the file
+changed, it refuses:
 
 ```text
-✖ Checksum mismatch: 20260101120000-the-broken-one.js was edited after it was applied
+✖ CHECKSUM_MISMATCH: Refusing to roll back a file that changed since being applied: 20261012091500-backfill-order-status.js
+  Rolling back would run the CURRENT down(), which may not undo what the applied up() did
+  Restore the file to the version that was applied, then roll back
+  Or roll back with the current code anyway: mmk down 20261012091500-backfill-order-status.js --force
 ```
 
-It's deliberately stricter on `down` than on `up`, because reverting edited code is the riskier
-case. If you genuinely mean it, `--force` overrides — but you have to ask for it on purpose. (More
-on tamper detection in the [checksum deep-dive](./mongodb-migration-best-practices).)
+If you've checked and really mean it, `--force` gets you past it. But you have to ask.
 
-## And it never deletes your history
+## The history stays
 
-When you roll a migration back, the record isn't erased. It's marked `reverted` with a
-`revertedAt` timestamp. The full audit trail — what ran, when, by whom, how long it took — stays
-intact. When something breaks at 2am, "what actually happened to this database" is a question you
-can answer, not guess.
+Rolling back doesn't erase the record of the migration. It's marked `reverted` with the time it
+happened. When something breaks at 2am, "what actually happened to this database?" is a question you
+can answer instead of guess.
 
-## The one-line version
+## Summary
 
 ```bash
-mmk down <file>          # roll back exactly one migration
-mmk down --batch <n>     # roll back one whole release
-mmk down --steps <n>     # roll back the last N, ignoring batches
-mmk dry-run down <file>  # preview any of the above, change nothing
+npx mmk down <file>           # one migration
+npx mmk down --batch <n>      # one release
+npx mmk down --steps <n>      # the last N, ignoring releases
+npx mmk dry-run down <file>   # preview any of the above
 ```
 
-That's the thing I wished I'd had on the Friday this all started.
+That's what I wished I'd had on the Friday this all started.
 
 ## Try it
 
-If "I just want to undo *this one* migration" is a sentence you've said out loud:
-
 ```bash
 npm install mongo-migrate-kit mongodb
-mmk dry-run down <file>   # preview
-mmk down <file>           # roll back exactly one
 ```
 
-Docs and recipes: **https://mongo-migrate-kit.vercel.app** · on npm and GitHub as
-**mongo-migrate-kit**. If it saves you a manual-rollback afternoon, a star helps the next person
-find it.
+The [quick start](/guide/getting-started) takes about five minutes. The package is on
+[npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 
 ### Related reading
 
-- [Why I Built a New MongoDB Migration Tool](./why-i-built-mongo-migrate-kit) — the Friday
-  that started all of this.
-- [7 Things migrate-mongo Can't Do](./7-things-migrate-mongo-cant-do) — single-file rollback
-  is #1, but it's not the only gap.
+- [Why I built a new MongoDB migration tool](./why-i-built-mongo-migrate-kit), the Friday that
+  started this.
+- [7 things I kept missing in migrate-mongo](./7-things-migrate-mongo-cant-do). Single-file
+  rollback is the first one.

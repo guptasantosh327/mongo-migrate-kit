@@ -11,10 +11,14 @@ import {
   MigrationFileNotFoundError,
   MigrationInvalidExportError,
   MigrationInvalidNameError,
+  MigrationNameConflictError,
+  NamespaceUnadoptedError,
   NotAppliedError,
   TransactionsUnsupportedError,
 } from '../errors/index.js';
 import type {
+  AdoptResult,
+  AdoptRow,
   ImportChecksumSource,
   ImportResult,
   ImportRow,
@@ -23,6 +27,7 @@ import type {
   MigrationRecord,
   MmkConfig,
   MmkLogger,
+  NamespaceStatusRow,
   ProgressReporter,
   RunResult,
   StatusRow,
@@ -32,6 +37,7 @@ import { computeChecksum } from '../utils/checksum.js';
 import { didYouMean, explain, listOf, quote } from '../utils/explain.js';
 import { loadMigrationFile } from '../utils/loader.js';
 import { resolveLogger } from '../utils/logger.js';
+import { namespaceLabel, namespaceProblem } from '../utils/namespace.js';
 import { redactMongoUri } from '../utils/redact.js';
 import { detectService } from '../utils/service.js';
 import {
@@ -46,9 +52,16 @@ import { buildContext } from './context.js';
 import { isMigrateMongoDoc, mapMigrateMongoDocs } from './import.js';
 import { type LockDocument, MigrationLock, runWithLock } from './lock.js';
 import { runMigration } from './runner.js';
+import { checkStorageFormat } from './storage-format.js';
 
 /** Default source collection name used by migrate-mongo */
 const MIGRATE_MONGO_COLLECTION = 'changelog';
+
+/**
+ * Oldest MongoDB wire version supported: 8 = server 4.2, the first with `$$NOW`
+ * and aggregation-pipeline updates, which the lock relies on.
+ */
+const MIN_WIRE_VERSION = 8;
 
 /** Options for {@link MigratorKit.up} */
 export interface UpOptions {
@@ -115,6 +128,19 @@ export interface InitOptions {
    * for `js`/`ts` formats.
    */
   secretProvider?: boolean;
+  /**
+   * Namespace written into the generated config (one per repo, for repos that
+   * share a database). Omitted: the file has a commented-out example instead.
+   */
+  namespace?: string;
+}
+
+/** Options for {@link MigratorKit.adopt} */
+export interface AdoptOptions {
+  /** Preview which records would move, without writing anything */
+  dryRun?: boolean;
+  /** Skip lock acquisition (dev only) */
+  noLock?: boolean;
 }
 
 /** Options for {@link MigratorKit.import} */
@@ -163,6 +189,8 @@ export class MigratorKit {
    * transactional migration fast on a standalone instead of at commit time.
    */
   private supportsTransactions = false;
+  /** The server's wire version from the connect-time probe; undefined if the probe failed */
+  private maxWireVersion: number | undefined;
 
   constructor(config: Partial<MmkConfig> = {}, options: MigratorKitOptions = {}) {
     this.partialConfig = config;
@@ -209,45 +237,92 @@ export class MigratorKit {
       this.client = new MongoClient(config.uri, clientOptions);
       await this.client.connect();
       this.db = this.client.db(config.dbName);
-      this.supportsTransactions = await this.detectTransactionSupport(this.client);
-      this.changelog = new Changelog(config.migrationsCollection);
-      await this.changelog.ensureIndexes(this.db);
+      const server = await this.probeServer(this.client);
+      this.supportsTransactions = server.supportsTransactions;
+      this.maxWireVersion = server.maxWireVersion;
     } catch (error) {
-      // Driver errors frequently embed the connection string verbatim — redact
-      // any credentials before they reach a log, JSON output, or error context.
-      const raw = error instanceof Error ? error.message : String(error);
-      const cause = redactMongoUri(raw);
-      // The redacted driver message is the only clue to WHY the connection
-      // failed (bad host, auth, TLS, timeout), so it belongs in the message —
-      // not only in the context, where the terminal never shows it.
-      throw new ConnectionFailedError(
-        explain(`Failed to connect to MongoDB at ${redactMongoUri(config.uri)}`, [
-          `Reason: ${cause}`,
-          `Database: ${quote(config.dbName)}`,
-          'Check the host/port is reachable, the credentials are right, and any TLS or IP allow-list requirement is met',
-          'Set the connection with --uri, the MMK_URI environment variable, or "uri" in your config file',
-        ]),
-        { cause, uri: redactMongoUri(config.uri), dbName: config.dbName },
-      );
+      throw this.connectionFailedError(config, error);
+    }
+    // Connected — refuse an unsupported server or a newer storage format
+    // BEFORE writing anything (the changelog index below is the first write).
+    // On any failure the client is closed so a later connect() starts clean.
+    try {
+      this.assertServerSupported();
+      // Only a namespaced run writes data older versions would misread, so only
+      // it records the marker; every run still refuses a newer format.
+      await checkStorageFormat(this.requireDb(), { record: config.namespace !== undefined });
+      this.changelog = new Changelog(config.migrationsCollection, config.namespace);
+      try {
+        await this.changelog.ensureIndexes(this.requireDb());
+      } catch (error) {
+        throw this.connectionFailedError(config, error);
+      }
+    } catch (error) {
+      await this.disconnect();
+      throw error;
     }
   }
 
   /**
-   * Detect whether the deployment can run multi-document transactions — true for
-   * a replica set (`setName` present) or a sharded cluster (mongos, `msg ===
-   * 'isdbgrid'`), false for a standalone. Best-effort: if the probe itself
-   * fails we assume support (fail open) and let a real commit surface the error,
-   * rather than block a working setup on a flaky admin command.
+   * The `CONNECTION_FAILED` error for a driver failure while connecting (or
+   * creating the changelog index). Driver errors frequently embed the
+   * connection string verbatim, so credentials are redacted before they reach a
+   * log, JSON output, or error context. The redacted driver message is the only
+   * clue to WHY it failed (bad host, auth, TLS, timeout, permissions), so it
+   * belongs in the message — not only in the context, where the terminal never
+   * shows it.
    */
-  private async detectTransactionSupport(client: MongoClient): Promise<boolean> {
+  private connectionFailedError(config: MmkConfig, error: unknown): ConnectionFailedError {
+    const raw = error instanceof Error ? error.message : String(error);
+    const cause = redactMongoUri(raw);
+    return new ConnectionFailedError(
+      explain(`Failed to connect to MongoDB at ${redactMongoUri(config.uri)}`, [
+        `Reason: ${cause}`,
+        `Database: ${quote(config.dbName)}`,
+        'Check the host/port is reachable, the credentials are right, and any TLS or IP allow-list requirement is met',
+        'Set the connection with --uri, the MMK_URI environment variable, or "uri" in your config file',
+      ]),
+      { cause, uri: redactMongoUri(config.uri), dbName: config.dbName },
+    );
+  }
+
+  /**
+   * Probe the deployment once on connect: whether it can run multi-document
+   * transactions — true for a replica set (`setName` present) or a sharded
+   * cluster (mongos, `msg === 'isdbgrid'`), false for a standalone — and its
+   * wire version. Best-effort: if the probe itself fails we assume transaction
+   * support and skip the version check (fail open), rather than block a working
+   * setup on a flaky admin command.
+   */
+  private async probeServer(
+    client: MongoClient,
+  ): Promise<{ supportsTransactions: boolean; maxWireVersion: number | undefined }> {
     try {
       const hello = (await client.db('admin').command({ hello: 1 })) as {
         setName?: string;
         msg?: string;
+        maxWireVersion?: number;
       };
-      return hello.setName !== undefined || hello.msg === 'isdbgrid';
+      return {
+        supportsTransactions: hello.setName !== undefined || hello.msg === 'isdbgrid',
+        maxWireVersion: hello.maxWireVersion,
+      };
     } catch {
-      return true;
+      return { supportsTransactions: true, maxWireVersion: undefined };
+    }
+  }
+
+  /** Refuse a server older than 4.2 with a clear message instead of a driver error mid-run */
+  private assertServerSupported(): void {
+    if (this.maxWireVersion !== undefined && this.maxWireVersion < MIN_WIRE_VERSION) {
+      throw new ConnectionFailedError(
+        explain('This MongoDB server is too old for mongo-migrate-kit — it needs 4.2 or newer', [
+          `Server wire version: ${this.maxWireVersion} (4.2 is wire version ${MIN_WIRE_VERSION})`,
+          'The migration lock uses the server clock ($$NOW) and pipeline updates, added in MongoDB 4.2',
+          'Upgrade the server, or point --uri / MMK_URI at a 4.2+ deployment',
+        ]),
+        { maxWireVersion: this.maxWireVersion, minWireVersion: MIN_WIRE_VERSION },
+      );
     }
   }
 
@@ -279,13 +354,180 @@ export class MigratorKit {
     if (!doc) {
       return null;
     }
-    return { lockedAt: doc.lockedAt, pid: doc.pid, host: doc.host, executedBy: doc.executedBy };
+    return {
+      lockedAt: doc.lockedAt,
+      pid: doc.pid,
+      host: doc.host,
+      executedBy: doc.executedBy,
+      ...(doc.namespace !== undefined ? { namespace: doc.namespace } : {}),
+      ...(doc.acquiredAt !== undefined ? { acquiredAt: doc.acquiredAt } : {}),
+      ...(doc.expiresAt !== undefined ? { expiresAt: doc.expiresAt } : {}),
+    };
   }
 
-  /** Build a lock bound to the configured collection (assumes connected) */
+  /**
+   * Build the lock (assumes connected). Every repo on a database takes this same
+   * lock whatever its namespace; the namespace is only recorded so others can
+   * see who holds it.
+   */
   private buildLock(): MigrationLock {
     const config = this.config as MmkConfig;
-    return new MigrationLock(this.requireDb(), config.lockCollection, config.lockTTLSeconds);
+    return new MigrationLock(
+      this.requireDb(),
+      config.lockCollection,
+      config.lockTTLSeconds,
+      config.namespace,
+    );
+  }
+
+  /**
+   * Resolve and cache the effective configuration — CLI flags, `MMK_*` env vars,
+   * config file and defaults merged and validated — without connecting. Any
+   * lines config loading prints ("Loaded config from …", env warnings) happen
+   * here, which lets a caller print them before starting a spinner.
+   * @throws {@link ConfigInvalidError} when the configuration is invalid
+   */
+  async resolveConfig(): Promise<MmkConfig> {
+    return this.ensureConfig();
+  }
+
+  /**
+   * The namespace this migrator is scoped to, or undefined for the default
+   * namespace (no `namespace` configured). Resolves the config if needed.
+   */
+  async getNamespace(): Promise<string | undefined> {
+    return (await this.resolveConfig()).namespace;
+  }
+
+  /** Print which namespace a command works in — only when one is set */
+  private announceNamespace(): void {
+    const namespace = this.config?.namespace;
+    if (namespace !== undefined) {
+      this.logger.dim(`Namespace: ${namespace}`);
+    }
+  }
+
+  /**
+   * Safety check 2: this repo's files whose records were written before it had
+   * a namespace (they carry none yet). Empty when no namespace is set — then
+   * those records are this repo's own.
+   */
+  private async unadoptedFiles(changelog: Changelog): Promise<string[]> {
+    if (changelog.namespace === undefined || !existsSync(this.migrationsPath())) {
+      return [];
+    }
+    const files = this.listMigrationFiles();
+    if (files.length === 0) {
+      return [];
+    }
+    const records = await changelog.getUnnamespaced(this.requireDb(), files);
+    return records.map((record) => record.name);
+  }
+
+  /**
+   * Safety check 2, the one place every command runs it — once per command.
+   *
+   * - `'refuse'`: every command whose answer depends on what is applied in this
+   *   namespace — `up`, `down`, `redo`, `import`, `dry-run`, and `list` filtered
+   *   to pending/applied (and so `pendingMigrations()`). Unadopted records would
+   *   make applied migrations look pending, so these refuse rather than give a
+   *   wrong answer (or, for `up`, run them a second time). Runs before check 1,
+   *   which would otherwise give the wrong advice.
+   * - `'warn'`: `status` and unfiltered `list` — the views that show the whole
+   *   picture. They warn and mark those rows `unadopted` instead.
+   *
+   * Returns the unadopted names (empty when refusing succeeds or none exist).
+   */
+  private async checkAdopted(
+    changelog: Changelog,
+    onUnadopted: 'refuse' | 'warn',
+  ): Promise<Set<string>> {
+    const names = await this.unadoptedFiles(changelog);
+    if (names.length === 0) {
+      return new Set();
+    }
+    const namespace = namespaceLabel(changelog.namespace);
+    if (onUnadopted === 'warn') {
+      this.logger.warn(
+        `⚠ ${names.length} file(s) here have records from before this repo had a namespace — they are applied, not pending. Run \`mmk namespace adopt\` to move them into ${quote(namespace)}`,
+      );
+      return new Set(names);
+    }
+    throw new NamespaceUnadoptedError(
+      explain(
+        `${names.length === 1 ? '1 migration' : `${names.length} migrations`} in this folder ${names.length === 1 ? 'was' : 'were'} applied before this repo had a namespace`,
+        [
+          `Their records have no namespace yet, so in namespace ${quote(namespace)} they would look pending (and \`mmk up\` would run them a second time)`,
+          `Files: ${listOf(names)}`,
+          'Preview the move:  mmk namespace adopt --dry-run',
+          `Then move them:    mmk namespace adopt   (into ${quote(namespace)})`,
+          'Nothing was run',
+        ],
+      ),
+      { namespace, names },
+    );
+  }
+
+  /**
+   * Safety check 1: refuse — before any write or transaction — when a file to
+   * run is already recorded under another *named* namespace in this collection
+   * (any status: even a reverted record holds the unique name). Without it, a
+   * non-transactional migration would run first and only then fail to record
+   * itself, leaving its writes behind unrecorded. The message tells apart a
+   * changed/mistyped namespace (several files, all under one other namespace)
+   * from two repos that used the same filename.
+   */
+  private async assertNoNameConflicts(changelog: Changelog, names: string[]): Promise<void> {
+    const conflicts = await changelog.getInOtherNamespaces(this.requireDb(), names);
+    if (conflicts.length === 0) {
+      return;
+    }
+    const mine = namespaceLabel(changelog.namespace);
+    const owners = [...new Set(conflicts.map((record) => namespaceLabel(record.namespace)))];
+    const files = conflicts.map((record) => record.name);
+    const context = {
+      namespace: mine,
+      conflicts: conflicts.map((record) => ({
+        name: record.name,
+        namespace: record.namespace,
+        status: record.status,
+      })),
+    };
+
+    const [onlyOwner] = owners;
+    if (conflicts.length >= 2 && owners.length === 1 && onlyOwner !== undefined) {
+      throw new MigrationNameConflictError(
+        explain(
+          `These ${conflicts.length} files are recorded under namespace ${quote(onlyOwner)}, but this run uses ${quote(mine)}`,
+          [
+            'Did the namespace change? Changing it makes every migration look pending',
+            `Files: ${listOf(files)}`,
+            `If this repo's namespace is ${quote(onlyOwner)}, set it back in its config: namespace: '${onlyOwner}'`,
+            'Nothing was run',
+          ],
+        ),
+        context,
+      );
+    }
+
+    const lines = conflicts.map(
+      (record) =>
+        `${quote(record.name)} is already used by namespace ${quote(namespaceLabel(record.namespace))}${record.status === 'reverted' ? ' (reverted)' : ''}`,
+    );
+    throw new MigrationNameConflictError(
+      explain(
+        conflicts.length === 1
+          ? (lines[0] ?? 'A migration filename is already used by another namespace')
+          : `${conflicts.length} migration filenames are already used by other namespaces`,
+        [
+          ...(conflicts.length === 1 ? [] : lines),
+          `This run uses namespace ${quote(mine)}; filenames must be unique within a changelog collection`,
+          'Rename the file (e.g. recreate it with `mmk create`), or give this repo its own migrationsCollection',
+          'Nothing was run',
+        ],
+      ),
+      context,
+    );
   }
 
   /**
@@ -509,13 +751,17 @@ export class MigratorKit {
 
   /** Run all pending migrations, or a specific named file */
   async up(filename?: string, options: UpOptions = {}): Promise<RunResult[]> {
-    const config = await this.ensureConfig();
+    await this.ensureConfig();
     await this.connect();
-    const lock = new MigrationLock(this.requireDb(), config.lockCollection, config.lockTTLSeconds);
+    this.announceNamespace();
+    const lock = this.buildLock();
     return runWithLock(
       lock,
       { logger: this.logger, ...(options.noLock ? { noLock: true } : {}) },
-      () => this.runUp(filename, options),
+      async () => {
+        await this.checkAdopted(this.requireChangelog(), 'refuse');
+        return this.runUp(filename, options);
+      },
     );
   }
 
@@ -540,6 +786,9 @@ export class MigratorKit {
       logger.info('Nothing to migrate');
       return [];
     }
+
+    // Check 1, before any hook, write, or transaction.
+    await this.assertNoNameConflicts(changelog, targets);
 
     const context = buildContext(this.client as MongoClient, db, config.mongoose);
     const results: RunResult[] = [];
@@ -684,18 +933,22 @@ export class MigratorKit {
   async down(filename?: string, options: DownOptions = {}): Promise<RunResult[]> {
     this.assertStepsValid(options.steps, filename, options.batch);
     this.assertBatchValid(options.batch, filename);
-    const config = await this.ensureConfig();
+    await this.ensureConfig();
     // Validate the name before the changelog lookup, so a traversing name is
     // reported as an invalid name rather than as "not applied".
     if (filename) {
       this.filepath(filename);
     }
     await this.connect();
-    const lock = new MigrationLock(this.requireDb(), config.lockCollection, config.lockTTLSeconds);
+    this.announceNamespace();
+    const lock = this.buildLock();
     return runWithLock(
       lock,
       { logger: this.logger, ...(options.noLock ? { noLock: true } : {}) },
-      () => this.runDown(filename, options),
+      async () => {
+        await this.checkAdopted(this.requireChangelog(), 'refuse');
+        return this.runDown(filename, options);
+      },
     );
   }
 
@@ -911,11 +1164,15 @@ export class MigratorKit {
    * run it.
    */
   async redo(filename?: string): Promise<RunResult[]> {
-    const config = await this.ensureConfig();
+    await this.ensureConfig();
     await this.connect();
-    const lock = new MigrationLock(this.requireDb(), config.lockCollection, config.lockTTLSeconds);
+    this.announceNamespace();
+    const lock = this.buildLock();
     return runWithLock(lock, { logger: this.logger }, async () => {
       const changelog = this.requireChangelog();
+      // Once, before picking the target: unadopted records would make the
+      // namespace look empty ("Nothing to redo") rather than explain what to do.
+      await this.checkAdopted(changelog, 'refuse');
 
       let target = filename;
       if (!target) {
@@ -948,9 +1205,12 @@ export class MigratorKit {
     this.assertStepsValid(options.steps, filename);
     await this.ensureConfig();
     await this.connect();
+    this.announceNamespace();
     const db = this.requireDb();
     const changelog = this.requireChangelog();
     const logger = this.logger;
+    // A dry run predicts `up`/`down`, so it refuses exactly when they would.
+    await this.checkAdopted(changelog, 'refuse');
 
     const records = await changelog.getAll(db);
     const recordByName = new Map(records.map((record) => [record.name, record]));
@@ -992,19 +1252,59 @@ export class MigratorKit {
   async status(): Promise<StatusRow[]> {
     await this.ensureConfig();
     await this.connect();
+    this.announceNamespace();
+    const unadopted = await this.checkAdopted(this.requireChangelog(), 'warn');
+    return this.statusRows(unadopted);
+  }
+
+  /** Rows for every known file and record, marking `unadopted` ones */
+  private async statusRows(unadopted: Set<string>): Promise<StatusRow[]> {
     const records = await this.requireChangelog().getAll(this.requireDb());
     const recordByName = new Map(records.map((record) => [record.name, record]));
 
     const names = new Set<string>([...this.listMigrationFiles(), ...recordByName.keys()]);
-    return [...names].sort().map((name) => this.buildStatusRow(name, recordByName.get(name)));
+    return [...names].sort().map((name) => {
+      const row = this.buildStatusRow(name, recordByName.get(name));
+      return unadopted.has(name) ? { ...row, unadopted: true } : row;
+    });
   }
 
-  /** Filtered list of migrations */
+  /**
+   * Every record in the changelog collection, across all namespaces — a
+   * read-only overview for whoever manages a shared database. Raw records (incl.
+   * reverted ones); files on disk are not compared, since they belong to other
+   * repos.
+   */
+  async statusAllNamespaces(): Promise<NamespaceStatusRow[]> {
+    await this.ensureConfig();
+    await this.connect();
+    const records = await this.requireChangelog().getAllNamespaces(this.requireDb());
+    return records.map((record) => ({
+      ...(record.namespace !== undefined ? { namespace: record.namespace } : {}),
+      file: record.name,
+      status: record.status,
+      batch: record.batch,
+      appliedAt: record.appliedAt,
+      ...(record.revertedAt ? { revertedAt: record.revertedAt } : {}),
+      ...(record.author ? { author: record.author } : {}),
+    }));
+  }
+
+  /**
+   * Filtered list of migrations. Unfiltered it is the same view as `status`.
+   * Filtered to pending/applied it answers "what is applied" — which unadopted
+   * records would make wrong — so it refuses with `NAMESPACE_UNADOPTED` until
+   * `mmk namespace adopt` has run (as `up` does).
+   */
   async list(filter: 'all' | 'pending' | 'applied'): Promise<StatusRow[]> {
-    const rows = await this.status();
     if (filter === 'all') {
-      return rows;
+      return this.status();
     }
+    await this.ensureConfig();
+    await this.connect();
+    this.announceNamespace();
+    await this.checkAdopted(this.requireChangelog(), 'refuse');
+    const rows = await this.statusRows(new Set());
     return rows.filter((row) => row.status === filter);
   }
 
@@ -1028,6 +1328,8 @@ export class MigratorKit {
       checksumOk,
       ...(record?.description ? { description: record.description } : {}),
       ...(isApplied && record?.author ? { author: record.author } : {}),
+      ...(this.config?.namespace !== undefined ? { namespace: this.config.namespace } : {}),
+      ...(record && !fileExists ? { fileMissing: true } : {}),
     };
   }
 
@@ -1063,6 +1365,19 @@ export class MigratorKit {
     if (this.partialConfig.uri) values.uri = this.partialConfig.uri;
     if (this.partialConfig.dbName) values.dbName = this.partialConfig.dbName;
     if (this.partialConfig.migrationsDir) values.migrationsDir = this.partialConfig.migrationsDir;
+    if (options.namespace !== undefined) {
+      const problem = namespaceProblem(options.namespace);
+      if (problem !== undefined) {
+        throw new InvalidArgumentError(
+          explain(`--namespace ${problem}`, [
+            `Received: ${quote(options.namespace)}`,
+            'Use one value per repo, e.g. the repo name: mmk init --namespace orders-api',
+          ]),
+          { namespace: options.namespace },
+        );
+      }
+      values.namespace = options.namespace;
+    }
 
     const filepath = createConfigFile({
       dir: process.cwd(),
@@ -1083,9 +1398,10 @@ export class MigratorKit {
    * file signatures, so `down`/`redo` on imported files is unsupported.
    */
   async import(options: ImportOptions = {}): Promise<ImportResult> {
-    const config = await this.ensureConfig();
+    await this.ensureConfig();
     await this.connect();
-    const lock = new MigrationLock(this.requireDb(), config.lockCollection, config.lockTTLSeconds);
+    this.announceNamespace();
+    const lock = this.buildLock();
     return runWithLock(
       lock,
       { logger: this.logger, ...(options.noLock ? { noLock: true } : {}) },
@@ -1119,36 +1435,61 @@ export class MigratorKit {
 
     // Records are written to `target`; reuse the connected changelog when it
     // already points there, otherwise bind a fresh one (and ensure its index).
+    // Either way it is scoped to this repo's namespace.
     const targetChangelog =
-      target === config.migrationsCollection ? changelog : new Changelog(target);
+      target === config.migrationsCollection ? changelog : new Changelog(target, config.namespace);
     if (targetChangelog !== changelog && !dryRun) {
       await targetChangelog.ensureIndexes(db);
     }
+    await this.checkAdopted(targetChangelog, 'refuse');
 
     const rawDocs = await changelog.getForeignDocs(db, source);
     if (rawDocs.length === 0) {
       logger.info(`Nothing to import from "${source}"`);
-      return { source, target, imported: 0, skipped: 0, dryRun, rows: [] };
+      return { source, target, imported: 0, skipped: 0, notInRepo: [], dryRun, rows: [] };
     }
 
     const valid: MigrateMongoDoc[] = [];
+    const notInRepo: string[] = [];
     let skipped = 0;
     for (const doc of rawDocs) {
-      if (isMigrateMongoDoc(doc)) {
-        valid.push(doc);
-      } else {
+      if (!isMigrateMongoDoc(doc)) {
         skipped += 1;
         logger.warn('⚠ Skipping source doc without a usable fileName');
+      } else if (config.namespace !== undefined && !existsSync(this.filepath(doc.fileName))) {
+        // A shared source changelog holds other repos' records too; a namespace
+        // imports only the migrations whose files are in this repo.
+        notInRepo.push(doc.fileName);
+      } else {
+        valid.push(doc);
       }
+    }
+    if (notInRepo.length > 0) {
+      logger.warn(
+        `⚠ Skipping ${notInRepo.length} record(s) whose files are not in this repo — namespace ${quote(config.namespace)} imports only its own migrations: ${listOf(notInRepo)}`,
+      );
     }
 
     const existing = await targetChangelog.getAll(db);
     if (!options.force && !dryRun && existing.length > 0) {
+      const where =
+        config.namespace === undefined ? '' : ` in namespace ${quote(config.namespace)}`;
       throw new ImportTargetNotEmptyError(
-        `Target collection "${target}" already has ${existing.length} record(s) — re-run with force to proceed`,
-        { target, existing: existing.length },
+        `Target collection "${target}" already has ${existing.length} record(s)${where} — re-run with force to proceed`,
+        {
+          target,
+          existing: existing.length,
+          ...(config.namespace ? { namespace: config.namespace } : {}),
+        },
       );
     }
+
+    // Check 1 on the incoming names, so an import can't collide with another
+    // namespace's record halfway through.
+    await this.assertNoNameConflicts(
+      targetChangelog,
+      valid.map((doc) => doc.fileName),
+    );
 
     // Continue batch numbering after the batches already in the target so imported
     // records never collide with existing ones. Records this import will overwrite
@@ -1185,7 +1526,7 @@ export class MigratorKit {
       logger.info(
         `◎ Dry-run  Would import ${rows.length} record(s) from "${source}" → "${target}"`,
       );
-      return { source, target, imported: 0, skipped, dryRun, rows };
+      return { source, target, imported: 0, skipped, notInRepo, dryRun, rows };
     }
 
     for (const record of records) {
@@ -1193,7 +1534,90 @@ export class MigratorKit {
     }
 
     logger.success(`✔ Imported ${records.length} record(s) from "${source}" → "${target}"`);
-    return { source, target, imported: records.length, skipped, dryRun, rows };
+    return { source, target, imported: records.length, skipped, notInRepo, dryRun, rows };
+  }
+
+  /**
+   * Move this repo's records that were written before it had a namespace into
+   * its namespace (`mmk namespace adopt`). Only records whose filename is in
+   * this repo's migrations directory move; everything else stays in the default
+   * namespace. Works within the current `migrationsCollection` only.
+   *
+   * @throws {@link InvalidArgumentError} when no `namespace` is configured
+   */
+  async adopt(options: AdoptOptions = {}): Promise<AdoptResult> {
+    const config = await this.ensureConfig();
+    if (config.namespace === undefined) {
+      throw new InvalidArgumentError(
+        explain('Set a namespace before adopting — adopt moves records into it', [
+          'This repo has no "namespace" configured',
+          "Add one to this repo's config file, e.g. namespace: 'orders-api' (or set MMK_NAMESPACE)",
+          'Then preview: mmk namespace adopt --dry-run',
+        ]),
+        {},
+      );
+    }
+    await this.connect();
+    this.announceNamespace();
+    return runWithLock(
+      this.buildLock(),
+      { logger: this.logger, ...(options.noLock ? { noLock: true } : {}) },
+      () => this.runAdopt(config.namespace as string, options.dryRun ?? false),
+    );
+  }
+
+  private async runAdopt(namespace: string, dryRun: boolean): Promise<AdoptResult> {
+    const db = this.requireDb();
+    const changelog = this.requireChangelog();
+    const logger = this.logger;
+
+    const files = new Set(this.listMigrationFiles());
+    const unnamespaced = await changelog.getUnnamespaced(db);
+    const matching = unnamespaced.filter((record) => files.has(record.name));
+    const leftInDefault = unnamespaced.length - matching.length;
+
+    // executedBy / appliedAt / service are review hints: if two repos once used
+    // the same filename, only one record exists and the first adopter takes it.
+    const rows: AdoptRow[] = matching.map((record) => ({
+      file: record.name,
+      status: record.status,
+      batch: record.batch,
+      appliedAt: record.appliedAt,
+      executedBy: record.executedBy,
+      ...(record.service ? { service: record.service } : {}),
+    }));
+    const result = (adopted: number): AdoptResult => ({
+      namespace,
+      rows,
+      adopted,
+      leftInDefault,
+      dryRun,
+    });
+
+    if (matching.length === 0) {
+      logger.info(
+        `Nothing to adopt — no record without a namespace matches a file in ${this.migrationsPath()}`,
+      );
+      return result(0);
+    }
+    if (dryRun) {
+      logger.info(
+        `◎ Dry-run  Would adopt ${matching.length} record(s) into namespace ${quote(namespace)}`,
+      );
+      return result(0);
+    }
+
+    const adopted = await changelog.adoptUnnamespaced(
+      db,
+      matching.map((record) => record.name),
+    );
+    logger.success(`✔ Adopted ${adopted} record(s) into namespace ${quote(namespace)}`);
+    if (leftInDefault > 0) {
+      logger.dim(
+        `${leftInDefault} record(s) without a namespace were left as they are — no file with that name is in this repo (deleted long ago, or another repo's)`,
+      );
+    }
+    return result(adopted);
   }
 
   /**

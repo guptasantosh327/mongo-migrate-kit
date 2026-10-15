@@ -1,122 +1,117 @@
-# Frequently Asked Questions
+---
+title: FAQ
+description: Answers to common questions about MongoDB migrations with mongo-migrate-kit, including running one migration, rolling back, TypeScript, Mongoose, transactions, CI and versions.
+---
 
-Quick answers to the most common questions about running MongoDB migrations with
-`mongo-migrate-kit`.
+# FAQ
 
 ## What is mongo-migrate-kit?
 
-`mongo-migrate-kit` is a production-grade MongoDB migration toolkit for Node.js and TypeScript. It
-runs versioned `up`/`down` migration files against MongoDB, with single-file runs, real rollbacks,
-dry-run previews, transactions, checksums, lifecycle hooks, and a native concurrency lock — exposed
-through the `mmk` CLI and a fully-typed programmatic API.
+A tool for running database migrations on MongoDB from Node.js. You write small files with an `up`
+and a `down` function, and the `mmk` command runs them in order, records what ran, and can roll any
+of them back. It also has a JavaScript API for running migrations from your own code.
 
-## Is mongo-migrate-kit a good migrate-mongo alternative?
+## How is it different from migrate-mongo?
 
-Yes. It's a drop-in alternative to [`migrate-mongo`](https://github.com/seppevs/migrate-mongo) that
-keeps the same `up`/`down`/`create`/`status` mental model and adds what the older tool lacks:
-single-file runs, rollback of any batch/file/last-N, dry-run previews, checksums, lifecycle hooks,
-and first-class TypeScript. You can adopt an existing migrate-mongo changelog with
-[`mmk import`](/commands/import) — no re-running migrations. See
-[Migrating from migrate-mongo](/guide/migrate-mongo).
+They work the same way at heart, so the switch is easy. mmk adds: running a single file, rolling
+back an older batch or one file by name, dry runs, `redo`, a lock that's on by default, checksums
+that stop you rolling back edited code, hooks, and a history that keeps rolled-back records. You
+can bring an existing migrate-mongo history over with `mmk import`. See
+[Moving from migrate-mongo](/guide/migrate-mongo).
 
-## How do I run a single MongoDB migration?
+## How do I run just one migration?
 
-Pass the filename to `up`:
+Pass the file name:
 
 ```bash
-mmk up 20260605120000-add-users-index.js
+npx mmk up 20261015110000-rename-user-name.js
 ```
 
-Most tools only run *all* pending migrations; `mmk` lets you run exactly one. See
-[`mmk up`](/commands/up).
-
-## How do I roll back a MongoDB migration in Node.js?
-
-`mmk down` reverts the last batch. You can also revert a specific batch, the last N migrations, or a
-single file:
+## How do I roll back a migration?
 
 ```bash
-mmk down                 # roll back the last batch
-mmk down --batch 3       # roll back a specific batch
-mmk down --steps 2       # roll back the last 2 migrations
-mmk down <file>          # roll back one migration
+npx mmk down                 # the last batch (the last `mmk up` run)
+npx mmk down <file>          # one file
+npx mmk down --batch 3       # batch 3
+npx mmk down --steps 2       # the last two files, whatever their batch
 ```
 
-Rollbacks never delete history — the record is marked `reverted`. See [`mmk down`](/commands/down).
+Add `dry-run` in front (`npx mmk dry-run down`) to see what would happen first. The
+[rollback picture](/guide/concepts#batches) shows the difference.
 
-## Does mongo-migrate-kit support TypeScript?
+## Does rolling back delete the record?
 
-Yes — TypeScript is first-class, with a fully-typed migration context and config. On **Node ≥ 22.18**
-`.ts` migrations load natively with zero setup. On older Node, run `mmk` under a TypeScript loader
-like `tsx`, or author migrations as `.js` (which work on Node 18+). `mmk` doesn't bundle a loader —
-it uses your installed Node. See
-[Running TypeScript migrations](/guide/writing-migrations#running-typescript-migrations).
+No. The record's `status` becomes `reverted` and it gets a `revertedAt` date. You can always see the
+full history in `_mmk_migrations`.
 
-## How do I write a MongoDB migration?
+## Does it work with TypeScript?
 
-Export an `up` and a `down` function:
-
-```ts
-import type { MigrationContext } from 'mongo-migrate-kit';
-
-export async function up({ db }: MigrationContext): Promise<void> {
-  await db.collection('users').createIndex({ email: 1 }, { unique: true });
-}
-
-export async function down({ db }: MigrationContext): Promise<void> {
-  await db.collection('users').dropIndex('email_1');
-}
-```
-
-Generate the scaffold with `mmk create <name>`. See [Writing Migrations](/guide/writing-migrations).
-
-## Can I run MongoDB migrations in a transaction?
-
-Yes. Export `useTransaction = true` from a migration (or set it globally in config) and `mmk` wraps
-it in a MongoDB session + transaction — commit on success, abort on error. The changelog "applied"
-record is written **inside the same transaction**, so the migration and its bookkeeping commit
-atomically (a crash can't leave a committed-but-unrecorded migration that re-runs next deploy).
-Requires a replica set; on a standalone, `mmk` fails fast with `TRANSACTIONS_UNSUPPORTED` before
-running anything. See [Transactions](/guide/transactions).
-
-## How do I preview migrations before running them?
-
-Use a dry run — it computes exactly what would run and touches nothing:
-
-```bash
-mmk dry-run up
-```
-
-See [`mmk dry-run`](/commands/dry-run).
-
-## How do I run MongoDB migrations in CI/CD?
-
-Run `mmk up` as a deploy step, and gate deploys with `mmk status --check` (exits non-zero when
-migrations are pending). Every data command supports `--json` for machine-readable output. There are
-GitHub Actions and Docker recipes in [CI/CD & Deployment](/guide/ci-cd).
+Yes. Write `.ts` migrations and import the `MigrationContext` type for full typing. On Node 22.18 or
+newer they run as they are. On older Node, run mmk with a loader such as `tsx`, or write `.js` files.
+See [Writing migrations → TypeScript](/guide/writing-migrations#typescript).
 
 ## Does it work with Mongoose?
 
-Yes. Pass your Mongoose instance in config and it's available as `ctx.mongoose` inside migrations.
-Mongoose is an optional peer dependency — you only need it if your migrations use Mongoose models.
+Yes. Pass your Mongoose instance in the config (`mongoose: mongoose`) and it shows up as
+`ctx.mongoose` in your migrations. That said, it's usually better to use `ctx.db` directly: your
+Mongoose models change over time, and a migration should keep working the way it did when you wrote
+it.
 
-## Can I run migrations without a config file?
+## Do I need a config file?
 
-Yes. Every option has an `MMK_*` environment variable, so exporting `MMK_URI` and `MMK_DB` is enough
-to run — no config file required. See [Configuration](/guide/configuration).
+No. `MMK_URI` and `MMK_DB` in the environment (or in `.env`) are enough. See
+[Configuration](/guide/configuration).
 
-## How does it prevent two deploys running migrations at once?
+## Can a migration run in a transaction?
 
-`mmk` acquires an atomic lock in MongoDB before writing, so concurrent runs can't collide. The lock
-auto-expires and renews on a heartbeat during long migrations. A stuck lock from a crashed run can be
-cleared with [`mmk unlock`](/commands/unlock).
+Yes. Add `export const useTransaction = true` to the file and pass `session` to each database call.
+If the migration throws, everything it wrote is rolled back, and the history record is only saved if
+the migration commits. You need a replica set or a sharded cluster (Atlas is always one). See
+[Transactions](/guide/transactions).
 
-## What Node.js and MongoDB versions are required?
+## What happens if two deploys run migrations at the same time?
 
-Node.js **≥ 18** and MongoDB **≥ 5.0**. `mongoose` (≥ 7) is optional.
+One gets the lock and runs. The other stops straight away with `LOCK_ALREADY_HELD` and says who has
+the lock. If you run migrations on app start, `runMigrations({ onLockHeld: 'wait' })` makes the
+others wait their turn. See [How it works → The lock](/guide/concepts#the-lock).
 
-## Is it free and open source?
+## What if a deploy dies halfway and leaves the lock behind?
 
-Yes — `mongo-migrate-kit` is MIT-licensed and free to use. The source is on
-[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit), and it's published on
-[npm](https://www.npmjs.com/package/mongo-migrate-kit).
+It frees itself after `lockTTLSeconds` (60 seconds by default). If you can't wait, `npx mmk unlock`
+removes it after showing you who held it.
+
+## Can I see what will run before it runs?
+
+Yes: `npx mmk dry-run up`. It reads the database but never writes, and doesn't take the lock, so
+it's safe against production.
+
+## How do I use it in CI?
+
+Run `npx mmk up` as a step before the app deploys. Use `npx mmk status --check` to fail a job when
+migrations are pending, and `--json` when a script needs to read the result. See
+[Deploying and CI](/guide/ci-cd).
+
+## Can I run migrations when my app starts?
+
+Yes, with `runMigrations()`. It opens a connection, runs what's pending, and always closes the
+connection. See [Running from your code](/guide/api).
+
+## Several services share one database. Will they clash?
+
+Not if each repo sets its own `namespace`. Each one then sees only its own history, and they all take
+turns on one lock. See [Sharing a database](/guide/shared-database).
+
+## Can I migrate several databases (one per customer)?
+
+Yes. Run mmk once per database, changing `--db` (or `MMK_DB`) each time, or loop over your tenants
+in code and call `runMigrations({ dbName })` for each one. Each database keeps its own history.
+
+## Which versions does it need?
+
+Node.js 18 or newer, the `mongodb` driver 5 or newer, and MongoDB server 4.2 or newer. Mongoose 7 or
+newer if you use it. Transactions need a replica set or sharded cluster.
+
+## Is it free?
+
+Yes. It's MIT-licensed. The code is on [GitHub](https://github.com/guptasantosh327/mongo-migrate-kit)
+and the package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit).

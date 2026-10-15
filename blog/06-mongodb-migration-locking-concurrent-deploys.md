@@ -1,137 +1,124 @@
 <!--
 SEO target keyword: "mongodb migration lock concurrent deploys" / "prevent concurrent migrations"
-Meta description: Two deploys running migrations at the same time can corrupt your database. Here's
-how a MongoDB-native distributed lock prevents it — with TTLs, stale-lock reclaim, and heartbeats.
+Meta description: Two deploys running migrations at once can leave MongoDB in a mess. How a lock
+stored in MongoDB prevents it, and the three cases a simple lock gets wrong: crashes, races and long
+migrations.
+Published copy: docs/blog/mongodb-migration-locking-concurrent-deploys.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
-# Stop Concurrent Deploys From Corrupting Your Database: MongoDB Migration Locking
+# Locking MongoDB migrations so two deploys can't collide
 
-Here's a bug that doesn't show up in development and is brutal in production: **two things run your
-migrations at the same time.**
+Here's a bug you'll never see in development: **two things run your migrations at the same time.**
 
-Two CI jobs fire on a retry. A rolling deploy spins up two app instances that both run migrations on
-boot. A teammate runs `up` locally against the shared staging DB while the pipeline does the same.
-Whatever the cause, two processes now race to apply the same pending migration — and MongoDB has no
-opinion about that. Both can run. You can end up with the same index built twice, the same data
-transformed twice, or a half-applied mess that matches no one's mental model.
+A CI job gets retried while the first attempt is still running. A deploy starts two app instances
+that both migrate on boot. A teammate runs `up` against staging while the pipeline does the same.
+Two processes now race to apply the same pending migration, and MongoDB is happy to let them. You can
+end up with the same data transformed twice, or a half-applied state that matches nobody's picture
+of the database.
 
-The fix is a **migration lock**: a guarantee that only one migration run touches the database at a
-time. This is what it is, and how it works in **mongo-migrate-kit**.
+The fix is a lock: only one migration run may touch a database at a time. This post explains how
+that works in mongo-migrate-kit, and the three places where a simple lock goes wrong.
 
-## The naive lock (and why it's not enough)
+## The simple lock
 
-The obvious approach: keep a `_locks` collection, write a "locked" document before running, delete
-it after. While it exists, nobody else may run.
+Keep a `_locks` collection. Before running, write a "locked" document. When done, delete it. While
+it exists, nobody else runs.
 
-The atomic version uses `findOneAndUpdate` with `upsert: true` as a test-and-set — MongoDB
-guarantees only one writer wins the upsert, so only one process gets the lock. Good start. But a
-naive lock has three holes, and each one is a real incident waiting to happen.
+To make "take the lock" safe when two processes try at the same instant, it has to be a single
+atomic operation. MongoDB gives you that with `findOneAndUpdate` and `upsert: true`: exactly one
+writer wins. Good start. But this version has three holes.
 
-### Hole 1: the crashed holder (stale locks)
+### Hole 1: the holder crashes
 
-A process acquires the lock and then **dies** — OOM, `kill -9`, a crashed container. The lock
-document is still sitting there. Now nobody can ever run migrations again until a human logs in and
-deletes it by hand. You've traded a race condition for a deadlock.
+A process takes the lock and then dies: out of memory, `kill -9`, a cancelled CI job. The lock
+document is still there. Nobody can run migrations until a person deletes it. You've swapped a race
+for a deadlock.
 
-**The fix is a TTL.** Each lock records `lockedAt`. A lock is only respected if it's *fresh* —
-within `lockTTLSeconds` (default 60). Acquisition logic:
+**Fix: an expiry time.** The lock says when it expires. A lock past that time counts as abandoned,
+and the next run can take it. In mmk the default is 60 seconds (`lockTTLSeconds`), and the time is
+checked with the database server's clock, so a laptop or runner with a wrong clock can't get it
+wrong.
 
-```text
-if a lock exists AND lockedAt is within the TTL  → someone is really running → refuse
-otherwise (no lock, or it's stale)               → take it
-```
+If you don't want to wait, `mmk unlock` shows who holds the lock and asks before removing it.
 
-A crashed holder's lock goes stale after the TTL and the next run reclaims it automatically. No
-human required. If you do want a human in the loop, `mmk unlock` shows you who holds it and releases
-it on confirmation.
+### Hole 2: two processes reclaim the same expired lock
 
-### Hole 2: the stale-reclaim race
+The expiry fixes the deadlock but opens a smaller race. Two processes look at the same expired lock
+at the same moment. Both think "it's abandoned, I'll take it". Both writes succeed. Now both believe
+they hold the lock.
 
-The TTL fixes the deadlock but opens a subtler race. Two processes both see the *same* stale lock at
-the same instant. Both decide "it's stale, I'll take it." Both upserts succeed. Now **both think
-they hold the lock** — exactly the concurrency you were trying to prevent.
+**Fix: an owner token, and read it back.** Each attempt writes a fresh random `owner` value, then
+reads the lock back. Only one write can be the last one, so only one process sees its own token. The
+other sees someone else's and backs off.
 
-The fix is a **per-acquire owner token**. Every acquisition writes a fresh random `owner` value into
-the lock document, then **reads it back**. Because the upsert is last-writer-wins, only one
-process's token survives. The winner reads back its own token and proceeds; the loser reads back a
-*different* token and knows it lost — it refuses instead of running. The readback is what closes the
-race.
-
-```text
-{ _id: 'mmk_lock', lockedAt, pid, host, executedBy, owner: '<random-per-acquire-token>' }
-```
-
-Release is then scoped to that token — `deleteOne({ _id, owner })` — so a process can never delete a
-lock that has since been legitimately reclaimed by someone else.
+Releasing works the same way: mmk deletes the lock only if `owner` is still its own token. So a
+process can never delete a lock that someone else has since taken.
 
 ### Hole 3: the long migration
 
-The TTL that saves you from crashed holders can also betray you. Say your TTL is 60 seconds and you
-have a migration that backfills a large collection and takes **four minutes**. At the 60-second mark
-your *own* lock looks stale to everyone else — and another process can reclaim it and start running
-**while your migration is still going.** The medicine became the disease.
+The expiry that saves you from crashed holders can also bite you. Your TTL is 60 seconds and you have
+a backfill that takes four minutes. After a minute, your own lock looks abandoned, and another run
+can take it **while your migration is still going.**
 
-The fix is a **heartbeat**. While a migration runs, the lock holder renews `lockedAt` every
-`TTL/2` seconds (an `updateOne` scoped to its own `owner`). A four-minute migration keeps its lock
-fresh the whole way through, so it's never stolen mid-run. The heartbeat timer is `unref`-ed (it
-never keeps the process alive on its own) and cleared in a `finally` block. And if a renewal ever
-discovers it *no longer* owns the lock, it logs a loud warning — that's a signal something else
-started, and you want to know.
+**Fix: a heartbeat.** While a migration runs, mmk pushes the lock's expiry forward every half TTL.
+A four-minute migration keeps its lock the whole way through. If a renewal ever finds the lock is no
+longer its own, mmk prints a loud warning, because that means something else started.
 
-## What this looks like in practice
+## What it looks like
 
-You don't configure any of this for the common case — it's on by default:
+You don't set any of this up. It's on for every `mmk up`, `down`, `redo` and `import`. Here's two
+deploys starting two seconds apart:
 
-```bash
-mmk up          # acquires the lock, runs, releases it in a finally block — always
-```
+![Two terminals: deploy A runs a slow migration; deploy B starts two seconds later and is stopped with LOCK_ALREADY_HELD naming the host, pid and user; when A finishes, B runs again and finds nothing to migrate](https://mongo-migrate-kit.vercel.app/gifs/lock.gif)
 
-If a second run starts while the first holds the lock, it fails fast and tells you who's holding it,
-instead of quietly racing:
+The second one stops at once and says who has the lock, since when, and when it frees itself if the
+holder crashed:
 
 ```text
-✖ Lock already held by pid 4821 on ci-runner-7 (locked 3s ago)
+✖ LOCK_ALREADY_HELD: The migration lock is held by the default namespace
+  Holder: host deploy-a, pid 16152, user asha, since 2026-10-15 22:24:21 (2s ago)
+  Why: all repos on this database take turns — one migration run at a time
+  If the holder crashed, the lock frees itself at 2026-10-15 22:25:21; `mmk unlock` releases it now (check the holder first)
+  Try: run again when it finishes (app start: runMigrations({ onLockHeld: "wait" }))
 ```
 
-Tune the staleness window if your migrations are long:
-
-```js
-// mmk.config.js
-export default { lockTTLSeconds: 300 };   // 5 minutes
-```
-
-For multi-instance deploys where you *expect* a brief collision (two app instances booting at once),
-the programmatic API can **wait** for the lock instead of failing — see
+When several app instances boot together and you'd rather they wait than fail, the programmatic API
+can wait for the lock. See
 [running migrations on startup](./07-run-migrations-on-startup-serverless.md).
 
-And the escape hatch for local solo dev, used loudly and on purpose:
+For your own machine, where nothing else is running, you can skip the lock. mmk warns you when you
+do:
 
-```bash
-mmk up --no-lock   # skips the lock — prints a warning — never do this against shared infra
+```text
+$ npx mmk up --no-lock
+⚠ Running without a lock (--no-lock) — concurrent runs are unsafe
 ```
 
-## The takeaway
+Don't use that in CI.
 
-A migration lock isn't a nice-to-have once more than one thing can deploy your app. The detail that
-separates a real lock from a toy one is how it handles the unhappy paths: **TTL** for crashed
-holders, an **owner token + readback** for the reclaim race, and a **heartbeat** for long
-migrations. Get those three right and "two deploys at once" stops being a way to corrupt your
-database.
+## Summary
+
+A lock stops mattering only when exactly one thing can ever deploy your app. Past that point, it's
+the difference between a retried job being harmless and being a mess. What separates a real lock
+from a toy one is the unhappy paths: an **expiry** for crashed holders, an **owner token** for the
+reclaim race, and a **heartbeat** for long migrations.
 
 ## Try it
 
 ```bash
 npm install mongo-migrate-kit mongodb
-mmk up          # locked by default — safe under concurrent deploys
+npx mmk up
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app** · npm/GitHub: **mongo-migrate-kit**.
+The [How it works](https://mongo-migrate-kit.vercel.app/guide/concepts#the-lock) page has more on the lock. The package is on
+[npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 
 ### Related reading
 
-- [Running MongoDB Migrations on App Startup and Serverless](./07-run-migrations-on-startup-serverless.md)
-  — where the "wait for the lock" mode earns its keep.
-- [Why I Built a New MongoDB Migration Tool](./01-why-i-built-mongo-migrate-kit.md) — a CI race is
-  one of the gaps that pushed me to build this.
+- [Running MongoDB migrations on app start and in serverless](./07-run-migrations-on-startup-serverless.md),
+  where waiting for the lock is useful.
+- [Why I built a new MongoDB migration tool](./01-why-i-built-mongo-migrate-kit.md). A CI race was one of
+  the reasons.

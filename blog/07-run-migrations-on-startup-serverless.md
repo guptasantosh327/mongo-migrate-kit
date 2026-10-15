@@ -1,135 +1,123 @@
 <!--
 SEO target keyword: "run mongodb migrations on app startup nodejs" / "run migrations serverless"
-Meta description: How to run MongoDB migrations safely from your app's startup code or a serverless
-function — without leaking connections or letting parallel instances race.
+Meta description: How to run MongoDB migrations from your Node.js app's start-up code or a
+serverless function without leaking connections, racing other instances, or serving traffic too
+early.
+Published copy: docs/blog/run-migrations-on-startup-serverless.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
-# Running MongoDB Migrations on App Startup and in Serverless (Safely)
+# Running MongoDB migrations on app start and in serverless
 
-There's a moment in most projects where someone says: "can't we just run the migrations when the app
-boots?" No separate deploy step, no remembering to run `mmk up` — the app brings the schema up to
-date itself.
+At some point in most projects someone asks: "can't the app just run the migrations when it starts?"
+No separate deploy step, nothing to remember. The app brings the database up to date itself.
 
-It's a reasonable wish. It's also where a lot of people quietly create bugs: leaked database
-connections, migrations racing across parallel instances, or a half-migrated app serving traffic.
-Here's how to do it properly.
+It's a fair idea. It's also an easy place to create quiet bugs. Here's how to do it without them.
 
-## The trap with hand-rolling it
+## What goes wrong when you write it yourself
 
-The naive version looks fine:
+The first version usually looks like this:
 
 ```js
 const client = await MongoClient.connect(uri);
-// ...run migrations somehow...
-// 🔥 forgot to disconnect, or didn't disconnect on the error path
+// ...run the migrations...
+// and if one throws, is the client ever closed?
 ```
 
-The problems pile up fast:
+Three problems tend to show up:
 
-- **Connection leaks.** If a migration throws, do you still close the client? In serverless, a
-  leaked connection per cold start will exhaust your Atlas connection limit by lunchtime.
-- **Parallel instances racing.** A rolling deploy or a serverless burst spins up *N* instances at
-  once. All *N* hit the migration code simultaneously. Without coordination, they race (see
-  [migration locking](./06-mongodb-migration-locking-concurrent-deploys.md)).
-- **Serving traffic mid-migration.** You want the app to wait until migrations are *done* before it
-  accepts requests, and to fail loudly if they didn't apply.
+- **Leaked connections.** If a migration throws and the client isn't closed, every failed start
+  leaks a connection. In serverless, with a cold start every few minutes, that can use up your
+  Atlas connection limit surprisingly fast.
+- **Instances racing.** A deploy starts five instances at once. All five reach the migration code
+  together and try to apply the same migration. (More on that in the
+  [locking post](./06-mongodb-migration-locking-concurrent-deploys.md).)
+- **Serving too early.** You want the app to accept traffic only after migrations finish, and to
+  refuse to start if they failed.
 
-You can solve all of these by hand. You shouldn't have to.
+You can handle all of that by hand. You shouldn't have to.
 
-## The blessed entry point: `runMigrations()`
+## runMigrations()
 
-**mongo-migrate-kit** ships a programmatic API designed for exactly this. One call that opens its
-own connection, runs everything pending, and **always disconnects in a `finally`** — leak or no
-leak, error or success.
+mongo-migrate-kit has one function for this. It opens its own connection, runs whatever is pending,
+and always closes the connection, whether things worked or not.
 
 ```js
 import { runMigrations } from 'mongo-migrate-kit';
 
-const summary = await runMigrations({
-  uri: process.env.MONGO_URI,
-  dbName: process.env.MONGO_DB,
-});
-
-console.log(`Applied ${summary.applied.length} migration(s)`);
+await runMigrations({ uri: process.env.MONGO_URL, dbName: 'shop' });
+app.listen(3000); // only after the database is ready
 ```
 
-Put that at the top of your server bootstrap, *before* you start listening:
+If a migration fails, `runMigrations` throws and the app doesn't start. Your platform won't send
+traffic to an instance running against a half-migrated database, which is what you want.
 
-```js
-await runMigrations({ uri, dbName });   // schema is now up to date, or this threw
-app.listen(3000);                       // only now do we accept traffic
-```
+## Several instances: wait instead of failing
 
-If a migration fails, `runMigrations` throws — your boot fails fast and your orchestrator doesn't
-route traffic to a half-migrated instance. That's the behavior you want.
-
-## Parallel instances: wait, don't fail
-
-Here's the part that matters for rolling deploys and serverless bursts. When five instances boot at
-once, they all call `runMigrations`. One wins the lock and runs the migrations. The other four hit a
-held lock — and you do **not** want four crashed boots.
-
-So tell them to wait:
+Five instances boot together. One gets the lock and runs the migrations. The other four find the lock
+taken, and by default they throw. Four crashed boots is not what you want. So tell them to wait:
 
 ```js
 await runMigrations(
-  { uri, dbName },
+  { uri: process.env.MONGO_URL, dbName: 'shop' },
   { onLockHeld: 'wait', lockWaitTimeoutMs: 60_000 },
 );
 ```
 
-Now the four losers poll until the winner finishes, see there's nothing left to apply, and continue
-booting cleanly. Set `lockWaitTimeoutMs` comfortably longer than your slowest migration. The
-returned summary tells you which instance actually did the work:
+The waiting instances check every half second. When the first one finishes, they see nothing is
+pending and carry on. Set `lockWaitTimeoutMs` longer than your slowest migration.
+
+The result tells you what happened on each instance:
 
 ```js
 const { applied, upToDate, waited } = await runMigrations(/* ... */);
-// applied: what THIS call ran (empty on the instances that waited)
+// applied:  what this call ran (empty on the instances that waited)
 // upToDate: true if nothing was pending
-// waited: true if this instance queued behind the lock holder
+// waited:   true if this instance waited for another one
 ```
 
-## Serverless: the readiness probe
+## Serverless: check, don't run
 
-In a serverless function you often don't want to *run* migrations on every cold start — you want to
-**check** whether the database is up to date and fail fast if a deploy forgot to migrate. There's a
-read-only probe for that:
+In a serverless function you often don't want to run migrations on every cold start. You want to
+check that the database is up to date, and fail fast if a deploy forgot to migrate. There's a
+read-only function for that:
 
 ```js
 import { pendingMigrations } from 'mongo-migrate-kit';
 
-const pending = await pendingMigrations({ uri, dbName });
+const pending = await pendingMigrations({ uri: process.env.MONGO_URL, dbName: 'shop' });
 if (pending.length > 0) {
-  throw new Error(`Database is behind: ${pending.length} migration(s) pending`);
+  throw new Error(`Database is ${pending.length} migration(s) behind`);
 }
 ```
 
-It connects, lists what's pending, and disconnects — no lock, no writes. Wire it into a health
-check or a function's init and you'll never again discover at runtime that a deploy shipped code
-expecting a schema that was never migrated.
+It connects, reads, and disconnects. No lock, no writes. Put it in a health check, and you'll find
+out at deploy time, not from a customer, that code shipped expecting a schema that doesn't exist yet.
 
-## A note on the connection itself
+Long backfills don't belong in a function with a 30-second timeout anyway. Run those from a
+[pipeline step](./08-mongodb-migrations-ci-cd-github-actions.md).
 
-`runMigrations` builds its `MongoClient` with sane production defaults — sensible
-server-selection/connect timeouts, `retryWrites`, and majority write concern on the collections
-that need durability (the lock and the changelog) so mutual exclusion and your audit trail survive a
-primary failover. If you need TLS, custom auth, or different timeouts, pass `mongoClientOptions` and
-they're merged over the defaults. You're not giving up control to get the convenience.
+## The connection settings
 
-## The whole pattern
+`runMigrations` creates the MongoDB client with sensible defaults: 10-second connect and server
+selection timeouts, so a wrong address fails quickly, and retryable writes. mmk's own history and
+lock are written with `w: 'majority'`, so they survive a primary failover. Your migrations keep the
+write concern from your connection string. For TLS, auth options or different timeouts, pass
+`mongoClientOptions` and they're applied on top.
+
+## All together
 
 ```js
 import { runMigrations, pendingMigrations } from 'mongo-migrate-kit';
 
-// On boot — run, wait for the lock if another instance is migrating:
-await runMigrations({ uri, dbName }, { onLockHeld: 'wait', lockWaitTimeoutMs: 60_000 });
+// on start: run, and wait if another instance is already migrating
+await runMigrations(
+  { uri: process.env.MONGO_URL, dbName: 'shop' },
+  { onLockHeld: 'wait', lockWaitTimeoutMs: 60_000 },
+);
 
-// In a health check — read-only "are we up to date?"
-const pending = await pendingMigrations({ uri, dbName });
+// in a health check: is the database up to date? (read-only)
+const pending = await pendingMigrations({ uri: process.env.MONGO_URL, dbName: 'shop' });
 ```
-
-Connection lifecycle handled. Parallel boots handled. No leaks. No racing. No serving traffic
-against a schema that isn't there yet.
 
 ## Try it
 
@@ -137,14 +125,15 @@ against a schema that isn't there yet.
 npm install mongo-migrate-kit mongodb
 ```
 
-Then drop `runMigrations` into your bootstrap. Recipes for app-start, multi-instance, and serverless
-are in the docs: **https://mongo-migrate-kit.vercel.app** · npm/GitHub: **mongo-migrate-kit**.
+More examples are on the [Running from your code](https://mongo-migrate-kit.vercel.app/guide/api) page. The package is on
+[npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 
 ### Related reading
 
-- [Stop Concurrent Deploys From Corrupting Your Database](./06-mongodb-migration-locking-concurrent-deploys.md)
-  — the lock that makes `onLockHeld: 'wait'` safe.
-- [MongoDB Migrations in CI/CD](./08-mongodb-migrations-ci-cd-github-actions.md) — the other common
-  place to run migrations: the pipeline.
+- [Locking MongoDB migrations so two deploys can't collide](./06-mongodb-migration-locking-concurrent-deploys.md),
+  the lock that makes waiting safe.
+- [MongoDB migrations in GitHub Actions](./08-mongodb-migrations-ci-cd-github-actions.md), the other
+  common place to run them.

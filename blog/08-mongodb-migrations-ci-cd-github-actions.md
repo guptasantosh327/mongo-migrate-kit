@@ -1,146 +1,152 @@
 <!--
 SEO target keyword: "mongodb migrations ci cd github actions" / "run migrations in pipeline"
-Meta description: A practical setup for running MongoDB migrations in CI/CD — a pending-check gate,
-machine-readable JSON output, dry-run previews, and locking that survives concurrent pipeline runs.
+Meta description: A practical GitHub Actions setup for MongoDB migrations: test every migration on
+pull requests, block deploys while migrations are pending, log the plan, and stay safe when two jobs
+overlap.
+Published copy: docs/blog/mongodb-migrations-ci-cd-github-actions.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
-# MongoDB Migrations in CI/CD: A Practical GitHub Actions Setup
+# MongoDB migrations in GitHub Actions
 
-Running migrations from your laptop is fine until it isn't. The moment more than one person ships,
-migrations belong in the pipeline — runnable the same way every time, gated, logged, and safe when
-two jobs fire at once.
+Running migrations from your laptop works until a second person starts shipping. After that,
+migrations belong in the pipeline: run the same way every time, logged, and safe when two jobs
+overlap.
 
-This is the setup I actually use, with **mongo-migrate-kit** (`mmk`). It's built for automation, so
-none of this is duct tape.
+This is the setup I use with mongo-migrate-kit (`mmk`). It's made of four small pieces.
 
-## The three things CI needs that interactive tools forget
+## 1. Test every migration on pull requests
 
-1. **A gate** — fail the build if code was merged that needs a migration nobody ran.
-2. **Machine-readable output** — so a step can parse what happened, not scrape a pretty table.
-3. **Safety under concurrency** — two pipeline runs must not race to migrate the same database.
-
-`mmk` has a first-class answer to each.
-
-## 1. The pending-migrations gate
-
-You want CI to *fail loudly* if someone ships code that expects a migration that hasn't been applied.
-`mmk status --check` exits non-zero when anything is pending:
-
-```bash
-mmk status --check    # exit 0 = up to date, exit 1 = something is pending
-```
-
-Drop that in a job that runs against staging (or a fresh test DB) and a "forgot to migrate" PR can't
-go green. The human-readable "N pending" line goes to stderr, so it's visible in logs without
-polluting any JSON you're capturing.
-
-## 2. JSON output for every command
-
-Pretty tables are for humans. Pipelines want structured data. Every DB-touching command takes
-`--json` and emits one clean JSON document on stdout (logs and the spinner are routed to stderr, so
-stdout stays a single parseable payload):
-
-```bash
-mmk up --json
-# [{"file":"20260101-add-index.js","status":"applied","duration":42,"batch":4}, ...]
-
-mmk status --json
-# [{"file":"...","status":"applied","batch":3,"appliedAt":"...","checksumOk":true}, ...]
-```
-
-On failure it emits `{ "error": { "code": "...", "message": "..." } }` and exits 1 — so your step
-can branch on the outcome instead of grepping. This is what makes it composable inside a pipeline.
-
-## 3. Preview before you touch production
-
-Before the production migration step runs, print the plan. `dry-run` writes nothing:
-
-```bash
-mmk dry-run up --json
-```
-
-Post that as a PR comment or a deploy-log line, and the exact set of migrations about to run against
-production is reviewable *before* it happens — not discovered afterward.
-
-## 4. Concurrency is already handled
-
-Two pipeline runs overlapping (a retry, a fast-follow merge) would otherwise race to migrate the same
-database. `mmk up` takes a MongoDB-native lock by default, so the second run fails fast with "lock
-already held" instead of racing. You don't configure anything — it's on. (The
-[locking deep-dive](./06-mongodb-migration-locking-concurrent-deploys.md) explains how it survives
-crashed jobs and long migrations.)
-
-## Putting it together: a GitHub Actions workflow
-
-A two-stage shape that works well: **gate on every PR**, **migrate on deploy to main**.
+The cheapest bugs to fix are the ones caught before merge. On every pull request, start an empty
+MongoDB, run all migrations from scratch, roll the newest one back, and run it again:
 
 ```yaml
-name: migrations
+# .github/workflows/migrations.yml
+name: Migrations
+on: pull_request
 
+jobs:
+  up-down-up:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports: ['27017:27017']
+    env:
+      MMK_URI: mongodb://localhost:27017
+      MMK_DB: ci_check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx mmk up              # everything applies on an empty database
+      - run: npx mmk down --steps 1  # the newest migration rolls back
+      - run: npx mmk up              # and applies again
+```
+
+This catches the usual mistakes: a typo in `down`, an index name that doesn't match, a migration that
+only works on a database that already has data in it.
+
+If your migrations use transactions, note that a plain `mongo` container is a standalone server,
+which can't run them. Start it as a single-node replica set instead.
+
+## 2. Log the plan, then migrate
+
+On a merge to `main`, print what's about to run, then run it. `dry-run` writes nothing, and having
+the plan in the job log is very useful when you look back at a deploy weeks later.
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy
 on:
-  pull_request:
   push:
     branches: [main]
 
 jobs:
-  # On every PR: fail if the branch needs a migration that isn't applied to staging.
-  check:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: npm ci
-      - name: Fail if migrations are pending
-        run: npx mmk status --check
-        env:
-          MMK_URI: ${{ secrets.STAGING_MONGO_URI }}
-          MMK_DB: ${{ secrets.STAGING_MONGO_DB }}
-
-  # On merge to main: preview, then apply to production.
   migrate:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # concurrency group = belt and braces on top of the DB lock
-    concurrency: production-migrations
+    concurrency: production-migrations   # don't start a second run while one is going
+    env:
+      MMK_URI: ${{ secrets.PROD_MONGO_URL }}
+      MMK_DB: shop
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with:
+          node-version: 22
       - run: npm ci
-      - name: Preview the plan
-        run: npx mmk dry-run up --json
-        env:
-          MMK_URI: ${{ secrets.PROD_MONGO_URI }}
-          MMK_DB: ${{ secrets.PROD_MONGO_DB }}
-      - name: Apply migrations
-        run: npx mmk up --json
-        env:
-          MMK_URI: ${{ secrets.PROD_MONGO_URI }}
-          MMK_DB: ${{ secrets.PROD_MONGO_DB }}
+      - run: npx mmk dry-run up
+      - run: npx mmk up
+
+  deploy:
+    needs: migrate        # the app only deploys if the migrations worked
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "deploy the app here"
 ```
 
-Connection details come from env vars (`MMK_URI`, `MMK_DB`) — **no config file is required**, which
-is exactly what you want in CI where secrets live in the runner's environment, not the repo.
+The connection comes from secrets through environment variables, so there's no config file and no
+connection string in the repo.
 
-## Loading secrets at runtime
+## 3. Block a deploy that would run ahead of its migrations
 
-If your connection string lives in AWS Secrets Manager, GCP, or Vault rather than a plain env var,
-your config file can `export default` an async function that fetches it at runtime — the library
-ships no cloud SDKs, you bring your own inside the function. `mmk init --secret-provider` scaffolds
-that for you. Handy when CI shouldn't see the raw URI at all.
+If migrations run somewhere else (a separate job, a manual step), you can still make the app deploy
+refuse to go ahead while anything is pending. `mmk status --check` exits `1` in that case:
 
-## The shortlist
+![Terminal titled CI deploy job: mmk status --check prints the status table with one pending migration, then 1 pending migration(s), and the pipeline echoes Deploy blocked](https://mongo-migrate-kit.vercel.app/gifs/ci-check.gif)
+
+```yaml
+      - name: Stop if migrations are pending
+        run: npx mmk status --check
+```
+
+## 4. Two jobs at once are already handled
+
+A retried job and a fresh merge can overlap. The `concurrency` setting above stops GitHub from
+running two migrate jobs together, but it only knows about this one workflow. mmk's own lock lives
+in the database, so it also covers another workflow, another repo, or someone running `up` by hand.
+The second run stops and names whoever holds the lock. (How the lock works is in
+[this post](./06-mongodb-migration-locking-concurrent-deploys.md).)
+
+## Reading the output in a script
+
+When a step needs to act on the result, add `--json`. You get one JSON document on stdout, and the
+human-readable lines move to stderr:
 
 ```bash
-mmk status --check     # CI gate: exit 1 if anything is pending
-mmk dry-run up --json  # preview the plan, write nothing
-mmk up --json          # apply, structured output, locked by default
+npx mmk up --json
 ```
 
-Predictable, gated, parseable, and safe when two jobs collide. That's all CI ever wanted from
-migrations.
+```json
+[
+  {
+    "file": "20261012091500-backfill-order-status.js",
+    "status": "applied",
+    "duration": 265,
+    "batch": 2
+  }
+]
+```
+
+On failure you get `{ "error": { "code": "...", "message": "..." } }` and exit code `1`, so a script
+can check the code rather than search the text.
+
+## Connection strings from a secret manager
+
+If the connection string lives in AWS Secrets Manager, Google Secret Manager or Vault rather than a
+GitHub secret, your `mmk.config.js` can export an async function that fetches it at runtime.
+`npx mmk init --secret-provider` writes a starting point. See
+[Configuration](https://mongo-migrate-kit.vercel.app/guide/configuration#loading-the-connection-string-from-a-secret-manager).
+
+## The short version
+
+```bash
+npx mmk up && npx mmk down --steps 1 && npx mmk up   # on pull requests, against an empty database
+npx mmk dry-run up                                   # on deploy: log the plan
+npx mmk up                                           # then run it
+npx mmk status --check                               # anywhere: fail if something is pending
+```
 
 ## Try it
 
@@ -148,14 +154,12 @@ migrations.
 npm install mongo-migrate-kit mongodb
 ```
 
-Full CI/CD recipes (GitLab, CircleCI, secret managers) in the docs:
-**https://mongo-migrate-kit.vercel.app** · npm/GitHub: **mongo-migrate-kit**.
+More pipeline examples (Docker, Kubernetes jobs) are on the
+[Deploying and CI](https://mongo-migrate-kit.vercel.app/guide/ci-cd) page.
 
 ---
 
 ### Related reading
 
-- [Stop Concurrent Deploys From Corrupting Your Database](./06-mongodb-migration-locking-concurrent-deploys.md)
-  — why two pipeline runs can't trample each other.
-- [MongoDB Migration Best Practices](./09-mongodb-migration-best-practices.md) — the habits that keep
-  a migration history trustworthy over years.
+- [Locking MongoDB migrations so two deploys can't collide](./06-mongodb-migration-locking-concurrent-deploys.md)
+- [Habits that make MongoDB migrations safe](./09-mongodb-migration-best-practices.md)

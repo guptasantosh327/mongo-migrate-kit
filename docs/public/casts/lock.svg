@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="843" height="398" viewBox="0 0 843 398" role="img" aria-label="Two deploys start at once; the second one is stopped by the lock">
+<title>Two deploys start at once; the second one is stopped by the lock</title>
+<style>
+svg{font-family:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','DejaVu Sans Mono',monospace;font-size:14px}
+text{white-space:pre;fill:#d5dde3}
+.k{fill:#7f8b93}.r{fill:#ff7b72}.g{fill:#4fd27f}.y{fill:#e6b84f}.b{fill:#79b8ff}.m{fill:#d2a8ff}.c{fill:#5fd0dc}.w{fill:#f3f6f8}
+.d{fill-opacity:.62}.o{font-weight:700}
+.p{fill:#3ddc84;font-weight:700}.cm{fill:#7d8a92}
+.t{fill:#8a969e;font-size:12.5px}.lb{fill:#8a969e;font-size:12px}
+.cur{fill:#d5dde3;animation:blink 1.05s step-end infinite}
+@keyframes blink{0%{opacity:1}50%{opacity:0}}
+.sp{opacity:0;animation:spin .8s step-end infinite}
+@keyframes spin{0%{opacity:1}10%{opacity:0}100%{opacity:0}}
+
+@media (prefers-reduced-motion:reduce){.sc0{transform:translateY(-0px)}}
+.s0{opacity:0;animation:s0 19004ms step-end infinite}@keyframes s0{0%{opacity:0}2.631%{opacity:1}100%{opacity:1}}
+.ty1{opacity:0;animation:ty1 19004ms step-end infinite}@keyframes ty1{0%{opacity:0;transform:translateX(0)}2.631%{opacity:1;transform:translateX(0)}5.525%{opacity:1;transform:translateX(0);animation-timing-function:steps(10,end)}7.735%{opacity:1;transform:translateX(84px)}9.103%{opacity:0;transform:translateX(84px)}100%{opacity:0;transform:translateX(84px)}}
+.s2{opacity:0;animation:s2 19004ms step-end infinite}@keyframes s2{0%{opacity:0}9.103%{opacity:1}100%{opacity:1}}
+.s3{opacity:0;animation:s3 19004ms step-end infinite}@keyframes s3{0%{opacity:0}9.103%{opacity:1}12.524%{opacity:0}100%{opacity:0}}
+.s4{opacity:0;animation:s4 19004ms step-end infinite}@keyframes s4{0%{opacity:0}12.524%{opacity:1}45.148%{opacity:0}100%{opacity:0}}
+.s5{opacity:0;animation:s5 19004ms step-end infinite}@keyframes s5{0%{opacity:0}45.212%{opacity:1}100%{opacity:1}}
+.s6{opacity:0;animation:s6 19004ms step-end infinite}@keyframes s6{0%{opacity:0}71.585%{opacity:1}100%{opacity:1}}
+.sc1{animation:sc1 19004ms step-end infinite}@keyframes sc1{0%{transform:translateY(0)}77.899%{transform:translateY(-17px)}100%{transform:translateY(-17px)}}
+@media (prefers-reduced-motion:reduce){.sc1{transform:translateY(-17px)}}
+.s7{opacity:0;animation:s7 19004ms step-end infinite}@keyframes s7{0%{opacity:0}8.945%{opacity:1}100%{opacity:1}}
+.ty8{opacity:0;animation:ty8 19004ms step-end infinite}@keyframes ty8{0%{opacity:0;transform:translateX(0)}8.945%{opacity:1;transform:translateX(0)}11.840%{opacity:1;transform:translateX(0);animation-timing-function:steps(10,end)}14.050%{opacity:1;transform:translateX(84px)}15.418%{opacity:0;transform:translateX(84px)}100%{opacity:0;transform:translateX(84px)}}
+.s9{opacity:0;animation:s9 19004ms step-end infinite}@keyframes s9{0%{opacity:0}15.418%{opacity:1}100%{opacity:1}}
+.s10{opacity:0;animation:s10 19004ms step-end infinite}@keyframes s10{0%{opacity:0}15.418%{opacity:1}18.838%{opacity:0}100%{opacity:0}}
+.s11{opacity:0;animation:s11 19004ms step-end infinite}@keyframes s11{0%{opacity:0}18.901%{opacity:1}100%{opacity:1}}
+.s12{opacity:0;animation:s12 19004ms step-end infinite}@keyframes s12{0%{opacity:0}18.964%{opacity:1}100%{opacity:1}}
+.s13{opacity:0;animation:s13 19004ms step-end infinite}@keyframes s13{0%{opacity:0}19.028%{opacity:1}100%{opacity:1}}
+.s14{opacity:0;animation:s14 19004ms step-end infinite}@keyframes s14{0%{opacity:0}19.091%{opacity:1}100%{opacity:1}}
+.s15{opacity:0;animation:s15 19004ms step-end infinite}@keyframes s15{0%{opacity:0}19.154%{opacity:1}100%{opacity:1}}
+.s16{opacity:0;animation:s16 19004ms step-end infinite}@keyframes s16{0%{opacity:0}19.217%{opacity:1}100%{opacity:1}}
+.s17{opacity:0;animation:s17 19004ms step-end infinite}@keyframes s17{0%{opacity:0}52.094%{opacity:1}100%{opacity:1}}
+.ty18{opacity:0;animation:ty18 19004ms step-end infinite}@keyframes ty18{0%{opacity:0;transform:translateX(0)}52.094%{opacity:1;transform:translateX(0)}54.988%{opacity:1;transform:translateX(0);animation-timing-function:steps(10,end)}57.198%{opacity:1;transform:translateX(84px)}58.567%{opacity:0;transform:translateX(84px)}100%{opacity:0;transform:translateX(84px)}}
+.s19{opacity:0;animation:s19 19004ms step-end infinite}@keyframes s19{0%{opacity:0}58.567%{opacity:1}100%{opacity:1}}
+.s20{opacity:0;animation:s20 19004ms step-end infinite}@keyframes s20{0%{opacity:0}58.567%{opacity:1}61.987%{opacity:0}100%{opacity:0}}
+.s21{opacity:0;animation:s21 19004ms step-end infinite}@keyframes s21{0%{opacity:0}62.050%{opacity:1}100%{opacity:1}}
+.s22{opacity:0;animation:s22 19004ms step-end infinite}@keyframes s22{0%{opacity:0}77.899%{opacity:1}100%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.l,.cg,.sp{animation:none!important}.fin{opacity:1}.spl,.cg{opacity:0}}</style>
+<rect x=".5" y=".5" width="842" height="397" rx="10" fill="#0f1417" stroke="#2a3238"/>
+<path d="M10.5 .5h822a10 10 0 0 1 10 10v23.5h-842v-23.5a10 10 0 0 1 10-10z" fill="#1a2024"/>
+<circle cx="20" cy="17" r="6" fill="#ff5f57"/><circle cx="40" cy="17" r="6" fill="#febc2e"/><circle cx="60" cy="17" r="6" fill="#28c840"/>
+<text class="t" x="421.5" y="21.5" text-anchor="middle">~/shop-api</text>
+<rect x="0.5" y="34" width="841.4000000000001" height="26" fill="#151b1f"/>
+<text class="lb" x="18" y="51">Deploy A</text>
+<clipPath id="clip0"><rect x="0" y="60" width="842.4000000000001" height="93"/></clipPath>
+<g clip-path="url(#clip0)"><g class="sc0">
+<g class="l s0 fin"><text x="18" y="87"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk up</tspan></tspan></text></g>
+<g class="ty1 cg"><rect x="34.8" y="74" width="92.4" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="75" width="8.4" height="16"/></g>
+<g class="l s2 fin"><text y="104"><tspan x="18.0" class="d">Loaded config from mmk.config.js</tspan></text></g>
+<g class="l s3 spl"><text class="sp c" x="18" y="121" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="121" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="121" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="121" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="121" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="121" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="121" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="121" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="121" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="121" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="121">Connecting to MongoDB…</text></g>
+<g class="l s4 spl"><text class="sp c" x="18" y="121" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="121" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="121" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="121" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="121" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="121" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="121" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="121" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="121" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="121" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="121">Applying 20261015130000-backfill-order-totals.js…</text></g>
+<g class="l s5 fin"><text y="121"><tspan x="18.0" class="g">✔ Applied  20261015130000-backfill-order-totals.js   [6003ms]</tspan></text></g>
+<g class="l s6 fin"><text x="18" y="138"><tspan class="p">$</tspan><tspan x="34.8"><tspan></tspan></tspan></text></g>
+<g class="s6 cg"><rect class="cur" x="34.8" y="126" width="8.4" height="16"/></g>
+</g></g>
+<rect x=".5" y="156" width="842" height="1" fill="#2a3238"/>
+<rect x="0.5" y="157" width="841.4000000000001" height="26" fill="#151b1f"/>
+<text class="lb" x="18" y="174">Deploy B, two seconds later</text>
+<clipPath id="clip1"><rect x="0" y="183" width="842.4000000000001" height="212"/></clipPath>
+<g clip-path="url(#clip1)"><g class="sc1">
+<g class="l s7 fin"><text x="18" y="210"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk up</tspan></tspan></text></g>
+<g class="ty8 cg"><rect x="34.8" y="197" width="92.4" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="198" width="8.4" height="16"/></g>
+<g class="l s9 fin"><text y="227"><tspan x="18.0" class="d">Loaded config from mmk.config.js</tspan></text></g>
+<g class="l s10 spl"><text class="sp c" x="18" y="244" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="244" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="244" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="244" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="244" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="244" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="244" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="244" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="244" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="244" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="244">Connecting to MongoDB…</text></g>
+<g class="l s11 fin"><text y="244"><tspan x="18.0" class="r">✖ LOCK_ALREADY_HELD: The migration lock is held by the default namespace</tspan></text></g>
+<g class="l s12 fin"><text y="261"><tspan x="18.0" class="r">  Holder: host deploy-a, pid 30546, user asha, since 2026-10-15 22:50:11 (2s ago)</tspan></text></g>
+<g class="l s13 fin"><text y="278"><tspan x="18.0" class="r">  Why: all repos on this database take turns — one migration run at a time</tspan></text></g>
+<g class="l s14 fin"><text y="295"><tspan x="18.0" class="r">  If the holder crashed, the lock frees itself at 2026-10-15 22:51:11; `mmk unlock` releases it</tspan></text></g>
+<g class="l s15 fin"><text y="312"><tspan x="18.0">    </tspan><tspan x="51.6" class="r">now (check the holder first)</tspan></text></g>
+<g class="l s16 fin"><text y="329"><tspan x="18.0" class="r">  Try: run again when it finishes (app start: runMigrations({ onLockHeld: "wait" }))</tspan></text></g>
+<g class="l s17 fin"><text x="18" y="346"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk up</tspan></tspan></text></g>
+<g class="ty18 cg"><rect x="34.8" y="333" width="92.4" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="334" width="8.4" height="16"/></g>
+<g class="l s19 fin"><text y="363"><tspan x="18.0" class="d">Loaded config from mmk.config.js</tspan></text></g>
+<g class="l s20 spl"><text class="sp c" x="18" y="380" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="380" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="380" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="380" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="380" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="380" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="380" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="380" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="380" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="380" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="380">Connecting to MongoDB…</text></g>
+<g class="l s21 fin"><text y="380"><tspan x="18.0">Nothing to migrate</tspan></text></g>
+<g class="l s22 fin"><text x="18" y="397"><tspan class="p">$</tspan><tspan x="34.8"><tspan></tspan></tspan></text></g>
+<g class="s22 cg"><rect class="cur" x="34.8" y="385" width="8.4" height="16"/></g>
+</g></g>
+</svg>

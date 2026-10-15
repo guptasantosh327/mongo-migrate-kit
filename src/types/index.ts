@@ -71,6 +71,10 @@ export interface MigrationRecord {
   /**
    * Service that applied this migration — the `service` config key, else the
    * nearest `package.json` name. Absent when neither was found.
+   *
+   * @deprecated Information only, and its value depends on how mmk was started.
+   * Use `namespace` to separate repos that share a database. No longer written
+   * from 2.0; existing records keep the field.
    */
   service?: string;
   /**
@@ -78,6 +82,12 @@ export interface MigrationRecord {
    * `mmk import` — these are not reversible by mmk. Absent for native records.
    */
   origin?: MigrationOrigin;
+  /**
+   * The namespace (usually one per repo) this record belongs to. Absent for the
+   * default namespace — which is why records written before namespaces existed
+   * need no rewrite.
+   */
+  namespace?: string;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -144,8 +154,21 @@ export interface MmkConfig {
    * Name recorded on each changelog record to show which service applied it.
    * Optional — defaults to the nearest `package.json` name. Set it only when
    * that name is missing or ambiguous (e.g. services sharing one package.json).
+   *
+   * @deprecated Use `namespace` to separate repos that share a database. They
+   * are not the same: `service` only labels records, while `namespace` decides
+   * which migrations count as applied. Removed in 2.0.
    */
   service?: string;
+  /**
+   * Scopes this repo's migration history inside a shared changelog collection,
+   * so several repos can use one database without seeing — or rolling back —
+   * each other's migrations. One value per repo (e.g. the repo name); lowercase
+   * letters, digits, `.`, `_`, `-`, at most 64 characters. Only needed when
+   * repos share a database. Set it once and never change it: it decides which
+   * migrations count as applied.
+   */
+  namespace?: string;
   /** Mongoose instance — required only if your migrations use Mongoose models */
   mongoose?: Mongoose;
   /**
@@ -224,6 +247,64 @@ export interface StatusRow {
   description?: string;
   /** Who wrote the migration, as recorded when it was applied */
   author?: string;
+  /** The namespace this row belongs to. Absent for the default namespace */
+  namespace?: string;
+  /**
+   * True when the changelog has a record for this migration but its file is
+   * not in the migrations directory (deleted, or written by another repo)
+   */
+  fileMissing?: boolean;
+  /**
+   * True when this file was applied before the repo had a namespace — its
+   * record has no namespace yet. Applied, not pending: run `mmk namespace adopt`
+   */
+  unadopted?: boolean;
+}
+
+/**
+ * One raw changelog record as shown by `mmk status --all-namespaces`: every
+ * namespace in the collection, without comparing against files on disk.
+ */
+export interface NamespaceStatusRow {
+  /** Owning namespace. Absent for the default namespace */
+  namespace?: string;
+  file: string;
+  status: MigrationStatus;
+  batch: number;
+  appliedAt: Date;
+  revertedAt?: Date;
+  author?: string;
+}
+
+// ─── Namespace adoption ─────────────────────────────────────────────────────────
+
+/** One record moved (or, in a dry run, to be moved) by `mmk namespace adopt` */
+export interface AdoptRow {
+  file: string;
+  status: MigrationStatus;
+  batch: number;
+  appliedAt: Date;
+  /** Who ran it — shown so a filename shared by two repos can be reviewed */
+  executedBy: string;
+  /** The service recorded when it ran, if any — a hint for the same review */
+  service?: string;
+}
+
+/** Outcome of `mmk namespace adopt` */
+export interface AdoptResult {
+  /** The namespace records were moved into */
+  namespace: string;
+  /** Records moved (or that would be moved, when `dryRun`) */
+  rows: AdoptRow[];
+  /** Number of records moved (0 when `dryRun` is true) */
+  adopted: number;
+  /**
+   * Records left in the default namespace because no file with that name is in
+   * this repo's migrations directory — deleted long ago, or another repo's
+   */
+  leftInDefault: number;
+  /** True when the run previewed only and wrote nothing */
+  dryRun: boolean;
 }
 
 // ─── Import (migrate-mongo adoption) ────────────────────────────────────────────
@@ -263,6 +344,12 @@ export interface ImportResult {
   imported: number;
   /** Number of source docs skipped as invalid (missing `fileName`) */
   skipped: number;
+  /**
+   * Source records skipped because their file is not in this repo's migrations
+   * directory — only when a `namespace` is set, where a shared source changelog
+   * holds other repos' records too. Empty otherwise.
+   */
+  notInRepo: string[];
   /** True when the run previewed only and wrote nothing */
   dryRun: boolean;
   /** The mapped rows, in apply order */
@@ -281,6 +368,15 @@ export interface LockInfo {
   host: string;
   /** Username of the holder */
   executedBy: string;
+  /** Namespace of the holder. Absent for the default namespace (or a pre-1.5 holder) */
+  namespace?: string;
+  /** When the holder first took the lock. Absent for a pre-1.5 holder */
+  acquiredAt?: Date;
+  /**
+   * When the lock goes stale if the holder stops renewing it (e.g. it crashed),
+   * by the database server's clock. Absent for a pre-1.5 holder
+   */
+  expiresAt?: Date;
 }
 
 // ─── Error Codes ──────────────────────────────────────────────────────────────
@@ -301,4 +397,7 @@ export type MmkErrorCode =
   | 'NOT_APPLIED'
   | 'IMPORT_TARGET_NOT_EMPTY'
   | 'MIGRATION_IRREVERSIBLE'
-  | 'TRANSACTIONS_UNSUPPORTED';
+  | 'TRANSACTIONS_UNSUPPORTED'
+  | 'MIGRATION_NAME_CONFLICT' // a file to run is already recorded under another namespace
+  | 'NAMESPACE_UNADOPTED' // records from before this repo had a namespace need `mmk namespace adopt`
+  | 'SCHEMA_TOO_NEW'; // the database was written by a newer mmk storage format

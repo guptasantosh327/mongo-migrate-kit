@@ -14,3 +14,7 @@ tests/.tmp
 docs/.vitepress/dist
 docs/.vitepress/cache
 .vercel
+
+# Docs recordings: plain-text transcripts are a by-product
+scripts/casts/.transcripts
+scripts/casts/node_modules

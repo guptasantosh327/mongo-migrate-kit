@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="dg" width="856" height="312" viewBox="0 0 856 312" role="img" aria-label="Renaming name to fullName in three deploys: expand (write both fields), migrate (copy name into fullName), contract (remove name). Every running version can read the data at every step.">
+<style>
+.dg{--bg:#f5f8f6;--card:#fff;--line:#cdd6d2;--tx:#1c2521;--mut:#5d6a64;--acc:#00875c;--accs:#d8f3e5;--f:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;--fm:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){.dg{--bg:#171b1a;--card:#1f2523;--line:#3a4541;--tx:#e4eae7;--mut:#9aa7a1;--acc:#3ddc84;--accs:#143a28}}
+html .dg{--bg:var(--vp-c-bg-soft);--card:var(--vp-c-bg);--line:var(--vp-c-divider);--tx:var(--vp-c-text-1);--mut:var(--vp-c-text-2);--acc:var(--vp-c-brand-1);--accs:var(--vp-c-brand-soft);--f:var(--vp-font-family-base);--fm:var(--vp-font-family-mono)}
+.dg text{font-family:var(--f);fill:var(--tx)}
+.dg .m{font-family:var(--fm);font-size:13px}
+.dg .s{font-size:12.5px;fill:var(--mut)}
+.dg .h{font-size:15px;font-weight:600}
+.dg .ch{font-size:13.5px;font-weight:600}
+.dg .card{fill:var(--card);stroke:var(--line)}
+.dg .hit{fill:var(--accs);stroke:var(--acc);stroke-width:1.5}
+.dg .hitt{fill:var(--acc);font-weight:600}
+.dg .ok{fill:var(--mut);font-size:13px}
+.dg .ar{fill:none;stroke:var(--mut);stroke-width:1.5}
+.dg .arh{fill:var(--mut)}
+.dg .num{fill:var(--acc)}
+.dg .numt{fill:var(--card);font-size:12px;font-weight:700}
+.dg .bgc{fill:var(--bg)}
+.dg .doc{fill:var(--bg);stroke:var(--line)}
+.dg .okt{fill:var(--acc);font-weight:600}
+</style>
+<defs><marker id="ec-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arh" d="M0 0L10 5L0 10z"/></marker></defs>
+<rect class="bgc" width="856" height="312" rx="14"/>
+<text class="h" x="24" y="38">Renaming name to fullName without downtime</text>
+<rect class="card" x="24" y="60" width="256" height="196" rx="10"/>
+<circle class="num" cx="50" cy="86" r="11"/><text class="numt" x="50" y="90" text-anchor="middle">1</text>
+<text class="ch" x="70" y="91">Expand</text>
+<text class="s" x="42" y="116">Deploy 1: code writes both fields</text>
+<text class="s" x="42" y="142">Migration</text>
+<text class="m" x="42" y="160">none</text>
+<text class="s" x="42" y="186">Old documents now look like</text>
+<rect class="doc" x="38" y="194" width="228" height="24" rx="6"/>
+<text class="m" x="48" y="211">{ name }</text>
+<text class="s" x="42" y="240">Reads fullName ?? name</text>
+
+<path class="ar" d="M284 158H296" marker-end="url(#ec-arrow)"/>
+<rect class="card" x="300" y="60" width="256" height="196" rx="10"/>
+<circle class="num" cx="326" cy="86" r="11"/><text class="numt" x="326" y="90" text-anchor="middle">2</text>
+<text class="ch" x="346" y="91">Migrate</text>
+<text class="s" x="318" y="116">Deploy 2: code reads fullName</text>
+<text class="s" x="318" y="142">Migration</text>
+<text class="m" x="318" y="160">copy name into fullName</text>
+<text class="s" x="318" y="186">Old documents now look like</text>
+<rect class="doc" x="314" y="194" width="228" height="24" rx="6"/>
+<text class="m" x="324" y="211">{ name, fullName }</text>
+<text class="s" x="318" y="240">Old code still finds name</text>
+
+<path class="ar" d="M560 158H572" marker-end="url(#ec-arrow)"/>
+<rect class="card" x="576" y="60" width="256" height="196" rx="10"/>
+<circle class="num" cx="602" cy="86" r="11"/><text class="numt" x="602" y="90" text-anchor="middle">3</text>
+<text class="ch" x="622" y="91">Contract</text>
+<text class="s" x="594" y="116">Deploy 3: code stops writing name</text>
+<text class="s" x="594" y="142">Migration</text>
+<text class="m" x="594" y="160">remove name</text>
+<text class="s" x="594" y="186">Old documents now look like</text>
+<rect class="doc" x="590" y="194" width="228" height="24" rx="6"/>
+<text class="m" x="600" y="211">{ fullName }</text>
+<text class="s" x="594" y="240">Only when nothing reads name</text>
+
+<text class="s" x="24" y="290">Each step is its own deploy. At every point, both the running code and the code before it can read the data.</text>
+</svg>

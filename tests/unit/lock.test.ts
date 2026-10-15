@@ -1,6 +1,6 @@
 import type { Db } from 'mongodb';
 import { describe, expect, it, vi } from 'vitest';
-import { LOCK_ID, MigrationLock, runWithLock } from '../../src/core/lock.js';
+import { LOCK_ID, MigrationLock, lockHeldMessage, runWithLock } from '../../src/core/lock.js';
 import { LockAlreadyHeldError, LockReleaseFailedError } from '../../src/errors/index.js';
 import { silentLogger } from '../../src/utils/logger.js';
 
@@ -10,14 +10,25 @@ interface MockCollection {
   deleteOne: ReturnType<typeof vi.fn>;
 }
 
-function makeDb(): { db: Db; collection: MockCollection } {
-  // acquire() upserts with a random `owner` token, then reads it back to confirm
-  // ownership. The mock captures the token from the update and echoes it from
-  // findOne so a successful acquire resolves.
+/** The literal `owner` an acquire() pipeline update writes, if this update is one */
+function ownerFrom(update: unknown): string | undefined {
+  if (!Array.isArray(update)) return undefined;
+  for (const stage of update as Array<{ $set?: { owner?: { $literal?: string } } }>) {
+    const owner = stage.$set?.owner?.$literal;
+    if (owner) return owner;
+  }
+  return undefined;
+}
+
+function makeDb(): { db: Db; collection: MockCollection; command: ReturnType<typeof vi.fn> } {
+  // acquire() reads the server clock (hello.localTime), upserts with a random
+  // `owner` token, then reads it back to confirm ownership. The mock captures
+  // the token from the pipeline update and echoes it from findOne so a
+  // successful acquire resolves.
   let storedOwner: string | undefined;
   const collection: MockCollection = {
     updateOne: vi.fn().mockImplementation((_filter, update) => {
-      const owner = (update as { $set?: { owner?: string } })?.$set?.owner;
+      const owner = ownerFrom(update);
       if (owner) {
         storedOwner = owner;
       }
@@ -32,9 +43,13 @@ function makeDb(): { db: Db; collection: MockCollection } {
       ),
     deleteOne: vi.fn().mockResolvedValue({}),
   };
-  const db = { collection: () => collection } as unknown as Db;
-  return { db, collection };
+  const command = vi.fn().mockResolvedValue({ localTime: SERVER_NOW });
+  const db = { collection: () => collection, command } as unknown as Db;
+  return { db, collection, command };
 }
+
+/** The server time the mocked `hello` reports — deliberately not this machine's clock */
+const SERVER_NOW = new Date('2030-01-01T00:00:00.000Z');
 
 describe('MigrationLock.acquire', () => {
   it('should upsert the lock document with the configured _id', async () => {
@@ -173,5 +188,130 @@ describe('runWithLock', () => {
     expect(collection.updateOne).not.toHaveBeenCalled();
     expect(collection.deleteOne).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledOnce();
+  });
+});
+
+describe('MigrationLock server clock and namespace', () => {
+  it('should judge staleness against the server clock, not this machine', async () => {
+    const { db, collection, command } = makeDb();
+    await new MigrationLock(db, '_mmk_locks', 60).acquire();
+    expect(command).toHaveBeenCalledWith({ hello: 1 });
+    const [filter] = collection.updateOne.mock.calls[0] ?? [];
+    expect(filter.$or).toEqual([
+      { expiresAt: { $lt: SERVER_NOW } },
+      { expiresAt: { $exists: false }, lockedAt: { $lt: new Date(SERVER_NOW.getTime() - 60_000) } },
+    ]);
+  });
+
+  it('should fall back to the local clock when the server reports no localTime', async () => {
+    const { db, collection, command } = makeDb();
+    command.mockResolvedValueOnce({});
+    await new MigrationLock(db, '_mmk_locks', 60).acquire();
+    const [filter] = collection.updateOne.mock.calls[0] ?? [];
+    expect(filter.$or[0].expiresAt.$lt).toBeInstanceOf(Date);
+  });
+
+  it('should write timestamps from the server clock with the holder TTL', async () => {
+    const { db, collection } = makeDb();
+    await new MigrationLock(db, '_mmk_locks', 90).acquire();
+    const [, update] = collection.updateOne.mock.calls[0] ?? [];
+    expect(update[0].$set.lockedAt).toBe('$$NOW');
+    expect(update[0].$set.acquiredAt).toBe('$$NOW');
+    expect(update[0].$set.expiresAt).toEqual({ $add: ['$$NOW', 90_000] });
+  });
+
+  it('should record a named namespace on the lock document', async () => {
+    const { db, collection } = makeDb();
+    await new MigrationLock(db, '_mmk_locks', 60, 'orders-api').acquire();
+    const [, update] = collection.updateOne.mock.calls[0] ?? [];
+    expect(update[0].$set.namespace).toEqual({ $literal: 'orders-api' });
+    expect(update).toHaveLength(1);
+  });
+
+  it('should unset a stale holder namespace when taken by the default namespace', async () => {
+    const { db, collection } = makeDb();
+    await new MigrationLock(db, '_mmk_locks', 60).acquire();
+    const [, update] = collection.updateOne.mock.calls[0] ?? [];
+    expect(update[0].$set).not.toHaveProperty('namespace');
+    expect(update[1]).toEqual({ $unset: 'namespace' });
+  });
+
+  it('should push lockedAt and expiresAt forward on renew', async () => {
+    const { db, collection } = makeDb();
+    const lock = new MigrationLock(db, '_mmk_locks', 60);
+    await lock.acquire();
+    await lock.renew();
+    const [, update] = collection.updateOne.mock.calls[1] ?? [];
+    expect(update).toEqual([
+      { $set: { lockedAt: '$$NOW', expiresAt: { $add: ['$$NOW', 60_000] } } },
+    ]);
+  });
+});
+
+describe('lockHeldMessage', () => {
+  const now = new Date('2026-10-14T12:00:11Z');
+  const holder = {
+    _id: LOCK_ID,
+    lockedAt: new Date('2026-10-14T12:00:10Z'),
+    acquiredAt: new Date('2026-10-14T12:00:03Z'),
+    expiresAt: new Date('2026-10-14T12:01:10Z'),
+    pid: 41,
+    host: 'worker-7c9f',
+    executedBy: 'deploy',
+    owner: 'x',
+    namespace: 'orders-worker',
+  };
+
+  it('should name the holder namespace, host, pid, user and age', () => {
+    const message = lockHeldMessage(holder, now);
+    expect(message).toContain('The migration lock is held by namespace "orders-worker"');
+    expect(message).toContain('host worker-7c9f, pid 41, user deploy');
+    expect(message).toContain('(8s ago)');
+    expect(message).toContain('all repos on this database take turns');
+    expect(message).toContain('mmk unlock');
+  });
+
+  it('should say when the lock frees itself if the holder crashed', () => {
+    expect(lockHeldMessage(holder, now)).toMatch(/frees itself at \d{4}-\d{2}-\d{2}/);
+  });
+
+  it('should name the default namespace when the holder has none', () => {
+    const { namespace: _n, ...unnamed } = holder;
+    expect(lockHeldMessage(unnamed, now)).toContain('held by the default namespace');
+  });
+
+  it('should describe a pre-1.5 holder without acquiredAt or expiresAt', () => {
+    const legacy = {
+      _id: LOCK_ID,
+      lockedAt: holder.lockedAt,
+      pid: 7,
+      host: 'h',
+      executedBy: 'u',
+      owner: 'o',
+    };
+    const message = lockHeldMessage(legacy, now);
+    expect(message).toContain('(1s ago)');
+    expect(message).toContain('once it goes stale');
+  });
+
+  it('should not crash on a hand-written lock missing fields', () => {
+    const partial = { _id: LOCK_ID, pid: 999 } as unknown as Parameters<typeof lockHeldMessage>[0];
+    const message = lockHeldMessage(partial, now);
+    expect(message).toContain('host unknown, pid 999, user unknown');
+    expect(message).not.toContain('ago');
+  });
+
+  it('should still explain what to do when the holder vanished', () => {
+    expect(lockHeldMessage(null)).toContain('held by another run');
+  });
+
+  it('should be the message of a LockAlreadyHeldError on a duplicate key', async () => {
+    const { db, collection } = makeDb();
+    collection.updateOne.mockRejectedValueOnce({ code: 11000 });
+    collection.findOne.mockResolvedValueOnce(holder);
+    const error = await new MigrationLock(db, '_mmk_locks', 60).acquire().catch((e) => e);
+    expect(error).toBeInstanceOf(LockAlreadyHeldError);
+    expect(error.message).toContain('namespace "orders-worker"');
+    expect(error.context.holder).toBe(holder);
   });
 });

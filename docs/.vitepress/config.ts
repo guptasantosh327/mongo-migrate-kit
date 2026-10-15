@@ -102,7 +102,7 @@ function writeRssFeed(outDir: string): void {
   <channel>
     <title>mongo-migrate-kit blog</title>
     <link>${blogUrl}</link>
-    <description>Articles on MongoDB migrations — rollbacks, locking, transactions, CI/CD, and best practices.</description>
+    <description>Notes on running MongoDB migrations: rollbacks, locking, transactions, CI/CD and habits that keep production safe.</description>
     <language>en-US</language>
     <lastBuildDate>${now}</lastBuildDate>
     <atom:link href="${feedUrl}" rel="self" type="application/rss+xml"/>
@@ -114,10 +114,10 @@ ${items}
   writeFileSync(join(outDir, 'blog', 'feed.xml'), xml, 'utf8');
 }
 
-const ogTitle = 'mongo-migrate-kit — MongoDB migrations for Node.js';
+const ogTitle = 'mongo-migrate-kit: MongoDB migrations for Node.js';
 const ogDescription =
-  'MongoDB migration toolkit for Node.js & TypeScript. Run a single migration, ' +
-  'roll back any batch, preview with dry-run, transactions, checksums, and native locking.';
+  'MongoDB migrations for Node.js and TypeScript. Run one migration, roll back any batch ' +
+  'or file, preview with dry-run, and stop two deploys from running at once.';
 const repo = 'https://github.com/guptasantosh327/mongo-migrate-kit';
 const base = '/';
 const hostname = 'https://mongo-migrate-kit.vercel.app/';
@@ -162,7 +162,7 @@ const jsonLd = {
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   title: 'mongo-migrate-kit',
-  titleTemplate: ':title — MongoDB migrations for Node.js',
+  titleTemplate: ':title | MongoDB migrations for Node.js',
   description: ogDescription,
   lang: 'en-US',
   base,
@@ -266,12 +266,12 @@ export default defineConfig({
 
     // ─── Top navigation ──────────────────────────────────────────────
     nav: [
-      { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
+      { text: 'Guide', link: '/guide/', activeMatch: '/guide/' },
       { text: 'Commands', link: '/commands/up', activeMatch: '/commands/' },
       { text: 'Reference', link: '/reference/cli', activeMatch: '/reference/' },
       { text: 'Blog', link: '/blog/', activeMatch: '/blog/' },
       {
-        text: 'v1.4.0',
+        text: 'v1.5.0',
         items: [
           { text: 'Changelog', link: `${repo}/blob/main/CHANGELOG.md` },
           { text: 'npm', link: 'https://www.npmjs.com/package/mongo-migrate-kit' },
@@ -281,33 +281,43 @@ export default defineConfig({
     ],
 
     // ─── Sidebar ─────────────────────────────────────────────────────
+    // The guide is ordered as a learning path: each group builds on the one above it,
+    // and the prev/next links at the bottom of every page follow the same order.
     sidebar: {
       '/guide/': [
         {
-          text: 'Introduction',
+          text: '1. Get it running',
           items: [
+            { text: 'Start here', link: '/guide/' },
             { text: 'Why mongo-migrate-kit?', link: '/guide/why' },
-            { text: 'Core Concepts', link: '/guide/concepts' },
-            { text: 'Getting Started', link: '/guide/getting-started' },
-            { text: 'Tutorial', link: '/guide/tutorial' },
+            { text: 'Quick start', link: '/guide/getting-started' },
+            { text: 'Tutorial: your first migration', link: '/guide/tutorial' },
+          ],
+        },
+        {
+          text: '2. Understand it',
+          items: [
+            { text: 'How it works', link: '/guide/concepts' },
+            { text: 'Writing migrations', link: '/guide/writing-migrations' },
+            { text: 'A normal day with mmk', link: '/guide/workflow' },
+          ],
+        },
+        {
+          text: '3. Use it in production',
+          items: [
             { text: 'Configuration', link: '/guide/configuration' },
-          ],
-        },
-        {
-          text: 'Writing Migrations',
-          items: [
-            { text: 'Migration Files', link: '/guide/writing-migrations' },
+            { text: 'Deploying and CI', link: '/guide/ci-cd' },
+            { text: 'Running from your code', link: '/guide/api' },
             { text: 'Transactions', link: '/guide/transactions' },
-            { text: 'Lifecycle Hooks', link: '/guide/hooks' },
+            { text: 'Hooks', link: '/guide/hooks' },
+            { text: 'When something goes wrong', link: '/guide/troubleshooting' },
           ],
         },
         {
-          text: 'Going Further',
+          text: '4. Bigger setups',
           items: [
-            { text: 'Programmatic API', link: '/guide/api' },
-            { text: 'CI/CD & Deployment', link: '/guide/ci-cd' },
-            { text: 'Troubleshooting', link: '/guide/troubleshooting' },
-            { text: 'Migrating from migrate-mongo', link: '/guide/migrate-mongo' },
+            { text: 'Sharing a database', link: '/guide/shared-database' },
+            { text: 'Moving from migrate-mongo', link: '/guide/migrate-mongo' },
             { text: 'FAQ', link: '/guide/faq' },
           ],
         },
@@ -317,38 +327,23 @@ export default defineConfig({
           text: 'Blog',
           items: [
             { text: 'All posts', link: '/blog/' },
+            { text: 'Why I built mongo-migrate-kit', link: '/blog/why-i-built-mongo-migrate-kit' },
+            { text: 'Rolling back one migration', link: '/blog/rollback-specific-mongodb-migration' },
+            { text: 'Switching from migrate-mongo', link: '/blog/switching-from-migrate-mongo' },
+            { text: "7 things migrate-mongo can't do", link: '/blog/7-things-migrate-mongo-cant-do' },
             {
-              text: 'Why I built mongo-migrate-kit',
-              link: '/blog/why-i-built-mongo-migrate-kit',
-            },
-            {
-              text: 'Switching from migrate-mongo',
-              link: '/blog/switching-from-migrate-mongo',
-            },
-            {
-              text: "7 things migrate-mongo can't do",
-              link: '/blog/7-things-migrate-mongo-cant-do',
-            },
-            {
-              text: 'Roll back a single migration',
-              link: '/blog/rollback-specific-mongodb-migration',
-            },
-            {
-              text: 'Migration locking for concurrent deploys',
+              text: 'Locking for concurrent deploys',
               link: '/blog/mongodb-migration-locking-concurrent-deploys',
             },
             {
-              text: 'Migrations on startup & serverless',
+              text: 'Migrations on app start and serverless',
               link: '/blog/run-migrations-on-startup-serverless',
             },
             {
-              text: 'Migrations in CI/CD (GitHub Actions)',
+              text: 'Migrations in GitHub Actions',
               link: '/blog/mongodb-migrations-ci-cd-github-actions',
             },
-            {
-              text: 'Migration best practices',
-              link: '/blog/mongodb-migration-best-practices',
-            },
+            { text: 'Habits for safe migrations', link: '/blog/mongodb-migration-best-practices' },
           ],
         },
       ],
@@ -356,8 +351,8 @@ export default defineConfig({
         {
           text: 'Reference',
           items: [
-            { text: 'CLI Cheatsheet', link: '/reference/cli' },
-            { text: 'Error Codes', link: '/reference/error-codes' },
+            { text: 'CLI cheatsheet', link: '/reference/cli' },
+            { text: 'Error codes', link: '/reference/error-codes' },
           ],
         },
       ],
@@ -371,18 +366,22 @@ export default defineConfig({
           ],
         },
         {
-          text: 'Inspecting & authoring',
+          text: 'Looking around',
           items: [
             { text: 'mmk status / list', link: '/commands/status' },
-            { text: 'mmk create / init', link: '/commands/create' },
             { text: 'mmk dry-run', link: '/commands/dry-run' },
           ],
         },
         {
-          text: 'Operations',
+          text: 'Creating files',
+          items: [{ text: 'mmk create / init', link: '/commands/create' }],
+        },
+        {
+          text: 'Maintenance',
           items: [
             { text: 'mmk import', link: '/commands/import' },
             { text: 'mmk unlock', link: '/commands/unlock' },
+            { text: 'mmk namespace adopt', link: '/commands/namespace' },
           ],
         },
       ],
@@ -404,8 +403,10 @@ export default defineConfig({
     },
 
     docFooter: {
-      prev: 'Previous page',
-      next: 'Next page',
+      prev: 'Back',
+      next: 'Next',
     },
+
+    outline: { level: [2, 3], label: 'On this page' },
   },
 });

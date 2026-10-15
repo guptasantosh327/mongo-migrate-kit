@@ -1,58 +1,64 @@
 # mongo-migrate-kit
 
-> Production-grade MongoDB migration toolkit for Node.js and TypeScript. Run a single migration file,
-> roll back any batch or the last N, preview with dry-run, wrap migrations in transactions, verify
-> file checksums, and run safely behind a native MongoDB concurrency lock — via the `mmk` CLI or a
-> fully-typed programmatic API. A drop-in alternative to migrate-mongo, with one-command import of an
-> existing migrate-mongo changelog.
+> MongoDB migrations for Node.js and TypeScript. Run one migration file or all pending ones, roll
+> back the last batch, an older batch, the last N files or one file by name, preview any run with a
+> dry run, wrap a migration in a transaction, notice files edited after they ran (SHA-256
+> checksums), and stop two deploys from running at once with a lock stored in MongoDB. Used through
+> the `mmk` CLI or a typed JavaScript API. Can import an existing migrate-mongo history so nothing
+> runs twice.
 
 Key facts:
-- Package (npm): `mongo-migrate-kit` — install with `npm install mongo-migrate-kit mongodb`
-- CLI binary: `mmk`
-- Requires Node.js >= 18 and MongoDB >= 5.0; supports TypeScript, ESM, and CommonJS
+- Package (npm): `mongo-migrate-kit`. Install with `npm install mongo-migrate-kit mongodb`
+- CLI command: `mmk`
+- Requires Node.js 18+, the `mongodb` driver 5+, and MongoDB server 4.2+. Transactions need a replica set or sharded cluster
+- Migration files: JavaScript (ESM or CommonJS) or TypeScript (runs directly on Node 22.18+)
 - License: MIT
 - Repository: https://github.com/guptasantosh327/mongo-migrate-kit
 
-## Guide
+## Guide (a learning path, in order)
 
-- [Why mongo-migrate-kit?](https://mongo-migrate-kit.vercel.app/guide/why): Reasons to choose it and how it compares to migrate-mongo
-- [Core Concepts](https://mongo-migrate-kit.vercel.app/guide/concepts): Migrations, batches, the changelog, ordering, locking, and checksums
-- [Getting Started](https://mongo-migrate-kit.vercel.app/guide/getting-started): Install, configure, create, and run your first migration
-- [Tutorial](https://mongo-migrate-kit.vercel.app/guide/tutorial): End-to-end worked example from init to rollback
-- [Configuration](https://mongo-migrate-kit.vercel.app/guide/configuration): Config file, env vars, precedence, and all options
-- [Writing Migrations](https://mongo-migrate-kit.vercel.app/guide/writing-migrations): The up/down contract in TypeScript, ESM, and CommonJS
-- [Transactions](https://mongo-migrate-kit.vercel.app/guide/transactions): Opt-in MongoDB transactions per file or globally
-- [Lifecycle Hooks](https://mongo-migrate-kit.vercel.app/guide/hooks): beforeAll, afterAll, beforeEach, afterEach, onError
-- [Programmatic API](https://mongo-migrate-kit.vercel.app/guide/api): The MigratorKit class, methods, and result types
-- [CI/CD & Deployment](https://mongo-migrate-kit.vercel.app/guide/ci-cd): GitHub Actions, Docker, deploy gates, and JSON output
-- [Troubleshooting](https://mongo-migrate-kit.vercel.app/guide/troubleshooting): Common errors and how to fix them
-- [Migrating from migrate-mongo](https://mongo-migrate-kit.vercel.app/guide/migrate-mongo): Adopt an existing migrate-mongo changelog
-- [FAQ](https://mongo-migrate-kit.vercel.app/guide/faq): Common questions about running MongoDB migrations
+- [Start here](https://mongo-migrate-kit.vercel.app/guide/): What the tool is and the four-step path through the docs
+- [Why mongo-migrate-kit?](https://mongo-migrate-kit.vercel.app/guide/why): What it does differently, and a fair comparison with migrate-mongo
+- [Quick start](https://mongo-migrate-kit.vercel.app/guide/getting-started): Install, create, run, check and roll back a first migration in five minutes
+- [Tutorial: your first migration](https://mongo-migrate-kit.vercel.app/guide/tutorial): A slower walkthrough with a collection, a backfill, a dry run and a rollback
+- [How it works](https://mongo-migrate-kit.vercel.app/guide/concepts): The history collection, batches, the lock, checksums and failures, with diagrams
+- [Writing migrations](https://mongo-migrate-kit.vercel.app/guide/writing-migrations): The file format, the migration context, CommonJS projects, TypeScript and good habits
+- [A normal day with mmk](https://mongo-migrate-kit.vercel.app/guide/workflow): The everyday workflow from writing a migration to rolling back a bad release
+- [Configuration](https://mongo-migrate-kit.vercel.app/guide/configuration): Config files, environment variables, flags, secret managers and config errors
+- [Deploying and CI](https://mongo-migrate-kit.vercel.app/guide/ci-cd): GitHub Actions, testing migrations on pull requests, Docker, Kubernetes and JSON output
+- [Running from your code](https://mongo-migrate-kit.vercel.app/guide/api): runMigrations(), pendingMigrations() and the MigratorKit class
+- [Transactions](https://mongo-migrate-kit.vercel.app/guide/transactions): All-or-nothing migrations with useTransaction and session
+- [Hooks](https://mongo-migrate-kit.vercel.app/guide/hooks): beforeAll, afterAll, beforeEach, afterEach and onError
+- [When something goes wrong](https://mongo-migrate-kit.vercel.app/guide/troubleshooting): The common errors, with real output and fixes
+- [Sharing a database](https://mongo-migrate-kit.vercel.app/guide/shared-database): Several repos on one database, one namespace per repo
+- [Moving from migrate-mongo](https://mongo-migrate-kit.vercel.app/guide/migrate-mongo): Import an existing migrate-mongo history without running anything twice
+- [FAQ](https://mongo-migrate-kit.vercel.app/guide/faq): Common questions about MongoDB migrations with mongo-migrate-kit
 
 ## Commands
 
-- [mmk up](https://mongo-migrate-kit.vercel.app/commands/up): Run all pending migrations, or a single file
-- [mmk down](https://mongo-migrate-kit.vercel.app/commands/down): Roll back the last batch, a batch, the last N, or a file
-- [mmk redo](https://mongo-migrate-kit.vercel.app/commands/redo): Roll back then re-apply a migration
-- [mmk status & list](https://mongo-migrate-kit.vercel.app/commands/status): Inspect migration state; --check gates CI
-- [mmk create & init](https://mongo-migrate-kit.vercel.app/commands/create): Scaffold migrations and generate a config
-- [mmk dry-run](https://mongo-migrate-kit.vercel.app/commands/dry-run): Preview up/down without touching the database
-- [mmk import](https://mongo-migrate-kit.vercel.app/commands/import): Adopt a migrate-mongo changelog (forward-only)
-- [mmk unlock](https://mongo-migrate-kit.vercel.app/commands/unlock): Force-release a stuck concurrency lock
+- [mmk up](https://mongo-migrate-kit.vercel.app/commands/up): Run pending migrations, or one file
+- [mmk down](https://mongo-migrate-kit.vercel.app/commands/down): Roll back the last batch, a batch, the last N, or one file
+- [mmk redo](https://mongo-migrate-kit.vercel.app/commands/redo): Roll back and re-apply a migration
+- [mmk status and list](https://mongo-migrate-kit.vercel.app/commands/status): See what ran and what's pending; --check for CI
+- [mmk dry-run](https://mongo-migrate-kit.vercel.app/commands/dry-run): Preview up or down without writing anything
+- [mmk create and init](https://mongo-migrate-kit.vercel.app/commands/create): Create migration files and a config file
+- [mmk import](https://mongo-migrate-kit.vercel.app/commands/import): Copy a migrate-mongo history (forward-only)
+- [mmk unlock](https://mongo-migrate-kit.vercel.app/commands/unlock): Remove a lock left by a crashed run
+- [mmk namespace adopt](https://mongo-migrate-kit.vercel.app/commands/namespace): Move a repo's older records into its new namespace
 
 ## Reference
 
-- [CLI Cheatsheet](https://mongo-migrate-kit.vercel.app/reference/cli): Every command and flag on one page
-- [Error Codes](https://mongo-migrate-kit.vercel.app/reference/error-codes): All error codes, classes, causes, and fixes
+- [CLI cheatsheet](https://mongo-migrate-kit.vercel.app/reference/cli): Every command and flag on one page
+- [Error codes](https://mongo-migrate-kit.vercel.app/reference/error-codes): Every error code, its cause and what to do
 
 ## Blog
 
-- [Blog index](https://mongo-migrate-kit.vercel.app/blog/): All articles on MongoDB migrations
-- [Why I Built a New MongoDB Migration Tool](https://mongo-migrate-kit.vercel.app/blog/why-i-built-mongo-migrate-kit): Origin story and how to switch off migrate-mongo in one command
-- [Switching from migrate-mongo](https://mongo-migrate-kit.vercel.app/blog/switching-from-migrate-mongo): A zero-downtime, non-destructive migration guide
-- [7 Things migrate-mongo Can't Do](https://mongo-migrate-kit.vercel.app/blog/7-things-migrate-mongo-cant-do): Real gaps that cost time in production
-- [How to Roll Back a Single MongoDB Migration](https://mongo-migrate-kit.vercel.app/blog/rollback-specific-mongodb-migration): Revert by file, batch, or last N — without nuking the rest
-- [MongoDB Migration Locking for Concurrent Deploys](https://mongo-migrate-kit.vercel.app/blog/mongodb-migration-locking-concurrent-deploys): Stop parallel deploys from corrupting the database
-- [Running Migrations on Startup and Serverless](https://mongo-migrate-kit.vercel.app/blog/run-migrations-on-startup-serverless): Safe app-start and serverless patterns
-- [MongoDB Migrations in CI/CD](https://mongo-migrate-kit.vercel.app/blog/mongodb-migrations-ci-cd-github-actions): A practical GitHub Actions setup
-- [MongoDB Migration Best Practices](https://mongo-migrate-kit.vercel.app/blog/mongodb-migration-best-practices): Ten lessons learned the hard way
+- [Blog index](https://mongo-migrate-kit.vercel.app/blog/): All posts
+- [Why I built a new MongoDB migration tool](https://mongo-migrate-kit.vercel.app/blog/why-i-built-mongo-migrate-kit): The story, and switching off migrate-mongo in one command
+- [Switching from migrate-mongo, step by step](https://mongo-migrate-kit.vercel.app/blog/switching-from-migrate-mongo): Moving an existing project without re-running anything
+- [7 things I kept missing in migrate-mongo](https://mongo-migrate-kit.vercel.app/blog/7-things-migrate-mongo-cant-do): Gaps that cost time in production
+- [How to roll back a single MongoDB migration](https://mongo-migrate-kit.vercel.app/blog/rollback-specific-mongodb-migration): By file, by batch, or the last N
+- [Locking MongoDB migrations so two deploys can't collide](https://mongo-migrate-kit.vercel.app/blog/mongodb-migration-locking-concurrent-deploys): Expiry, owner tokens and heartbeats
+- [Running MongoDB migrations on app start and in serverless](https://mongo-migrate-kit.vercel.app/blog/run-migrations-on-startup-serverless): runMigrations() with waiting for the lock
+- [MongoDB migrations in GitHub Actions](https://mongo-migrate-kit.vercel.app/blog/mongodb-migrations-ci-cd-github-actions): Testing, gating and running migrations in a pipeline
+- [Habits that make MongoDB migrations safe](https://mongo-migrate-kit.vercel.app/blog/mongodb-migration-best-practices): Reversible migrations, batches, expand and contract, and more

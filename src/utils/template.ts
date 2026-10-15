@@ -165,6 +165,222 @@ export interface ConfigValues {
   uri?: string;
   dbName?: string;
   migrationsDir?: string;
+  /** Written as a real `namespace` line; omitted → a commented-out example */
+  namespace?: string;
+}
+
+/** One option in a generated config: its documentation and its code line */
+interface DocumentedOption {
+  /** Lines of the `/** … *\/` block above the option */
+  doc: string[];
+  /** The option itself, e.g. `strict: false,` — or `// key: value,` when off by default */
+  code: string;
+}
+
+/** A titled group of options, rendered under a `// ── Title ──` divider */
+interface OptionSection {
+  title: string;
+  options: DocumentedOption[];
+}
+
+/** Width a section divider is padded to, before indentation */
+const DIVIDER_WIDTH = 62;
+
+/** A `// ── Title ─────` divider line, padded to a fixed width */
+function divider(title: string, indent: string): string {
+  const head = `// ── ${title} `;
+  return `${indent}${head}${'─'.repeat(Math.max(2, DIVIDER_WIDTH - head.length))}`;
+}
+
+/** Render one option as a `/** … *\/` documentation block followed by its code line */
+function renderOption(option: DocumentedOption, indent: string): string {
+  return [
+    `${indent}/**`,
+    ...option.doc.map((line) => `${indent} * ${line}`),
+    `${indent} */`,
+    ...option.code.split('\n').map((line) => `${indent}${line}`),
+  ].join('\n');
+}
+
+/** Render sections of documented options, separated by blank lines */
+function renderSections(sections: OptionSection[], indent: string): string {
+  return sections
+    .map((section) =>
+      [divider(section.title, indent), ...section.options.map((o) => renderOption(o, indent))].join(
+        '\n\n',
+      ),
+    )
+    .join('\n\n');
+}
+
+/**
+ * The documented `namespace` option. A real value when one was given
+ * (`mmk init --namespace`), otherwise a commented-out example — never guessed
+ * from the package or folder name, since a namespace decides which migrations
+ * count as applied and must be chosen deliberately.
+ */
+function namespaceOption(namespace: string | undefined): DocumentedOption {
+  return {
+    doc: [
+      "Scopes this repo's migration history when several repos share this database.",
+      'One value per repo, e.g. the repo name (lowercase letters, digits, . _ -).',
+      'Set it once and never change it — it decides which migrations count as applied.',
+      'Not needed when this repo has the database to itself.',
+      'Env: MMK_NAMESPACE',
+    ],
+    code:
+      namespace === undefined
+        ? "// namespace: 'my-repo',"
+        : `namespace: ${toSingleQuoted(namespace)},`,
+  };
+}
+
+/**
+ * Every documented option except the connection, which the static and the
+ * secret-provider templates supply differently. A single list, so both
+ * templates explain each option in exactly the same words.
+ */
+function sharedSections(
+  createExtension: MigrationExtension,
+  migrationsDir: string,
+  namespace: string | undefined,
+): OptionSection[] {
+  return [
+    {
+      title: 'Migration files',
+      options: [
+        {
+          doc: [
+            'Folder holding your migration files, relative to where you run mmk.',
+            "Default: './migrations' · Env: MMK_MIGRATIONS_DIR · Flag: --dir",
+          ],
+          code: `migrationsDir: ${toSingleQuoted(migrationsDir)},`,
+        },
+        {
+          doc: [
+            'File extensions mmk treats as migrations when it scans migrationsDir.',
+            '.ts files need Node 22.18+ (or a TypeScript loader) when mmk runs them.',
+            "Default: ['.ts', '.js']",
+          ],
+          code: "fileExtensions: ['.ts', '.js'],",
+        },
+        {
+          doc: [
+            "File type `mmk create` writes: 'js' or 'ts'.",
+            "Default: 'js' · Env: MMK_CREATE_EXTENSION · Per run: mmk create <name> --js / --ts",
+          ],
+          code: `createExtension: '${createExtension}',`,
+        },
+        {
+          doc: [
+            'Name new migrations 0001-, 0002-, … instead of with a timestamp.',
+            'Keep timestamps if several repos share a database: sequential names clash.',
+            'Default: false · Env: MMK_SEQUENTIAL',
+          ],
+          code: 'sequential: false,',
+        },
+        {
+          doc: [
+            'Your own template for `mmk create`, copied as-is into each new file.',
+            'Per run: mmk create <name> --template <path>',
+          ],
+          code: "// templatePath: './migration.template.ts',",
+        },
+        {
+          doc: [
+            '`mmk create` writes this into new migrations (`export const author`), and',
+            '`mmk up` records it — who wrote a migration, not who ran it.',
+            'Default: your git `user.name <user.email>`, then your OS username',
+            'Env: MMK_AUTHOR · Per run: mmk create <name> --author <name>',
+          ],
+          code: "// author: 'Jane Doe <jane@example.com>',",
+        },
+      ],
+    },
+    {
+      title: 'Bookkeeping collections',
+      options: [
+        {
+          doc: [
+            'Collection that records which migrations have run (the history).',
+            'Change it only to give a group of repos its own history on a shared database.',
+            "Default: '_mmk_migrations' · Env: MMK_COLLECTION",
+          ],
+          code: "migrationsCollection: '_mmk_migrations',",
+        },
+        {
+          doc: [
+            'Collection holding the lock that stops two runs migrating at the same time.',
+            'Every repo on a database must use the same value, or they stop taking turns.',
+            "Default: '_mmk_locks' · Env: MMK_LOCK_COLLECTION",
+          ],
+          code: "lockCollection: '_mmk_locks',",
+        },
+        namespaceOption(namespace),
+        {
+          doc: [
+            'Seconds after which a lock left behind by a crashed run counts as stale and',
+            'can be taken over. A running migration keeps renewing its lock, so this does',
+            'not limit how long a migration may take.',
+            'Default: 60 · Env: MMK_LOCK_TTL',
+          ],
+          code: 'lockTTLSeconds: 60,',
+        },
+      ],
+    },
+    {
+      title: 'Behavior',
+      options: [
+        {
+          doc: [
+            'What `mmk up <file>` does when that file is already applied and has changed',
+            'since it ran: false = warn and skip it, true = stop with an error.',
+            '(`mmk down` always refuses a changed file; `mmk status` shows it as MISMATCH.)',
+            'Default: false · Env: MMK_STRICT · Per run: mmk up --strict',
+          ],
+          code: 'strict: false,',
+        },
+        {
+          doc: [
+            'Run every migration inside a transaction, so a failure rolls back its writes.',
+            'Needs a replica set or sharded cluster. Override per file with',
+            '`export const useTransaction = true` (or false).',
+            'Default: false · Env: MMK_USE_TRANSACTION',
+          ],
+          code: 'useTransaction: false,',
+        },
+        {
+          doc: [
+            'Refuse `mmk up` while any migration about to run has no `author` export.',
+            'Checked before anything runs.',
+            'Default: false · Env: MMK_REQUIRE_AUTHOR',
+          ],
+          code: 'requireAuthor: false,',
+        },
+      ],
+    },
+    {
+      title: 'Lifecycle hooks (code only — not available in JSON config)',
+      options: [
+        {
+          doc: [
+            'Functions mmk calls around migrations: once before and after the whole run,',
+            'and before, after, or on error for each migration. Each receives the same',
+            'context as your migrations ({ db, client, … }).',
+          ],
+          code: [
+            '// hooks: {',
+            '//   beforeAll: async (ctx) => {},',
+            '//   afterAll: async (ctx) => {},',
+            '//   beforeEach: async (name, ctx) => {},',
+            '//   afterEach: async (name, duration, ctx) => {},',
+            '//   onError: async (name, error, ctx) => {},',
+            '// },',
+          ].join('\n'),
+        },
+      ],
+    },
+  ];
 }
 
 /** Merge caller-supplied config values over the built-in defaults */
@@ -181,56 +397,37 @@ function configFields(values: ConfigValues): {
 }
 
 /**
- * The commented body shared by the TS and JS templates. Documents every option
+ * The documented body shared by the TS and JS templates. Every option gets a
+ * `/** … *\/` block saying what it does, its default, and its env var or flag,
  * so the file is the single place to set behavior and nothing has to be
- * remembered as a CLI flag. `createExtension` is seeded to match the config
- * file's own language (a `.ts` config defaults to TS migrations, `.js` to JS).
+ * remembered as a CLI flag. Options that are off stay as `// key: value` lines
+ * — one keystroke toggles them in most editors. `createExtension` is seeded to
+ * match the config file's own language (a `.ts` config defaults to TS
+ * migrations, `.js` to JS).
  */
 function configBody(values: ConfigValues, createExtension: MigrationExtension): string {
   const { uri, dbName, migrationsDir } = configFields(values);
-  return `  // ── Connection ──────────────────────────────────────────────
-  // To load these from a secret manager instead, run: mmk init --secret-provider
-  uri: '${uri}',
-  dbName: '${dbName}',
-
-  // ── Migration files ─────────────────────────────────────────
-  migrationsDir: '${migrationsDir}',
-  // Extensions scanned when discovering migrations.
-  fileExtensions: ['.ts', '.js'],
-  // File type \`mmk create\` generates by default ('ts' | 'js').
-  // Override for a single run with --js / --ts.
-  createExtension: '${createExtension}',
-  // Use 0001-style sequential numbering instead of timestamps.
-  sequential: false,
-  // Path to a custom template used by \`mmk create\`.
-  // templatePath: './migration.template.ts',
-  // Author \`mmk create\` writes into new migrations. Defaults to your git
-  // \`user.name <user.email>\`; override per run with --author.
-  // author: 'Jane Doe <jane@example.com>',
-
-  // ── Bookkeeping collections ─────────────────────────────────
-  migrationsCollection: '_mmk_migrations',
-  lockCollection: '_mmk_locks',
-  // Seconds before a held lock is considered stale and reclaimable.
-  lockTTLSeconds: 60,
-
-  // ── Behavior ────────────────────────────────────────────────
-  // Abort (instead of warn) when a file's checksum no longer matches.
-  strict: false,
-  // Wrap every migration in a transaction. Override per file with
-  // \`export const useTransaction = true\`.
-  useTransaction: false,
-  // Refuse to apply any migration that does not export a non-empty \`author\`.
-  requireAuthor: false,
-
-  // ── Lifecycle hooks (code only — not available in JSON config) ──
-  // hooks: {
-  //   beforeAll: async (ctx) => {},
-  //   afterAll: async (ctx) => {},
-  //   beforeEach: async (name, ctx) => {},
-  //   afterEach: async (name, duration, ctx) => {},
-  //   onError: async (name, error, ctx) => {},
-  // },`;
+  const connection: OptionSection = {
+    title: 'Connection',
+    options: [
+      {
+        doc: [
+          'MongoDB connection string. Required.',
+          'Env: MMK_URI · Flag: --uri',
+          'To load it from a secret manager instead, run: mmk init --secret-provider',
+        ],
+        code: `uri: ${toSingleQuoted(uri)},`,
+      },
+      {
+        doc: ['Database the migrations run against. Required.', 'Env: MMK_DB · Flag: --db'],
+        code: `dbName: ${toSingleQuoted(dbName)},`,
+      },
+    ],
+  };
+  return renderSections(
+    [connection, ...sharedSections(createExtension, migrationsDir, values.namespace)],
+    '  ',
+  );
 }
 
 /** The built-in TypeScript config template */
@@ -283,6 +480,8 @@ export function defaultConfigJson(values: ConfigValues = {}): string {
     sequential: false,
     migrationsCollection: '_mmk_migrations',
     lockCollection: '_mmk_locks',
+    // JSON cannot hold the commented example, so the key appears only when set.
+    ...(values.namespace !== undefined ? { namespace: values.namespace } : {}),
     lockTTLSeconds: 60,
     strict: false,
     useTransaction: false,
@@ -320,25 +519,16 @@ const SECRET_PROVIDER_GUIDE = `/**
  */`;
 
 /**
- * The migration-tool options shared by both secret-provider templates, indented
- * to sit inside the returned object of the async factory (4 spaces).
+ * The documented migration-tool options of both secret-provider templates,
+ * indented to sit inside the object the async factory returns (4 spaces). Same
+ * wording as the static templates; only the connection differs.
  */
-function secretConfigOptions(createExtension: MigrationExtension, migrationsDir: string): string {
-  return `    // ── Migration files ─────────────────────────────────────
-    migrationsDir: '${migrationsDir}',
-    fileExtensions: ['.ts', '.js'],
-    createExtension: '${createExtension}',
-    sequential: false,
-
-    // ── Bookkeeping collections ─────────────────────────────
-    migrationsCollection: '_mmk_migrations',
-    lockCollection: '_mmk_locks',
-    lockTTLSeconds: 60,
-
-    // ── Behavior ────────────────────────────────────────────
-    strict: false,
-    useTransaction: false,
-    requireAuthor: false,`;
+function secretConfigOptions(
+  createExtension: MigrationExtension,
+  migrationsDir: string,
+  namespace: string | undefined,
+): string {
+  return renderSections(sharedSections(createExtension, migrationsDir, namespace), '    ');
 }
 
 /** Secret-provider JavaScript (ESM) config template */
@@ -382,7 +572,7 @@ export default async () => {
     uri: secret.uri,
     dbName: secret.dbName,
 
-${secretConfigOptions('js', migrationsDir)}
+${secretConfigOptions('js', migrationsDir, values.namespace)}
   };
 };
 `;
@@ -428,7 +618,7 @@ export default async (): Promise<Partial<MmkConfig>> => {
     uri: secret.uri,
     dbName: secret.dbName,
 
-${secretConfigOptions('ts', migrationsDir)}
+${secretConfigOptions('ts', migrationsDir, values.namespace)}
   };
 };
 `;

@@ -2,6 +2,76 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.5.0
+
+Several repos, one database: give each repo a `namespace`.
+
+### Added
+
+- **`namespace`** (config / `MMK_NAMESPACE`) — one value per repo when several repos share a
+  database. Each repo's changelog records carry its namespace and every query is scoped to it:
+  `status` shows only this repo's migrations, batch numbers are per repo, and `down` / `down --steps`
+  / `redo` never touch another repo's migrations. The collections stay shared (no new collections),
+  and the unique index on `name` is unchanged. Without a `namespace`, nothing changes: existing
+  records have no namespace field and belong to the default namespace as they are.
+- **`mmk namespace adopt [--dry-run]`** — one-time move of a repo's records written before it had a
+  namespace into its namespace (`MigratorKit.adopt()`, `AdoptResult`). The dry run lists who ran each
+  record so a filename shared by two repos can be reviewed first.
+- **`mmk status --all-namespaces`** — read-only overview of every namespace in the changelog
+  collection (`MigratorKit.statusAllNamespaces()`, `NamespaceStatusRow`).
+- **`mmk init --namespace <ns>`** — writes the namespace into the generated config. Without it, the
+  template shows a commented-out example; the value is never guessed.
+- **Safety checks** that refuse before anything runs:
+  - `NAMESPACE_UNADOPTED` — a namespace is set but this repo's older records have none yet. Every
+    command whose answer depends on what's applied refuses (`up`, `down`, `redo`, `import`,
+    `dry-run`, `list --pending/--applied`, `pendingMigrations()`), so none of them reports applied
+    migrations as pending. `status` and `list` warn instead and mark those rows `unadopted`
+    (`StatusRow.unadopted`), and `status --check` names `adopt` as the reason.
+  - `MIGRATION_NAME_CONFLICT` — a file to run is already recorded under another namespace. When
+    several files sit under one other namespace, the message asks whether the namespace changed.
+  - `SCHEMA_TOO_NEW` — on connect, when a newer mongo-migrate-kit wrote the database in a storage
+    format this version doesn't understand. The marker lives in its own `_mmk_meta` collection and is
+    written only by repos with a `namespace` — a single-repo database gets no new collection.
+- **`mmk status` notes applied records without a file** — one info line, and `(no file)` after the
+  name (`StatusRow.fileMissing`). Shown by `status` only, never by `up`.
+- **`mmk import` with a namespace** imports only records whose files are in this repo
+  (`ImportResult.notInRepo` lists the rest), stamps them with the namespace, and counts only this
+  namespace for "target not empty" and batch numbering.
+- **`LockInfo`** gains `namespace`, `acquiredAt` and `expiresAt`; `mmk unlock` shows the holder's
+  namespace and warns when the lock belongs to another repo.
+
+### Changed
+
+- **The lock-held error names the holder** — namespace, host, pid, user, since when, and when the lock
+  frees itself if the holder crashed — instead of `Migration lock is already held`.
+- **Lock staleness respects each holder's own `lockTTLSeconds` and uses the server clock.** The lock
+  document carries `expiresAt` (server time + the holder's TTL). Previously the run *trying* to take
+  the lock judged staleness by its own TTL and its own clock, so a repo with a short TTL — or a
+  machine whose clock ran ahead — could take over a lock while a long migration was still running.
+  Locks written by older versions (no `expiresAt`) are judged by the old rule.
+- **`mmk init` config files document every option in a `/** … */` block** — what it does, its
+  default, and its env var or flag — instead of terse `//` comments. Options that are off by default
+  stay as `// key: value` lines so one keystroke turns them on. The `--secret-provider` templates use
+  the same wording and now also list `templatePath`, `author` and `hooks`.
+- **The `status` / `list` / `dry-run` table no longer has a Duration column.** `duration` is still
+  recorded and still in `--json` output and `StatusRow`.
+- **MongoDB server 4.2 or newer is required** (the lock uses the server clock and pipeline updates).
+  Connecting to an older server fails with `CONNECTION_FAILED` and a message naming its version.
+
+### Fixed
+
+- **`Loaded config from …` no longer lands on the spinner's line** (`⠋ Connecting to MongoDB…Loaded
+  config from mmk.config.ts`) in every command that connects. The config is now loaded before the
+  spinner starts, so it and any config warnings print on their own lines — and `Loaded config` now
+  comes before the warnings about that config. New `MigratorKit.resolveConfig()` resolves the config
+  without connecting.
+
+### Deprecated
+
+- **`service`** (config / `MMK_SERVICE` / `MigrationRecord.service`) — use `namespace`. They are not
+  the same: `service` only labels records, `namespace` decides which migrations count as applied.
+  Setting `service` explicitly prints a notice; it is removed in 2.0. Existing records keep the field.
+
 ## v1.4.0
 
 Know who wrote a migration, not just who ran it.
