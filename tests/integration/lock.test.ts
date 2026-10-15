@@ -121,3 +121,70 @@ describe('MigrationLock (integration)', () => {
     expect(warn).toHaveBeenCalledOnce();
   });
 });
+
+describe('MigrationLock across repos (integration)', () => {
+  it("should not let a short-TTL repo take over a long-TTL holder's lock", async () => {
+    // billing-api holds the lock with a 10-minute TTL; checkout-api uses 1s.
+    // Before 1.5 the acquirer judged staleness by ITS OWN TTL, so after 1s it
+    // would take the lock while billing's migration was still running.
+    const holder = new MigrationLock(mongo.db, COLLECTION, 600, 'billing-api');
+    await holder.acquire();
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const shortTtl = new MigrationLock(mongo.db, COLLECTION, 1, 'checkout-api');
+    await expect(shortTtl.acquire()).rejects.toBeInstanceOf(LockAlreadyHeldError);
+  });
+
+  it('should reclaim a lock whose expiresAt has passed', async () => {
+    await mongo.db.collection<{ _id: string }>(COLLECTION).insertOne({
+      _id: LOCK_ID,
+      lockedAt: new Date(Date.now() - 120_000),
+      expiresAt: new Date(Date.now() - 60_000),
+      pid: 1,
+      host: 'crashed-host',
+      executedBy: 'old-user',
+      owner: 'stale',
+      namespace: 'billing-api',
+    });
+    const lock = new MigrationLock(mongo.db, COLLECTION, 60);
+    await expect(lock.acquire()).resolves.toBeUndefined();
+    const doc = await mongo.db.collection<{ _id: string }>(COLLECTION).findOne({ _id: LOCK_ID });
+    expect(doc?.pid).toBe(process.pid);
+    // Taken by the default namespace: the previous holder's namespace is gone.
+    expect(doc).not.toHaveProperty('namespace');
+  });
+
+  it('should keep a fresh lock even when this machine clock runs far ahead', async () => {
+    const holder = new MigrationLock(mongo.db, COLLECTION, 60, 'billing-api');
+    await holder.acquire();
+    // An hour of clock skew on the acquirer. Judged on the local clock, the
+    // holder's lock would look an hour old — far past its 60s TTL.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 3_600_000);
+    try {
+      const skewed = new MigrationLock(mongo.db, COLLECTION, 60, 'checkout-api');
+      await expect(skewed.acquire()).rejects.toBeInstanceOf(LockAlreadyHeldError);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should write server-clock timestamps and the holder TTL deadline', async () => {
+    const lock = new MigrationLock(mongo.db, COLLECTION, 90, 'orders-api');
+    await lock.acquire();
+    const doc = await mongo.db.collection<{ _id: string }>(COLLECTION).findOne({ _id: LOCK_ID });
+    expect(doc?.namespace).toBe('orders-api');
+    expect(doc?.acquiredAt).toBeInstanceOf(Date);
+    expect(doc?.expiresAt.getTime() - doc?.lockedAt.getTime()).toBe(90_000);
+  });
+
+  it('should move expiresAt forward on renew', async () => {
+    const lock = new MigrationLock(mongo.db, COLLECTION, 60);
+    await lock.acquire();
+    const before = await mongo.db.collection<{ _id: string }>(COLLECTION).findOne({ _id: LOCK_ID });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await lock.renew()).toBe(true);
+    const after = await mongo.db.collection<{ _id: string }>(COLLECTION).findOne({ _id: LOCK_ID });
+    expect(after?.expiresAt.getTime()).toBeGreaterThan(before?.expiresAt.getTime());
+    expect(after?.acquiredAt.getTime()).toBe(before?.acquiredAt.getTime());
+  });
+});

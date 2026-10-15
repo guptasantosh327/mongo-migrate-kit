@@ -5,6 +5,7 @@ import { registerDryRun } from './commands/dry-run.js';
 import { registerImport } from './commands/import.js';
 import { registerInit } from './commands/init.js';
 import { registerList } from './commands/list.js';
+import { registerNamespace } from './commands/namespace.js';
 import { registerRedo } from './commands/redo.js';
 import { registerStatus } from './commands/status.js';
 import { registerUnlock } from './commands/unlock.js';
@@ -39,6 +40,7 @@ export function buildProgram(): Command {
   registerDryRun(program);
   registerCreate(program);
   registerUnlock(program);
+  registerNamespace(program);
 
   return program;
 }

@@ -144,9 +144,10 @@ Every command accepts the global flags `--uri`, `--db`, `--dir`, and `--config`.
 | `mmk list` | List migrations, filtered by status |
 | `mmk dry-run <up\|down> [file]` | Preview a run without touching the database |
 | `mmk unlock` | Force-release a stuck lock left behind by a crashed run |
+| `mmk namespace adopt` | Move records from before a repo had a `namespace` into it (one-time) |
 
 Most data commands (`up`, `down`, `redo`, `status`, `list`, `dry-run`, `import`, `create`,
-`unlock`) accept **`--json`** for machine-readable output — see [CI & automation](#ci--automation).
+`unlock`, `namespace adopt`) accept **`--json`** for machine-readable output — see [CI & automation](#ci--automation).
 
 <details>
 <summary><b>Options for every command</b></summary>
@@ -468,14 +469,13 @@ A typical pipeline gate:
 <br>
 
 Every record in `_mmk_migrations` stores `batch`, `status`, `appliedAt`, `revertedAt`, `duration`,
-`checksum`, `environment`, `executedBy`, `author`, and `service`. Rolling back **updates** a record's status to
+`checksum`, `environment`, `executedBy`, `author`, and — when set — `namespace`. Rolling back **updates** a record's status to
 `reverted` and stamps `revertedAt` — it is **never deleted**, so the full history stays intact for
 compliance.
 
-`service` records which codebase applied the migration — no setup needed. mmk uses the `name` of the
-nearest `package.json` above your migrations directory (or `npm_package_name` when run from an npm
-script). Set `service` / `MMK_SERVICE` only if that name is missing or shared by several services;
-if nothing is found, the field is simply left out.
+Records also carry `service`, the `package.json` name of the codebase that applied them. It is
+**deprecated** in favour of [`namespace`](#sharing-one-database-across-repos) and stops being written in
+2.0; setting it explicitly prints a notice.
 
 `author` records **who wrote** the migration; `executedBy` records **who ran** it. `mmk create`
 writes an `export const author = '…'` line into every new file, using `--author`, then the `author`
@@ -492,8 +492,39 @@ on are not checked.
 > Custom `--template` files are copied as-is, so add an `export const author = '…'` line to your
 > template yourself.
 
-> **Several services, one database?** Give each service its own `migrationsCollection` (e.g.
-> `_mmk_migrations_orders`). Batches, rollbacks, and the lock then stay scoped to that service.
+</details>
+
+<details>
+<summary><b>Sharing one database across repos</b> — one <code>namespace</code> per repo</summary>
+
+<br>
+
+<a id="sharing-one-database-across-repos"></a>
+
+When several repos run migrations against the same database, give each one a `namespace`:
+
+```js
+export default { uri: process.env.MONGO_URI, dbName: 'shop', namespace: 'orders-api' };
+```
+
+Each repo's records carry its namespace and every query is scoped to it: `mmk status` shows only
+this repo's migrations, batch numbers are per repo, and `mmk down` never touches another repo's
+batch. The collections stay shared — a namespace never creates new ones — and every repo on the
+database still takes turns on **one lock** (a busy lock names the repo holding it).
+
+- Set it once and never change it: it decides which migrations count as applied.
+- Put it in the repo's config file, not on a shared CI runner.
+- Every repo on the database needs mongo-migrate-kit 1.5+; MongoDB 4.2+.
+- With a namespace, mmk keeps one storage-format document in a small `_mmk_meta` collection (grant
+  your deploy user access to it if its permissions are narrowly scoped).
+- New repos need nothing else. An existing repo whose migrations ran before it had a namespace can
+  simply stay without one (the default namespace coexists with named ones), or move its history into
+  a namespace once with `mmk namespace adopt`.
+- `mmk status --all-namespaces` shows every repo's records.
+- Separate products or teams can additionally use their own `migrationsCollection`.
+
+Without a `namespace`, nothing changes. Full guide:
+[Sharing a Database](https://mongo-migrate-kit.vercel.app/guide/shared-database).
 
 </details>
 
@@ -552,6 +583,9 @@ if (pending.length > 0) {
   throw new Error(`Database is behind by ${pending.length} migration(s)`);
 }
 ```
+
+With a `namespace` whose older records haven't been adopted yet, it throws `NamespaceUnadoptedError`
+(as `runMigrations()` would) instead of counting already-applied migrations as pending.
 
 #### Full control
 
@@ -642,11 +676,12 @@ export default {
 | `MMK_COLLECTION` | `migrationsCollection` | `_mmk_migrations` |
 | `MMK_LOCK_COLLECTION` | `lockCollection` | `_mmk_locks` |
 | `MMK_LOCK_TTL` | `lockTTLSeconds` | `60` |
+| `MMK_NAMESPACE` | `namespace` | — *(default namespace; set per repo only when repos share a database)* |
 | `MMK_STRICT` | `strict` | `false` |
 | `MMK_USE_TRANSACTION` | `useTransaction` | `false` |
 | `MMK_SEQUENTIAL` | `sequential` | `false` |
 | `MMK_CREATE_EXTENSION` | `createExtension` | `js` |
-| `MMK_SERVICE` | `service` | nearest `package.json` name |
+| `MMK_SERVICE` | `service` *(deprecated — use `namespace`)* | nearest `package.json` name |
 | `MMK_AUTHOR` | `author` | git `user.name <user.email>`, then OS username |
 | `MMK_REQUIRE_AUTHOR` | `requireAuthor` | `false` |
 

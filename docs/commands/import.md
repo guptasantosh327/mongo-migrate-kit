@@ -63,4 +63,15 @@ you pass `--force`. A forced re-import is stable — records being overwritten a
 batch offset.
 :::
 
+## With a namespace
+
+When several repos shared one migrate-mongo `changelog`, run `mmk import` **in each repo** with its
+[`namespace`](/guide/shared-database) set:
+
+- Only records whose file is in this repo's migrations folder are imported; the rest are listed as
+  skipped (`notInRepo` in `--json`) — they belong to other repos.
+- Imported records are stamped with this repo's namespace.
+- "Target not empty" and batch numbering only count this namespace, so other repos' records never
+  block an import.
+
 See the [migration guide](/guide/migrate-mongo) for the full switch-over walkthrough.

@@ -76,6 +76,7 @@ mmk init --ts                # → mmk.config.ts
 mmk init --json              # → mmk.config.json
 mmk init --secret-provider   # → a runtime secret-loading config (js/ts only)
 mmk init --force             # overwrite an existing config file
+mmk init --namespace orders-api   # write this repo's namespace (repos sharing a database)
 ```
 
 ### Options
@@ -87,8 +88,22 @@ mmk init --force             # overwrite an existing config file
 | `--json` | Create `mmk.config.json` (omits code-only options like `hooks`). |
 | `--secret-provider` | Generate a factory-function config wired to a secret manager (AWS example, provider-agnostic). `--json --secret-provider` is rejected. |
 | `--force` | Overwrite an existing config file (otherwise exits 1 with `CONFIG_FILE_EXISTS`). |
+| `--namespace <ns>` | Write `namespace: '<ns>'` into the file, for [repos sharing a database](/guide/shared-database). Without it the file has a commented-out example — the value is never guessed. An invalid value exits 1 with `INVALID_ARGUMENT`. |
 
-The generated JS/TS templates document every option inline, including a commented `hooks` block. The
+The generated JS/TS templates document every option in its own `/** … */` block — what it does, its
+default, and its env var or flag:
+
+```js
+  /**
+   * Collection that records which migrations have run (the history).
+   * Change it only to give a group of repos its own history on a shared database.
+   * Default: '_mmk_migrations' · Env: MMK_COLLECTION
+   */
+  migrationsCollection: '_mmk_migrations',
+```
+
+Options that are off by default (`namespace`, `author`, `templatePath`, `hooks`) are left as
+`// key: value` lines under their block, so one keystroke in your editor turns them on. The
 `--uri` / `--db` / `--dir` global flags pre-fill the generated file.
 
 See [Configuration](/guide/configuration) for what each option does.

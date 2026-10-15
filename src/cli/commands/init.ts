@@ -16,6 +16,10 @@ export function registerInit(program: Command): void {
       'Generate a config that loads the connection from a secret manager (js/ts only)',
     )
     .option('--force', 'Overwrite an existing config file')
+    .option(
+      '--namespace <ns>',
+      "Write this repo's namespace into the config (only for repos sharing a database)",
+    )
     .action(async (_opts, command) => {
       const opts = command.optsWithGlobals() as CliOptions & {
         ts?: boolean;
@@ -23,6 +27,7 @@ export function registerInit(program: Command): void {
         js?: boolean;
         secretProvider?: boolean;
         force?: boolean;
+        namespace?: string;
       };
       const format: ConfigFormat = opts.json ? 'json' : opts.ts ? 'ts' : 'js';
 
@@ -39,6 +44,7 @@ export function registerInit(program: Command): void {
           format,
           force: opts.force ?? false,
           ...(opts.secretProvider ? { secretProvider: true } : {}),
+          ...(opts.namespace !== undefined ? { namespace: opts.namespace } : {}),
         });
       });
     });

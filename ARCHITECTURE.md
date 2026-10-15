@@ -77,6 +77,7 @@ src/
 │   ├── runner.ts            # Execute ONE migration up()/down() (+ transactions)
 │   ├── context.ts           # Build the MigrationContext passed to each migration
 │   ├── import.ts            # PURE migrate-mongo → MigrationRecord mapping
+│   ├── storage-format.ts    # _mmk_meta marker: refuse a newer storage format (SCHEMA_TOO_NEW)
 │   └── run.ts               # Programmatic helpers: runMigrations(), pendingMigrations()
 ├── utils/
 │   ├── logger.ts            # Chalk logger (+ silent + stream-routed variants)
@@ -84,11 +85,12 @@ src/
 │   ├── loader.ts            # Dynamic-import a migration file (.ts/.js, ESM/CJS)
 │   ├── template.ts          # Generate migration files & config files
 │   ├── author.ts            # detectAuthor(): who `mmk create` writes into a new file
+│   ├── namespace.ts         # namespaceProblem()/namespaceLabel(): shared namespace rules
 │   └── date.ts              # Dependency-free timestamp formatting
 └── cli/
     ├── index.ts             # commander root: registers commands + global flags
     ├── shared.ts            # withMigrator(), confirm(), emitJson(), partialFromOpts()
-    ├── table.ts             # cli-table3 renderers (status/list/import)
+    ├── table.ts             # cli-table3 renderers (status/list/import/all-namespaces/adopt)
     └── commands/*.ts        # One file per command — thin wrappers over MigratorKit
 
 bin/mmk.ts                   # CLI shebang entry → calls cli/index.ts run()
@@ -208,7 +210,8 @@ Each entry: **responsibility · key exports · nuances you must know.**
 
 ### `src/core/lock.ts` — distributed lock (the subtlest module)
 - **Responsibility:** ensure only one migration run executes at a time, cluster-wide.
-- **Key exports:** `MigrationLock` (acquire/renew/release/inspect/forceRelease), `runWithLock()`.
+- **Key exports:** `MigrationLock` (acquire/renew/release/inspect/forceRelease), `runWithLock()`,
+  `lockHeldMessage()` (the holder-naming `LOCK_ALREADY_HELD` text).
 - **Durability:** all lock ops go through `MigrationLock.coll()`, which pins the collection to
   `writeConcern:{w:'majority'}` + `readConcern:{level:'majority'}` — the mutual-exclusion guarantee is
   only as strong as the lock's durability under failover.
@@ -216,10 +219,17 @@ Each entry: **responsibility · key exports · nuances you must know.**
   anything here.
 
 ### `src/core/changelog.ts` — the audit trail
-- **Responsibility:** read/write `MigrationRecord`s in `_mmk_migrations`.
+- **Responsibility:** read/write `MigrationRecord`s in `_mmk_migrations`, for **one namespace**.
 - **Key methods:** `getAll`, `getAppliedNames`, `getByName`, `getLastBatch`, `getByBatch`, `count`,
-  `getForeignDocs` (raw read for import), `markApplied`, `markReverted`, `ensureIndexes`.
+  `getForeignDocs` (raw read for import), `markApplied`, `markReverted`, `ensureIndexes` — all
+  scoped to the namespace. Deliberately cross-namespace (and named so): `getInOtherNamespaces`,
+  `getUnnamespaced`, `adoptUnnamespaced`, `getAllNamespaces`.
 - **Nuances:**
+  - **Namespace scoping lives in one place.** The constructor takes `(collection, namespace?)`;
+    every per-namespace filter is built by the private `scope()` — `{namespace}` or, for the default
+    namespace, `{namespace: {$exists: false}}`. No method writes its own namespace filter, so a new
+    query can't forget it. `stamp()` sets (or strips) the field on every record written. The default
+    namespace is the *absence* of the field, which is why pre-1.5 records need no rewrite.
   - `markApplied` is a **`replaceOne(..., {upsert:true})` keyed on `name`** — *not* `insertOne`. This
     is deliberate: `redo` / `up --force` / `import` must overwrite a record without violating the
     unique `name` index ([changelog.ts](src/core/changelog.ts)).
@@ -229,7 +239,10 @@ Each entry: **responsibility · key exports · nuances you must know.**
     sacred.
   - `coll()` pins the collection to `writeConcern:{w:'majority'}` so the audit trail survives failover
     (overridden by the transaction's WC when a session is in play).
-  - `ensureIndexes` creates the unique index on `name`; called on every `connect()`.
+  - `ensureIndexes` creates the unique index on `name`; called on every `connect()`. It stays unique
+    across the **whole collection**, not per namespace — stricter than `(namespace, name)`, recreated
+    by every pre-1.5 version anyway, and dropping it would need index privileges. A filename used by
+    two namespaces is caught earlier by safety check 1, with a clear message.
 
 ### `src/core/runner.ts` — single-migration execution
 - **Responsibility:** run exactly one `up()` or `down()`, optionally inside a transaction, time it,
@@ -270,8 +283,23 @@ Each entry: **responsibility · key exports · nuances you must know.**
   transaction. `redo` wraps `runDown`→`runUp` in a **single** `runWithLock`. `connect()` hardens the
   `MongoClient` (safe timeouts + `retryWrites`, overridable via `mongoClientOptions`; deliberately
   **no** client-wide write concern — majority is scoped to the bookkeeping collections instead),
-  detects transaction support (`detectTransactionSupport` → `assertTransactionSupported`), and redacts
-  credentials from connection errors (`redactMongoUri`).
+  probes the server once (`probeServer`: transaction support → `assertTransactionSupported`, wire
+  version → `assertServerSupported`, MongoDB ≥ 4.2), checks the storage format (`checkStorageFormat`:
+  reads the `_mmk_meta` marker every time, records it only when a namespace is set — so single-repo
+  databases never get the collection),
+  and redacts credentials from connection errors (`redactMongoUri`). The post-connect checks sit
+  outside the connection `try/catch` and disconnect on failure, so a retry re-checks instead of
+  finding a half-open client.
+- **Namespaces:** the changelog and lock are built with `config.namespace`. Safety checks run
+  before anything executes, in a fixed order: `checkAdopted` (check 2 — records from before the repo
+  had a namespace; run **once per command**: `'refuse'` in every command that answers "what's
+  applied" — `up`/`down`/`redo`/`import`/`dryRun`/`list('pending'|'applied')`, hence
+  `pendingMigrations()` — and `'warn'` + `StatusRow.unadopted` only in `status` / `list('all')`)
+  **then** `assertNoNameConflicts` (check 1 — a target recorded under another
+  *named* namespace; tells a changed namespace apart from a filename clash). Check 2 first, because
+  check 1 would otherwise tell someone who just added a namespace to "set it back". Check 3 (applied
+  records without a file) is presentation only: `StatusRow.fileMissing`, rendered by the CLI `status`
+  command. `adopt()` / `statusAllNamespaces()` are the namespace commands.
 
 ### `src/core/run.ts` — programmatic entry points
 - **Responsibility:** the "blessed" lifecycle-safe helpers for app startup / serverless / tests.
@@ -339,16 +367,31 @@ with `undefined`. This is why precedence works cleanly.
 
 ### 6.2 The lock (the most important thing to get right)
 File: [lock.ts](src/core/lock.ts). The lock is a single document `{_id:'mmk_lock'}` in
-`_mmk_locks`. Three mechanisms combine:
+`_mmk_locks`. **Every repo on a database takes this same lock**, whatever its namespace or
+`migrationsCollection`, so all migration runs on a database take turns (finer lock scopes were
+designed and deferred — see `NAMESPACE-PLAN.md` §4.9). The holder's `namespace` is recorded only so
+others can see who holds it. Three mechanisms combine:
 
 **(a) Atomic test-and-set with stale reclaim** — `acquire()`:
 ```
+now = hello.localTime                                   // the SERVER clock, read once
 updateOne(
-  { _id:'mmk_lock', lockedAt: { $lt: now - ttl } },   // matches only a stale/absent lock
-  { $set: { ...holderInfo, owner: randomUUID() } },
+  { _id:'mmk_lock', $or: [
+      { expiresAt: { $lt: now } },                      // 1.5+ holder: its own deadline passed
+      { expiresAt: { $exists:false }, lockedAt: { $lt: now - ourTtl } },  // pre-1.5 holder
+  ] },
+  [ { $set: { lockedAt:'$$NOW', acquiredAt:'$$NOW', expiresAt:{ $add:['$$NOW', ourTtl] },
+              ...holderInfo as $literal, owner: randomUUID() } } ],    // pipeline update
   { upsert:true }
 )
 ```
+- **Staleness uses the holder's TTL and the server clock.** `expiresAt` is written from the
+  *holder's* `lockTTLSeconds`, so a repo with a short TTL can't take over a long-TTL holder; and both
+  the comparison (`hello.localTime`) and the written timestamps (`$$NOW`) come from the server, so a
+  machine with a skewed clock can't mistake a fresh lock for a stale one. MongoDB rejects `$expr` /
+  `$$NOW` in an upsert's *filter* (code 224), hence the one `hello` round trip per acquire.
+- Values in the pipeline are wrapped in `$literal` so a string starting with `$` is stored as-is. When
+  the default namespace takes the lock, a `$unset: 'namespace'` stage drops a previous holder's.
 - If a **fresh** lock exists, the filter doesn't match and the upsert collides on `_id` →
   duplicate-key error → `LockAlreadyHeldError` (with the current holder attached).
 - If **no** lock or a **stale** one exists, the upsert inserts/overwrites it.
@@ -360,7 +403,8 @@ instead of running concurrently ([lock.ts:92-98](src/core/lock.ts#L92-L98)).
 
 **(c) Heartbeat (makes long migrations safe)** — `runWithLock` starts a `setInterval` that calls
 `renew()` every `ttlMs/2`. `renew()` is scoped to `{_id, owner}` so it only refreshes *our* lock and
-returns `false` if we've lost it (logging a warning). The interval is `.unref()`-ed so it never keeps
+returns `false` if we've lost it (logging a warning). It moves both `expiresAt` and `lockedAt`
+forward (`$$NOW`) — `lockedAt` because pre-1.5 versions judge staleness from it. The interval is `.unref()`-ed so it never keeps
 the process alive, and is `clearInterval`-ed in `finally` ([lock.ts:170-195](src/core/lock.ts#L170-L195)).
 
 **Release** — `deleteOne({_id, owner})`, owner-scoped so we never delete a lock since reclaimed by
@@ -369,8 +413,9 @@ someone else. `forceRelease()` (for `mmk unlock`) deletes unconditionally by `_i
 **(d) Majority durability** — every lock op goes through `coll()`, which pins
 `writeConcern:{w:'majority'}` + `readConcern:{level:'majority'}`. A lock write that isn't majority-acked
 could be rolled back on a primary failover, letting a second run acquire it; majority on both sides
-closes that. (Still TTL/heartbeat-based, so it does *not* fully defend against cross-host **clock
-skew** — a fencing-token scheme would; noted as a known limitation.)
+closes that. (Staleness is judged on the server clock, so cross-host clock skew no longer matters
+for 1.5+ holders; a pre-1.5 holder's `lockedAt` is still its own machine's clock. Still TTL/heartbeat
+based — a fencing-token scheme would be stronger; noted as a known limitation.)
 
 > **Why TTL + heartbeat instead of just TTL?** TTL alone means a migration longer than `lockTTLSeconds`
 > would let its own lock go stale and be stolen mid-run. The heartbeat refreshes it; the TTL is only
@@ -383,6 +428,8 @@ skew** — a fencing-token scheme would; noted as a known limitation.)
 ### 6.3 The changelog & batches
 - A **batch** groups migrations applied together. Default `up` assigns one shared batch to the whole
   run (`nextBatch()` = max existing batch + 1). `up --step` gives each file its own sequential batch.
+  Batches are **per namespace** (every changelog query is scoped), so each repo has its own batch 1
+  and `down` only ever reverts its own.
 - `down` (no args) reverts the **last batch**; `down --batch N` a specific batch; `down --steps N`
   the last N applied files ignoring batches (newest-first, `appliedAt` desc).
 - Records are upserted by `name`, so re-applying overwrites cleanly. Reverting flips `status` and

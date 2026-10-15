@@ -1,21 +1,79 @@
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
-import type { Collection, Db } from 'mongodb';
+import type { Collection, Db, Document, Filter } from 'mongodb';
 import { LockAlreadyHeldError, LockReleaseFailedError } from '../errors/index.js';
 import type { MmkLogger } from '../types/index.js';
+import { formatDateTime } from '../utils/date.js';
+import { explain, quote } from '../utils/explain.js';
 
-/** Fixed `_id` of the singleton lock document */
+/**
+ * Fixed `_id` of the singleton lock document. Every repo on a database — any
+ * namespace, any `migrationsCollection` — takes this same lock, so all
+ * migration runs on a database take turns (and pre-namespace versions, which
+ * use the same id, coordinate with newer ones).
+ */
 export const LOCK_ID = 'mmk_lock';
 
 /** Shape of the lock document stored in the lock collection */
 export interface LockDocument {
   _id: string;
+  /**
+   * When the holder last took or renewed the lock. Kept refreshed by the
+   * heartbeat because pre-1.5 versions judge staleness from it.
+   */
   lockedAt: Date;
   pid: number;
   host: string;
   executedBy: string;
   /** Random per-acquisition token identifying the current holder instance */
   owner: string;
+  /** Namespace of the holder. Absent for the default namespace (or a pre-1.5 holder) */
+  namespace?: string;
+  /** When the holder first took the lock, by the server clock. Absent for a pre-1.5 holder */
+  acquiredAt?: Date;
+  /**
+   * When the lock goes stale unless renewed: the server clock plus the
+   * **holder's** TTL. Absent for a pre-1.5 holder, which is judged by the
+   * acquirer's TTL against `lockedAt` instead.
+   */
+  expiresAt?: Date;
+}
+
+/** Wrap a value so an aggregation-pipeline update stores it verbatim (never as a `$field` path) */
+function literal(value: unknown): Document {
+  return { $literal: value };
+}
+
+/**
+ * Build the self-explanatory `LOCK_ALREADY_HELD` message: who holds the lock,
+ * since when, why repos take turns, when it frees itself, and what to do.
+ */
+export function lockHeldMessage(holder: LockDocument | null, now = new Date()): string {
+  if (!holder) {
+    return explain('The migration lock is held by another run', [
+      'Try: run again when it finishes (app start: runMigrations({ onLockHeld: "wait" }))',
+    ]);
+  }
+  const who =
+    holder.namespace === undefined
+      ? 'the default namespace'
+      : `namespace ${quote(holder.namespace)}`;
+  // The document may come from another version, or be written by hand, so
+  // describe only the fields that are actually there.
+  const since = holder.acquiredAt ?? holder.lockedAt;
+  const sinceText =
+    since instanceof Date
+      ? `, since ${formatDateTime(since)} (${Math.max(0, Math.round((now.getTime() - since.getTime()) / 1000))}s ago)`
+      : '';
+  const field = (value: unknown): string => (value === undefined ? 'unknown' : String(value));
+  return explain(`The migration lock is held by ${who}`, [
+    `Holder: host ${field(holder.host)}, pid ${field(holder.pid)}, user ${field(holder.executedBy)}${sinceText}`,
+    'Why: all repos on this database take turns — one migration run at a time',
+    holder.expiresAt instanceof Date
+      ? `If the holder crashed, the lock frees itself at ${formatDateTime(holder.expiresAt)}; \`mmk unlock\` releases it now (check the holder first)`
+      : 'If the holder crashed, the lock frees itself once it goes stale; `mmk unlock` releases it now (check the holder first)',
+    'Try: run again when it finishes (app start: runMigrations({ onLockHeld: "wait" }))',
+  ]);
 }
 
 /** Returns true when an error is a MongoDB duplicate-key error (code 11000) */
@@ -37,13 +95,16 @@ export class MigrationLock {
   private readonly db: Db;
   private readonly collectionName: string;
   private readonly ttlSeconds: number;
+  /** Namespace recorded on the lock document so other repos can see who holds it */
+  private readonly namespace: string | undefined;
   /** Token proving this instance is the current holder; set on acquire, cleared on release */
   private owner: string | undefined;
 
-  constructor(db: Db, collectionName: string, ttlSeconds: number) {
+  constructor(db: Db, collectionName: string, ttlSeconds: number, namespace?: string) {
     this.db = db;
     this.collectionName = collectionName;
     this.ttlSeconds = ttlSeconds;
+    this.namespace = namespace;
   }
 
   /** TTL in milliseconds — used to size the renewal heartbeat */
@@ -67,33 +128,77 @@ export class MigrationLock {
   }
 
   /**
+   * The database server's current time, from `hello.localTime`. Staleness is
+   * judged on the server's clock, never this machine's, so a CI runner or pod
+   * whose clock is off cannot mistake a fresh lock for a stale one. (MongoDB
+   * does not allow `$expr`/`$$NOW` in an upsert's filter, hence the round trip.)
+   */
+  private async serverNow(): Promise<Date> {
+    const hello = (await this.db.command({ hello: 1 })) as { localTime?: unknown };
+    return hello.localTime instanceof Date ? hello.localTime : new Date();
+  }
+
+  /**
+   * The filter matching a lock that may be taken: none at all (the upsert then
+   * inserts), or one that has gone stale by the server's clock.
+   *
+   * A lock with `expiresAt` is stale once that deadline — set from the
+   * *holder's* TTL — has passed, so a repo with a short `lockTTLSeconds` cannot
+   * take over from a holder with a long one. A lock without it (written by a
+   * pre-1.5 version) falls back to the old rule: `lockedAt` older than this
+   * run's TTL.
+   */
+  private staleFilter(now: Date): Filter<LockDocument> {
+    return {
+      _id: LOCK_ID,
+      $or: [
+        { expiresAt: { $lt: now } },
+        {
+          expiresAt: { $exists: false },
+          lockedAt: { $lt: new Date(now.getTime() - this.ttlMs) },
+        },
+      ],
+    };
+  }
+
+  /**
    * Acquire the lock, reclaiming it if the existing one is stale.
    * @throws {@link LockAlreadyHeldError} when another process holds a fresh lock
    */
   async acquire(): Promise<void> {
     const collection = this.coll();
-    const staleThreshold = new Date(Date.now() - this.ttlSeconds * 1000);
     const owner = randomUUID();
-    const lockFields = {
-      lockedAt: new Date(),
-      pid: process.pid,
-      host: os.hostname(),
-      executedBy: os.userInfo().username,
-      owner,
-    };
+    // A pipeline update so the timestamps written come from the server clock
+    // too. Values are wrapped in $literal so a string starting with "$" is
+    // stored as-is.
+    const update: Document[] = [
+      {
+        $set: {
+          lockedAt: '$$NOW',
+          acquiredAt: '$$NOW',
+          expiresAt: { $add: ['$$NOW', this.ttlMs] },
+          pid: literal(process.pid),
+          host: literal(os.hostname()),
+          executedBy: literal(os.userInfo().username),
+          owner: literal(owner),
+          ...(this.namespace === undefined ? {} : { namespace: literal(this.namespace) }),
+        },
+      },
+      // Reclaiming a stale lock updates the old document in place, so drop a
+      // namespace the previous holder left behind.
+      ...(this.namespace === undefined ? [{ $unset: 'namespace' }] : []),
+    ];
 
     try {
       // Matches when no fresh lock exists; upsert inserts (no doc) or updates (stale doc).
       // A fresh lock fails the filter, so the upsert collides on _id → duplicate-key error.
-      await collection.updateOne(
-        { _id: LOCK_ID, lockedAt: { $lt: staleThreshold } },
-        { $set: lockFields },
-        { upsert: true },
-      );
+      await collection.updateOne(this.staleFilter(await this.serverNow()), update, {
+        upsert: true,
+      });
     } catch (error) {
       if (isDuplicateKeyError(error)) {
         const holder = await collection.findOne({ _id: LOCK_ID });
-        throw new LockAlreadyHeldError('Migration lock is already held', {
+        throw new LockAlreadyHeldError(lockHeldMessage(holder), {
           holder: holder ?? undefined,
         });
       }
@@ -106,7 +211,7 @@ export class MigrationLock {
     // concurrently.
     const current = await collection.findOne({ _id: LOCK_ID });
     if (!current || current.owner !== owner) {
-      throw new LockAlreadyHeldError('Migration lock is already held', {
+      throw new LockAlreadyHeldError(lockHeldMessage(current), {
         holder: current ?? undefined,
       });
     }
@@ -114,18 +219,18 @@ export class MigrationLock {
   }
 
   /**
-   * Refresh `lockedAt` so a long-running migration's lock never goes stale and
-   * gets reclaimed mid-run. Scoped to our `owner` token, so it is a no-op if the
-   * lock was already lost. Returns true while we still hold the lock.
+   * Push the lock's deadline forward so a long-running migration's lock never
+   * goes stale and gets reclaimed mid-run. Refreshes `lockedAt` too, because
+   * pre-1.5 versions judge staleness from it. Scoped to our `owner` token, so it
+   * is a no-op if the lock was already lost. Returns true while we still hold it.
    */
   async renew(): Promise<boolean> {
     if (!this.owner) {
       return false;
     }
-    const result = await this.coll().updateOne(
-      { _id: LOCK_ID, owner: this.owner },
-      { $set: { lockedAt: new Date() } },
-    );
+    const result = await this.coll().updateOne({ _id: LOCK_ID, owner: this.owner }, [
+      { $set: { lockedAt: '$$NOW', expiresAt: { $add: ['$$NOW', this.ttlMs] } } },
+    ]);
     return result.matchedCount === 1;
   }
 

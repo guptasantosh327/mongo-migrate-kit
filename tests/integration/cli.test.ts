@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -548,5 +548,201 @@ describe('mmk CLI (integration)', () => {
     );
     expect(result.code).toBe(0);
     expect(readdirSync(project.dir).filter((f) => f.endsWith('forced-ts.ts'))).toHaveLength(1);
+  });
+});
+
+describe('mmk CLI namespaces (integration)', () => {
+  const ns = (namespace: string): Record<string, string> => ({ MMK_NAMESPACE: namespace });
+  const output = (result: CliResult): string => `${result.stdout}\n${result.stderr}`;
+
+  it('should print the namespace header and stamp records', async () => {
+    project.write('0001-a.js', insertMigration('things', 'a'));
+    const result = await runCli(baseArgs(['up']), ns('orders-api'));
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('Namespace: orders-api');
+    const record = await mongo.db.collection('_mmk_migrations').findOne({ name: '0001-a.js' });
+    expect(record?.namespace).toBe('orders-api');
+  });
+
+  it('should refuse up before adopt, then adopt (dry-run first) and carry on', async () => {
+    project.write('0001-a.js', insertMigration('things', 'a'));
+    expect((await runCli(baseArgs(['up']))).code).toBe(0);
+
+    const refused = await runCli(baseArgs(['up']), ns('orders-api'));
+    expect(refused.code).toBe(1);
+    expect(output(refused)).toContain('NAMESPACE_UNADOPTED');
+
+    const preview = await runCli(
+      baseArgs(['namespace', 'adopt', '--dry-run', '--json']),
+      ns('orders-api'),
+    );
+    expect(preview.code).toBe(0);
+    const planned = JSON.parse(preview.stdout) as {
+      adopted: number;
+      rows: Array<{ file: string }>;
+    };
+    expect(planned.adopted).toBe(0);
+    expect(planned.rows.map((row) => row.file)).toEqual(['0001-a.js']);
+
+    const adopted = await runCli(baseArgs(['namespace', 'adopt']), ns('orders-api'));
+    expect(adopted.code).toBe(0);
+    expect(adopted.stdout).toContain('Adopted 1 record(s) into namespace "orders-api"');
+    expect(adopted.stdout).toContain('0001-a.js');
+
+    const after = await runCli(baseArgs(['up']), ns('orders-api'));
+    expect(after.code).toBe(0);
+    expect(after.stdout).toContain('Nothing to migrate');
+    expect(await mongo.db.collection('things').countDocuments()).toBe(1);
+  });
+
+  it('should refuse adopt without a namespace', async () => {
+    const result = await runCli(baseArgs(['namespace', 'adopt']));
+    expect(result.code).toBe(1);
+    expect(output(result)).toContain('INVALID_ARGUMENT');
+    expect(output(result)).toContain('Set a namespace before adopting');
+  });
+
+  it('should give the adopt reason, not "pending", from status --check', async () => {
+    project.write('0001-a.js', insertMigration('things', 'a'));
+    await runCli(baseArgs(['up']));
+    const result = await runCli(baseArgs(['status', '--check']), ns('orders-api'));
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain('unadopted');
+    expect(result.stderr).toContain('need `mmk namespace adopt`');
+    expect(result.stderr).not.toContain('pending migration(s)');
+  });
+
+  it('should refuse list --pending and dry-run up until adopted, like up', async () => {
+    project.write('0001-a.js', insertMigration('things', 'a'));
+    await runCli(baseArgs(['up']));
+    for (const args of [
+      ['list', '--pending'],
+      ['dry-run', 'up'],
+    ]) {
+      const result = await runCli(baseArgs(args), ns('orders-api'));
+      expect(result.code).toBe(1);
+      expect(output(result)).toContain('NAMESPACE_UNADOPTED');
+      expect(output(result)).not.toContain('Would apply');
+    }
+  });
+
+  it('should list every namespace with status --all-namespaces', async () => {
+    project.write('0001-a.js', insertMigration('things', 'a'));
+    await runCli(baseArgs(['up']), ns('orders-api'));
+    await mongo.db.collection('_mmk_migrations').insertOne({
+      name: '0002-b.js',
+      batch: 1,
+      status: 'applied',
+      appliedAt: new Date(),
+      duration: 1,
+      checksum: '',
+      environment: 'test',
+      executedBy: 'someone',
+    });
+
+    const table = await runCli(baseArgs(['status', '--all-namespaces']));
+    expect(table.code).toBe(0);
+    expect(table.stdout).toContain('orders-api');
+    expect(table.stdout).toContain('(default)');
+
+    const json = await runCli(baseArgs(['status', '--all-namespaces', '--json']));
+    const rows = JSON.parse(json.stdout) as Array<{ file: string; namespace?: string }>;
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.file === '0001-a.js')?.namespace).toBe('orders-api');
+  });
+
+  it('should reject --check with --all-namespaces before connecting', async () => {
+    const result = await runCli(baseArgs(['status', '--check', '--all-namespaces']));
+    expect(result.code).toBe(1);
+    expect(output(result)).toContain('INVALID_ARGUMENT');
+  });
+
+  it('should note applied records without a file in status only', async () => {
+    project.write('0001-a.js', insertMigration('things', 'a'));
+    await runCli(baseArgs(['up']));
+    rmSync(path.join(project.dir, '0001-a.js'));
+
+    const status = await runCli(baseArgs(['status']));
+    expect(status.code).toBe(0);
+    expect(status.stdout).toContain('(no file)');
+    expect(status.stdout).toContain('1 applied migration have no file here');
+
+    const up = await runCli(baseArgs(['up']));
+    expect(output(up)).not.toContain('no file here');
+  });
+
+  it('should write --namespace into the config with init, and reject a bad one', async () => {
+    const ok = await runCli(['init', '--namespace', 'orders-api'], {}, project.dir);
+    expect(ok.code).toBe(0);
+    expect(readFileSync(path.join(project.dir, 'mmk.config.js'), 'utf8')).toContain(
+      "namespace: 'orders-api',",
+    );
+
+    const bad = await runCli(['init', '--force', '--namespace', 'Orders API'], {}, project.dir);
+    expect(bad.code).toBe(1);
+    expect(output(bad)).toContain('INVALID_ARGUMENT');
+    expect(output(bad)).toContain('lowercase letters');
+  });
+
+  it("should warn when unlock releases another repo's lock", async () => {
+    await mongo.db.collection<{ _id: string }>('_mmk_locks').insertOne({
+      _id: 'mmk_lock',
+      lockedAt: new Date(),
+      pid: 4242,
+      host: 'billing-host',
+      executedBy: 'deploy',
+      owner: 'token',
+      namespace: 'billing-api',
+    });
+    const result = await runCli(baseArgs(['unlock', '--yes']), ns('orders-api'));
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain(
+      'This lock belongs to "billing-api", not this repo ("orders-api")',
+    );
+  });
+
+  it('should name the holder namespace when the lock is busy', async () => {
+    await mongo.db.collection<{ _id: string }>('_mmk_locks').insertOne({
+      _id: 'mmk_lock',
+      lockedAt: new Date(),
+      expiresAt: new Date(Date.now() + 600_000),
+      pid: 4242,
+      host: 'billing-host',
+      executedBy: 'deploy',
+      owner: 'token',
+      namespace: 'billing-api',
+    });
+    project.write('0001-a.js', insertMigration('things', 'a'));
+    const result = await runCli(baseArgs(['up']), ns('orders-api'));
+    expect(result.code).toBe(1);
+    expect(output(result)).toContain(
+      'LOCK_ALREADY_HELD: The migration lock is held by namespace "billing-api"',
+    );
+    expect(output(result)).toContain('host billing-host, pid 4242');
+  });
+});
+
+describe('mmk CLI output ordering (integration)', () => {
+  it('should print "Loaded config" on its own line before the connecting spinner', async () => {
+    // A config file in the cwd is what prints "Loaded config from …". The spinner
+    // writes to stderr and the log line to stdout, so merge them (2>&1) to see
+    // the order a terminal shows. ora falls back to plain lines when not a TTY.
+    writeFileSync(
+      path.join(project.dir, 'mmk.config.json'),
+      JSON.stringify({ uri: mongo.uri, dbName: DB, migrationsDir: '.' }),
+    );
+    const merged = await new Promise<string>((resolve, reject) => {
+      const child = spawn('sh', ['-c', `npx tsx "${binPath}" status 2>&1`], { cwd: project.dir });
+      let out = '';
+      child.stdout.on('data', (chunk) => {
+        out += String(chunk);
+      });
+      child.on('error', reject);
+      child.on('close', () => resolve(out));
+    });
+    const loaded = merged.indexOf('Loaded config from mmk.config.json');
+    const connecting = merged.indexOf('Connecting to MongoDB');
+    expect(loaded).toBeGreaterThanOrEqual(0);
+    expect(connecting).toBeGreaterThan(loaded);
   });
 });

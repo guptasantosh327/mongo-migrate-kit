@@ -21,6 +21,10 @@ mmk dry-run down --steps <n> # preview reverting the last N migrations
 **never connects for writes, acquires no lock, and changes nothing**. It's the safe way to confirm a
 production run before committing to it.
 
+Because it predicts the real command, it also refuses exactly when that command would — e.g. with
+`NAMESPACE_UNADOPTED` when a [namespace](/guide/shared-database) was added but older records haven't
+been adopted yet, rather than listing already-applied migrations as pending.
+
 ```
 ◎ Dry-run  Would apply 2 migrations:
    • 20260605120000-add-users-index.js

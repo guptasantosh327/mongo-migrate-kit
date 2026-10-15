@@ -95,20 +95,24 @@ describe('runMigrations (programmatic entry point)', () => {
     project.write('0001-a.ts', insertMigration('things', 'a'));
     await holdLock();
 
-    // Release the peer's lock shortly after we start waiting.
-    const release = (async (): Promise<void> => {
-      await new Promise((r) => setTimeout(r, 150));
-      await mongo.db.collection(LOCK_COLLECTION).deleteOne({ _id: 'mmk_lock' });
-    })();
-
-    const [summary] = await Promise.all([
-      runMigrations(config(), {
-        onLockHeld: 'wait',
-        lockPollIntervalMs: 40,
-        lockWaitTimeoutMs: 5_000,
-      }),
-      release,
-    ]);
+    // Release the peer's lock once we are actually waiting for it — not on a
+    // fixed timer, which could fire before the connection is even open and
+    // leave nothing to wait for.
+    let release: Promise<unknown> | undefined;
+    const onInfo = (message: string): void => {
+      if (release === undefined && message.includes('waiting')) {
+        release = mongo.db.collection(LOCK_COLLECTION).deleteOne({ _id: 'mmk_lock' });
+      }
+    };
+    const noop = (): void => undefined;
+    const summary = await runMigrations(
+      {
+        ...config(),
+        logger: { info: onInfo, success: noop, warn: noop, error: noop, dim: noop },
+      },
+      { onLockHeld: 'wait', lockPollIntervalMs: 40, lockWaitTimeoutMs: 5_000 },
+    );
+    await release;
 
     expect(summary.waited).toBe(true);
     expect(summary.applied.map((r) => r.status)).toEqual(['applied']);

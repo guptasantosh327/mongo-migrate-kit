@@ -271,7 +271,7 @@ export default defineConfig({
       { text: 'Reference', link: '/reference/cli', activeMatch: '/reference/' },
       { text: 'Blog', link: '/blog/', activeMatch: '/blog/' },
       {
-        text: 'v1.4.0',
+        text: 'v1.5.0',
         items: [
           { text: 'Changelog', link: `${repo}/blob/main/CHANGELOG.md` },
           { text: 'npm', link: 'https://www.npmjs.com/package/mongo-migrate-kit' },
@@ -306,6 +306,7 @@ export default defineConfig({
           items: [
             { text: 'Programmatic API', link: '/guide/api' },
             { text: 'CI/CD & Deployment', link: '/guide/ci-cd' },
+            { text: 'Sharing a Database', link: '/guide/shared-database' },
             { text: 'Troubleshooting', link: '/guide/troubleshooting' },
             { text: 'Migrating from migrate-mongo', link: '/guide/migrate-mongo' },
             { text: 'FAQ', link: '/guide/faq' },
@@ -383,6 +384,7 @@ export default defineConfig({
           items: [
             { text: 'mmk import', link: '/commands/import' },
             { text: 'mmk unlock', link: '/commands/unlock' },
+            { text: 'mmk namespace adopt', link: '/commands/namespace' },
           ],
         },
       ],

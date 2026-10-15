@@ -84,7 +84,8 @@ for Google/Vault/Azure/any source — it just must return `{ uri, dbName }`).
 | `migrationsDir` | `string` | `'./migrations'` | Directory holding migration files |
 | `migrationsCollection` | `string` | `'_mmk_migrations'` | Collection storing the changelog |
 | `lockCollection` | `string` | `'_mmk_locks'` | Collection used for the concurrency lock |
-| `lockTTLSeconds` | `number` | `60` | Seconds before a lock is considered stale |
+| `lockTTLSeconds` | `number` | `60` | Seconds before a lock is considered stale. Each holder's own value is respected, judged on the server clock |
+| `namespace` | `string` | — (the default namespace) | One value per repo when [several repos share a database](/guide/shared-database). Lowercase letters, digits, `.`, `_`, `-`; max 64. Set once, never change it |
 | `strict` | `boolean` | `false` | Abort (vs. warn) on a checksum mismatch |
 | `useTransaction` | `boolean` | `false` | Wrap every migration in a transaction globally |
 | `fileExtensions` | `string[]` | `['.ts', '.js']` | Extensions scanned in the migrations dir |
@@ -93,7 +94,7 @@ for Google/Vault/Azure/any source — it just must return `{ uri, dbName }`).
 | `templatePath` | `string` | — | Path to a custom migration template |
 | `author` | `string` | git `user.name <user.email>`, then OS username | Author `mmk create` writes into new files ([details](/guide/writing-migrations#author)) |
 | `requireAuthor` | `boolean` | `false` | `mmk up` refuses files without a non-empty `author` export |
-| `service` | `string` | nearest `package.json` name | Service recorded on each changelog record |
+| `service` | `string` | nearest `package.json` name | **Deprecated** — use `namespace`. Only labels records; removed in 2.0 |
 | `mongoose` | `Mongoose` | — | Mongoose instance, if your migrations use it |
 | `mongoClientOptions` | `MongoClientOptions` | — | Extra options merged into the `MongoClient` (TLS, timeouts, auth, read/write prefs) |
 | `hooks` | `MigrationHooks` | — | [Lifecycle hooks](/guide/hooks) |
@@ -147,11 +148,12 @@ Every core option has an `MMK_*` variable. These **override the config file**:
 | `MMK_COLLECTION` | `migrationsCollection` |
 | `MMK_LOCK_COLLECTION` | `lockCollection` |
 | `MMK_LOCK_TTL` | `lockTTLSeconds` |
+| `MMK_NAMESPACE` | `namespace` — prefer the config file, so a CI runner can't give every repo the same one |
 | `MMK_STRICT` | `strict` |
 | `MMK_USE_TRANSACTION` | `useTransaction` |
 | `MMK_SEQUENTIAL` | `sequential` |
 | `MMK_CREATE_EXTENSION` | `createExtension` |
-| `MMK_SERVICE` | `service` (optional — defaults to the nearest `package.json` name) |
+| `MMK_SERVICE` | `service` (**deprecated** — use `MMK_NAMESPACE`) |
 | `MMK_AUTHOR` | `author` (optional — defaults to your git identity) |
 | `MMK_REQUIRE_AUTHOR` | `requireAuthor` |
 

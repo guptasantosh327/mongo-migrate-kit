@@ -278,3 +278,32 @@ describe('createConfigFile', () => {
     expect(readFileSync(file, 'utf8')).toContain("dbName: 'fresh'");
   });
 });
+
+describe('config templates — namespace', () => {
+  it('should show namespace as a commented-out example when none is given', () => {
+    for (const tpl of [defaultConfigJs(), defaultConfigTs(), secretConfigJs(), secretConfigTs()]) {
+      expect(tpl).toContain("// namespace: 'my-repo',");
+      expect(tpl).toContain(
+        "Scopes this repo's migration history when several repos share this database",
+      );
+      expect(tpl).not.toMatch(/^\s*namespace:/m);
+    }
+  });
+
+  it('should write a real namespace line when one is given', () => {
+    for (const tpl of [
+      defaultConfigJs({ namespace: 'orders-api' }),
+      defaultConfigTs({ namespace: 'orders-api' }),
+      secretConfigJs({ namespace: 'orders-api' }),
+      secretConfigTs({ namespace: 'orders-api' }),
+    ]) {
+      expect(tpl).toMatch(/^\s*namespace: 'orders-api',$/m);
+      expect(tpl).not.toContain("// namespace: 'my-repo',");
+    }
+  });
+
+  it('should keep namespace out of a JSON config unless one is given', () => {
+    expect(JSON.parse(defaultConfigJson())).not.toHaveProperty('namespace');
+    expect(JSON.parse(defaultConfigJson({ namespace: 'orders-api' })).namespace).toBe('orders-api');
+  });
+});

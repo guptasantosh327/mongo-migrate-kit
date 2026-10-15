@@ -159,3 +159,40 @@ export class TransactionsUnsupportedError extends MmkError {
     this.name = 'TransactionsUnsupportedError';
   }
 }
+
+/**
+ * Thrown before anything runs when a migration file to apply is already
+ * recorded under a different namespace in the same changelog collection —
+ * usually because this repo's `namespace` was changed or mistyped, or because
+ * two repos sharing the collection used the same filename.
+ */
+export class MigrationNameConflictError extends MmkError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super('MIGRATION_NAME_CONFLICT', message, context);
+    this.name = 'MigrationNameConflictError';
+  }
+}
+
+/**
+ * Thrown when this repo has a `namespace` but some of its migrations were
+ * applied before it had one, so their records carry no namespace yet. Fixed by
+ * `mmk namespace adopt`; refusing until then stops those migrations from
+ * looking pending and running a second time.
+ */
+export class NamespaceUnadoptedError extends MmkError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super('NAMESPACE_UNADOPTED', message, context);
+    this.name = 'NamespaceUnadoptedError';
+  }
+}
+
+/**
+ * Thrown on connect when the database was last written by a newer
+ * mongo-migrate-kit whose storage format this version does not understand.
+ */
+export class SchemaTooNewError extends MmkError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super('SCHEMA_TOO_NEW', message, context);
+    this.name = 'SchemaTooNewError';
+  }
+}

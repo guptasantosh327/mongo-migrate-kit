@@ -38,6 +38,7 @@ Available on every command, highest precedence:
 |---|---|
 | [`mmk status`](/commands/status) | Full status table |
 | `mmk status --check` | Exit 1 if any migration is pending (CI gate) |
+| `mmk status --all-namespaces` | Every namespace in the changelog collection (read-only) |
 | `mmk list --pending` | Only pending migrations |
 | `mmk list --applied` | Only applied migrations |
 | [`mmk dry-run up`](/commands/dry-run) | Preview what would apply |
@@ -57,6 +58,7 @@ Available on every command, highest precedence:
 | `mmk init --ts` / `--json` | Generate `.ts` / `.json` config |
 | `mmk init --secret-provider` | Generate a secret-manager config |
 | `mmk init --force` | Overwrite an existing config |
+| `mmk init --namespace <ns>` | Write this repo's [namespace](/guide/shared-database) into the config |
 
 ## Operations
 
@@ -69,6 +71,8 @@ Available on every command, highest precedence:
 | `mmk import --force` | Import into a non-empty changelog |
 | [`mmk unlock`](/commands/unlock) | Force-release a stuck lock |
 | `mmk unlock --yes` | Release without confirmation |
+| [`mmk namespace adopt`](/commands/namespace) | Move pre-namespace records into this repo's namespace |
+| `mmk namespace adopt --dry-run` | Preview what would move |
 
 ## Exit codes
 

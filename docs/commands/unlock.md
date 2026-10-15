@@ -21,16 +21,18 @@ mmk unlock --yes    # force-release without prompting
 mmk unlock --json   # machine-readable { released, holder }
 ```
 
-It first shows who holds the lock:
+It first shows who holds the lock — including the holder's [namespace](/guide/shared-database):
 
 ```
-Lock held by:
-  pid:   48213
-  host:  deploy-runner-7
-  user:  ci
-  since: 2026-06-05 12:01:33
+⚠ Lock held by namespace "orders-worker": pid 48213 on deploy-runner-7 (ci) since 2026-06-05T12:01:33.000Z
+Force-release this lock? [y/N]
+```
 
-Release this lock? [y/N]
+Every repo on a database shares one lock, so the holder may be **another repo**. When its namespace
+differs from yours, `unlock` says so — in the prompt, and as a warning with `--yes` or `--json`:
+
+```
+⚠ This lock belongs to "billing-api", not this repo ("orders-api") — releasing it may let two migrations run at once
 ```
 
 ## Options
@@ -57,3 +59,6 @@ if (info) {
   await migrator.forceUnlock();
 }
 ```
+
+`LockInfo` carries `namespace`, `acquiredAt` and `expiresAt` (when the lock frees itself if the holder
+stops renewing it, by the server clock) for holders on 1.5 or newer.
