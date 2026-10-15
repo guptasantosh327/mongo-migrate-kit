@@ -1,199 +1,235 @@
-# Troubleshooting
+---
+title: When something goes wrong
+description: The mongo-migrate-kit errors you're most likely to see, what they mean, and how to fix them. Lock held, failed migrations, connection errors, checksum mismatches and more.
+---
 
-Common problems and how to fix them. Each entry names the error you'll see, why it happens, and what
-to do. For the full list of error codes, see the [Error Codes reference](/reference/error-codes).
+# When something goes wrong
 
-## "Lock already held"
+<p class="page-meta">Step 3 of the learning path · read the parts you need</p>
 
-```
-LockAlreadyHeldError: Migration lock is held by pid 48213 on host deploy-runner-7
-```
+mmk's error messages are written to be read. Each one starts with a code (like `LOCK_ALREADY_HELD`),
+then says what happened, what it found, and what to try. Most of the time the message alone is
+enough. This page adds the background for the errors people hit most.
 
-**Why:** another `mmk` process is running migrations, *or* a previous run crashed and left the lock
-behind.
+All the output below is real.
 
-**Fix:**
-- If a migration really is running elsewhere, wait — this is the lock doing its job.
-- If you're sure nothing is running (e.g. a CI job was killed), clear it:
-  ```bash
-  mmk unlock
-  ```
-- The lock also auto-expires after `lockTTLSeconds` (default 60), so waiting works too.
+## Before anything else
 
-## "Checksum mismatch"
+1. **Read the whole message.** The useful part is often on the third or fourth line.
+2. **Run `npx mmk status`.** It shows what's applied, what's pending, and which files changed since
+   they ran.
+3. **Preview before you fix.** `npx mmk dry-run up` or `npx mmk dry-run down` shows what a command
+   would do, without doing it.
 
-```
-⚠ Warning  Checksum mismatch: 2026...-add-users-index.js
-```
+## Another run holds the lock
 
-**Why:** the file was **edited after it was already applied**. `mmk` detects this to stop you
-silently changing history.
-
-**Fix:**
-- **Never edit an applied migration.** Instead, write a *new* migration for the change.
-- If the edit was intentional and harmless (a comment, formatting), the warning is informational in
-  the default (non-strict) mode and the file is skipped.
-- If you truly need to re-run it, that's `mmk up <file> --force` — but understand you're rewriting
-  history. See [`mmk up --force`](/commands/up#re-running-an-applied-migration).
-
-## "Connection failed"
-
-```
-ConnectionFailedError: Failed to connect to MongoDB
+```text
+✖ LOCK_ALREADY_HELD: The migration lock is held by the default namespace
+  Holder: host deploy-a, pid 16152, user asha, since 2026-10-15 22:24:21 (2s ago)
+  Why: all repos on this database take turns — one migration run at a time
+  If the holder crashed, the lock frees itself at 2026-10-15 22:25:21; `mmk unlock` releases it now (check the holder first)
+  Try: run again when it finishes (app start: runMigrations({ onLockHeld: "wait" }))
 ```
 
-**Why:** the `uri`/`dbName` is wrong, MongoDB isn't running, or the network/credentials are off.
+**What it means:** another `mmk` process is running migrations on this database right now, or one
+crashed without letting go of the lock.
 
-**Fix:**
-- Verify the server is up: `mongosh "<your-uri>"`.
-- Check your config or env vars (`MMK_URI`, `MMK_DB`). See [Configuration](/guide/configuration).
-- In Docker/CI, make sure the host is reachable (often `mongodb://mongo:27017`, not `localhost`).
+**What to do:**
 
-## A `.ts` migration won't load
+- If the holder is a real deploy that's still going, wait and run again. The lock is doing its job.
+- If the holder crashed (a cancelled CI job, a killed pod), the lock frees itself at the time shown.
+  To clear it sooner, run `npx mmk unlock`. It shows the holder and asks before removing it.
+- If your app runs migrations on start-up and several instances boot together, use
+  `runMigrations({ onLockHeld: 'wait' })` so the others wait instead of failing. See
+  [Running from your code](/guide/api#several-instances-starting-at-once).
 
-```
-Cannot import a TypeScript migration: ERR_UNKNOWN_FILE_EXTENSION
-```
+## A migration failed
 
-**Why:** you're on a Node version below 22.18, which can't import `.ts` directly, and no TypeScript
-loader is registered. `mmk` runs under your Node and does not bundle a loader.
-
-**Fix:** any one of:
-- **Upgrade to Node ≥ 22.18** — `.ts` then loads natively, no setup.
-- **Register a loader:** install `tsx` and run mmk under it, e.g.
-  `node --import tsx node_modules/mongo-migrate-kit/dist/mmk.cjs up`.
-- **Use `.js` instead** (`mmk create <name> --js`) — runs on Node 18+ with zero setup.
-
-See [Running TypeScript migrations](/guide/writing-migrations#running-typescript-migrations) for the
-full breakdown.
-
-## "Transaction numbers are only allowed on a replica set"
-
-**Why:** you set `useTransaction` but your MongoDB is a standalone server. Transactions require a
-replica set or sharded cluster.
-
-**Fix:**
-- Run a single-node replica set locally, or use a managed cluster (Atlas) which already is one.
-- Or drop `useTransaction` for that migration if you don't need atomicity.
-
-See [Transactions](/guide/transactions).
-
-## "Migration is not applied"
-
-```
-NotAppliedError: 2026...-add-users-index.js has not been applied
-```
-
-**Why:** you tried to `down` (revert) a migration that isn't currently applied.
-
-**Fix:** run `mmk status` to see what's actually applied, then target a file that is.
-
-## An imported migration won't revert
-
-```
-IrreversibleMigrationError: 2026...-legacy.js was imported from migrate-mongo and cannot be reverted
-```
-
-**Why:** migrations adopted via [`mmk import`](/commands/import) use migrate-mongo's positional
-`up(db, client)` signature, which mmk can't run safely in reverse. This is intentional — it's caught
-*before* anything is touched.
-
-**Fix:** imported history is forward-only. To undo such a change, write a new migration that performs
-the reverse operation.
-
-## Still stuck?
-
-- Run any command with `--json` to get a structured error object you can inspect.
-- Check the [Error Codes reference](/reference/error-codes) for the exact `code` and its meaning.
-- Open an issue: <https://github.com/guptasantosh327/mongo-migrate-kit/issues>.
-
-## Wrong command arguments
-
-Argument problems carry the `INVALID_ARGUMENT` code — distinct from `CONFIG_INVALID`, so you always
-know whether to fix your **command** or your **config**. Flags are validated before mmk connects, so
-a typo costs nothing and the message is never buried under the connection spinner.
-
-```
-$ mmk down --batch abc
-✖ INVALID_ARGUMENT: --batch must be a positive whole number
-  Received: "abc"
-  Try: mmk down --batch 3
-```
-
-Nothing is a silent no-op. Each of these used to exit 0 (or quietly do the wrong thing) and now
-fails with an explanation:
-
-| Command | What you get |
-|---|---|
-| `mmk down --batch abc` | Rejected before connecting, naming the value it received |
-| `mmk down --batch 99` (no such batch) | Rejected, listing the batches that still have applied migrations |
-| `mmk down <file> --steps 2` | Rejected, spelling out what each option would roll back |
-| `mmk up typo.js` | Names the directory searched, suggests the closest real filename, lists what is there |
-| `mmk down not-applied.js` | Lists what *is* currently applied |
-| `mmk dry-run sideways` | Rejected before connecting, showing both valid directions |
-| `mmk create "   "` | Rejected — the name slugifies to nothing (it used to write `<stamp>-.js`) |
-| `mmk create x --js --ts` | Rejected as contradictory (it used to silently pick `.ts`) |
-| `mmk create x --template ./missing.js` | Names the absolute path it resolved the template to |
-| `mmk import --from c --to c` | Rejected — importing a collection into itself would rewrite the source |
-| `mmk stauts` | `(Did you mean status?)` |
-| A migration missing `down()` | Says which export is missing or the wrong type, and lists the exports found |
-
-Catch them programmatically with `InvalidArgumentError`:
-
-```ts
-import { MigratorKit, InvalidArgumentError } from 'mongo-migrate-kit';
-
-try {
-  await new MigratorKit(config).down(undefined, { steps: 0 });
-} catch (error) {
-  if (error instanceof InvalidArgumentError) {
-    console.error(error.message); // includes the received value and a command to try
-  }
-  throw error;
-}
-```
-
-## Runtime failures
-
-These three carry everything you need in the message itself — nothing important is hidden in
-`error.context` any more.
-
-**A migration threw.** You get the migration's own error, the line it came from, and — critically —
-whether its writes survived:
-
-```
-✖ MIGRATION_EXECUTION_FAILED: Migration "0001-add-users.js" threw while running up()
-  Reason: E11000 duplicate key error collection: shop.users index: email_1
-  Thrown at: /app/migrations/0001-add-users.js:4:11
-  This migration did not run in a transaction, so any writes it already made are still in the database
+```text
+✖ Error    20261015120000-seed-plans.js
+✖ MIGRATION_EXECUTION_FAILED: Migration "20261015120000-seed-plans.js" threw while running up()
+  Reason: MongoBulkWriteError: E11000 duplicate key error collection: shop.plans index: _id_ dup key: { _id: "free" }
+  Thrown at: /home/asha/shop-api/migrations/20261015120000-seed-plans.js:8:3
+  This migration ran in a transaction, so its database writes were rolled back
   The batch stopped here — later migrations were not run
 ```
 
-Set `export const useTransaction = true` in the migration to make that last point read
-"rolled back" instead (requires a replica set or sharded cluster).
+**What it means:** your `up` (or `down`) threw. `Reason` is the original error. `Thrown at` points
+to the line in your file.
 
-**Couldn't connect.** The driver's reason is in the message, and any password in the URI is redacted
-before it reaches your logs, `--json` output, or the error context:
+**What to do:**
 
-```
-✖ CONNECTION_FAILED: Failed to connect to MongoDB at mongodb://***:***@db.internal:27017
-  Reason: getaddrinfo ENOTFOUND db.internal
+1. Read the line about writes. If it says they were **rolled back**, the database is as it was
+   before this file. If it says they are **still in the database**, the migration got partway.
+   Check what it changed before you run it again.
+2. Fix the file. It hasn't been recorded as applied, so editing it is fine.
+3. Run `npx mmk up` again. It picks up from this file.
+
+If partial writes are a worry for a migration, give it `export const useTransaction = true`. See
+[Transactions](/guide/transactions).
+
+## Can't connect to MongoDB
+
+```text
+✖ CONNECTION_FAILED: Failed to connect to MongoDB at mongodb://***:***@db.internal.example:27017
+  Reason: getaddrinfo ENOTFOUND db.internal.example
   Database: "shop"
   Check the host/port is reachable, the credentials are right, and any TLS or IP allow-list requirement is met
+  Set the connection with --uri, the MMK_URI environment variable, or "uri" in your config file
 ```
 
-**An applied migration was edited.** `down` always verifies checksums (not just under `--strict`),
-because reverting edited code is the riskier direction:
+**What it means:** the address, the network or the credentials are wrong. The password is hidden in
+the message on purpose.
 
-```
-✖ CHECKSUM_MISMATCH: Refusing to roll back a file that changed since being applied: 0001-a.ts
+**What to do:**
+
+- `ENOTFOUND` means the host name doesn't resolve. In Docker or Kubernetes, use the service name
+  (`mongo`), not `localhost`.
+- `Authentication failed` means the user or password is wrong, or the user belongs to a different
+  `authSource`.
+- A timeout usually means a firewall or an IP allow-list (on Atlas, check Network Access).
+- Test the same URI with `mongosh "<your uri>"`. If that fails too, it's not an mmk problem.
+
+mmk also refuses servers older than MongoDB 4.2 with this code. The message says which version it
+found.
+
+## A file was edited after it ran
+
+```text
+✖ CHECKSUM_MISMATCH: Refusing to roll back a file that changed since being applied: 20261012091500-backfill-order-status.js
   Rolling back would run the CURRENT down(), which may not undo what the applied up() did
   Restore the file to the version that was applied, then roll back
-  Or roll back with the current code anyway: mmk down 0001-a.ts --force
+  Or roll back with the current code anyway: mmk down 20261012091500-backfill-order-status.js --force
 ```
 
-::: tip Detecting drift before it bites
-A plain `mmk up --strict` only checks the migrations it is about to run, so it will not flag drift in
-an **already-applied** file. Use `mmk status` (the `Checksum` column) for that, or name the file:
-`mmk up 0001-a.ts --strict`.
-:::
+**What it means:** the file on disk isn't the file that ran. `mmk status` shows `MISMATCH` for it.
+
+**What to do:** in most cases, put the old version back (`git log` and `git checkout` the file) and
+put your change in a new migration. If the edit really doesn't matter, or you've checked that the
+current `down()` is right, run the command with `--force`. It asks you to confirm.
+
+`mmk up` doesn't look at files that already ran, so it won't stop you here. Check `mmk status` in
+CI if you want edits caught early. See [Checksums](/guide/concepts#checksums).
+
+## "It is not currently applied"
+
+```text
+✖ NOT_APPLIED: Cannot roll back "20261015120000-seed-plans.js" — it is not currently applied
+  It has no changelog record
+  Currently applied: 20261012090000-add-users-email-index.js
+  Run `mmk status` to see what is applied
+```
+
+You tried to roll back something that hasn't run (or was already rolled back). The message lists
+what is applied, so you can pick the right file.
+
+## A typo in a command
+
+mmk checks what you typed before it connects, so a mistake costs nothing:
+
+```text
+$ npx mmk down --batch abc
+✖ INVALID_ARGUMENT: --batch must be a positive whole number
+  Received: "abc"
+  Try: mmk down --batch 3
+
+$ npx mmk down --steps 1 --batch 2
+✖ INVALID_ARGUMENT: Cannot combine --batch with --steps — they select different things
+  Received: --batch 2 and --steps 1
+  --batch 2 rolls back everything applied in batch 2
+  --steps 1 rolls back the last 1 migration(s), ignoring batches
+
+$ npx mmk stauts
+error: unknown command 'stauts'
+(Did you mean status?)
+```
+
+A file name that doesn't exist gets the folder mmk looked in, the closest match, and the files that
+are there:
+
+```text
+✖ MIGRATION_FILE_NOT_FOUND: Migration file not found: "0001-add-user.ts"
+  Looked in: /app/migrations
+  Did you mean "0001-add-users.ts"?
+  Migrations in that directory: 0001-add-users.ts, 0002-backfill.ts
+  Run `mmk status` to see every migration mmk knows about
+```
+
+Nothing quietly does the wrong thing. A few cases that are errors on purpose:
+
+| You typed | What happens |
+| --- | --- |
+| `mmk down --batch 99` (no such batch) | Error listing the batches that do exist |
+| `mmk create "   "` | Error: the name is empty once cleaned up |
+| `mmk create x --js --ts` | Error: pick one |
+| `mmk import --from changelog --to changelog` | Error: that would overwrite the source |
+| `mmk dry-run sideways` | Error: it's `up` or `down` |
+| A migration without `down()` | Error naming the missing export and listing the ones it found |
+
+## Transactions aren't supported
+
+```text
+✖ TRANSACTIONS_UNSUPPORTED: Migration "20261015120000-seed-plans.js" requests a transaction, but this MongoDB deployment is a standalone server, which does not support transactions. Use a replica set (even single-node) or a sharded cluster, or disable useTransaction for this migration.
+```
+
+The migration asked for a transaction and your MongoDB is a single standalone server. mmk stops
+before running anything. Run MongoDB as a replica set (a single node is enough, Atlas always is one),
+or remove `useTransaction` from that file. See [Transactions](/guide/transactions#what-it-needs).
+
+## "Unexpected token 'export'"
+
+```text
+✖ CONFIG_INVALID: Config file /app/mmk.config.js could not be imported: Unexpected token 'export'
+```
+
+**What it means:** your project is CommonJS (`"type": "commonjs"` in `package.json`), and the config
+file uses `export default`, which is ES module syntax. New projects from `npm init -y` are CommonJS
+by default.
+
+**What to do:** in a new project, `npm pkg set type=module`. In an existing CommonJS app, switch the
+config to `module.exports` and use a CommonJS template for new migrations. See
+[CommonJS projects](/guide/writing-migrations#commonjs-projects).
+
+## A .ts migration won't load
+
+**What it means:** your Node is older than 22.18, which can't load TypeScript by itself, and no
+TypeScript loader is set up. mmk uses your Node and doesn't include a compiler.
+
+**What to do**, any one of:
+
+- Use Node 22.18 or newer. `.ts` files then just work.
+- Install `tsx` and run mmk through it:
+  `node --import tsx node_modules/mongo-migrate-kit/dist/mmk.cjs up`
+- Write `.js` migrations (`mmk create <name> --js`), which work on Node 18 and up.
+
+## An imported migration won't roll back
+
+```text
+These were adopted via `mmk import` (forward-only). Their files use the positional migrate-mongo signature, which mmk cannot run. Revert them manually or re-author them in mmk format.
+✖ Cannot roll back 1 migrate-mongo-imported migration(s): 20250101000000-legacy.js
+✖ MIGRATION_IRREVERSIBLE: Cannot roll back migrate-mongo-imported migration(s): 20250101000000-legacy.js
+```
+
+Migrations brought over with [`mmk import`](/commands/import) were written for migrate-mongo, which
+calls `down(db, client)`. mmk calls `down({ db, client })`, so running the old file could do the
+wrong thing. mmk refuses before touching anything.
+
+To undo one of those changes, write a new migration that reverses it. Or rewrite the old file in
+mmk's format if you want it to be reversible.
+
+## Config errors
+
+`CONFIG_INVALID` lists every problem with your settings at once, with the value it read and where
+from. See [Configuration → When a setting is wrong](/guide/configuration#when-a-setting-is-wrong).
+
+## Namespace errors
+
+`NAMESPACE_UNADOPTED`, `MIGRATION_NAME_CONFLICT` and `SCHEMA_TOO_NEW` only happen when several repos
+share a database. They're explained in [Sharing a database](/guide/shared-database#mistakes-mmk-catches).
+
+## Still stuck?
+
+- Run the command with `--json`. You get the error code and all the details as data.
+- Look the code up in [Error codes](/reference/error-codes).
+- [Open an issue](https://github.com/guptasantosh327/mongo-migrate-kit/issues) with the full message
+  (passwords are already hidden). I read every one.

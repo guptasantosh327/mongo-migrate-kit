@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="dg" width="856" height="372" viewBox="0 0 856 372" role="img" aria-label="Five applied migrations in three batches, and which ones mmk down, mmk down --batch 2, mmk down --steps 3 and mmk down with a file name would undo">
+<style>
+.dg{--bg:#f5f8f6;--card:#fff;--line:#cdd6d2;--tx:#1c2521;--mut:#5d6a64;--acc:#00875c;--accs:#d8f3e5;--f:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;--fm:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){.dg{--bg:#171b1a;--card:#1f2523;--line:#3a4541;--tx:#e4eae7;--mut:#9aa7a1;--acc:#3ddc84;--accs:#143a28}}
+html .dg{--bg:var(--vp-c-bg-soft);--card:var(--vp-c-bg);--line:var(--vp-c-divider);--tx:var(--vp-c-text-1);--mut:var(--vp-c-text-2);--acc:var(--vp-c-brand-1);--accs:var(--vp-c-brand-soft);--f:var(--vp-font-family-base);--fm:var(--vp-font-family-mono)}
+.dg text{font-family:var(--f);fill:var(--tx)}
+.dg .m{font-family:var(--fm);font-size:13px}
+.dg .s{font-size:12.5px;fill:var(--mut)}
+.dg .h{font-size:15px;font-weight:600}
+.dg .bh{font-size:12.5px;font-weight:600;fill:var(--mut)}
+.dg .chip{fill:var(--card);stroke:var(--line)}
+.dg .hit{fill:var(--accs);stroke:var(--acc);stroke-width:1.5}
+.dg .hitt{fill:var(--acc);font-size:12.5px;font-weight:600}
+.dg .empty{fill:none;stroke:var(--line);stroke-dasharray:3 4}
+.dg .br{fill:none;stroke:var(--mut);stroke-width:1.2}
+.dg .rule{stroke:var(--line)}
+.dg .bgc{fill:var(--bg)}
+</style>
+<rect class="bgc" width="856" height="372" rx="14"/>
+<text class="h" x="24" y="36">What each rollback command undoes</text>
+
+<text class="bh" x="374" y="64" text-anchor="middle">Batch 1 · Monday deploy</text>
+<path class="br" d="M266 78v-6h216v6"/>
+<text class="bh" x="548" y="64" text-anchor="middle">Batch 2 · Wed</text>
+<path class="br" d="M498 78v-6h100v6"/>
+<text class="bh" x="722" y="64" text-anchor="middle">Batch 3 · Friday deploy</text>
+<path class="br" d="M614 78v-6h216v6"/>
+
+<text class="s" x="24" y="101">Applied migrations,</text>
+<text class="s" x="24" y="117">oldest to newest</text>
+<rect class="chip" x="262" y="86" width="108" height="38" rx="8"/><text class="m" x="316" y="110" text-anchor="middle">users-index</text>
+<rect class="chip" x="378" y="86" width="108" height="38" rx="8"/><text class="m" x="432" y="110" text-anchor="middle">order-status</text>
+<rect class="chip" x="494" y="86" width="108" height="38" rx="8"/><text class="m" x="548" y="110" text-anchor="middle">orders-index</text>
+<rect class="chip" x="610" y="86" width="108" height="38" rx="8"/><text class="m" x="664" y="110" text-anchor="middle">rename-name</text>
+<rect class="chip" x="726" y="86" width="108" height="38" rx="8"/><text class="m" x="780" y="110" text-anchor="middle">seed-plans</text>
+
+<line class="rule" x1="24" y1="142" x2="834" y2="142"/>
+
+<text class="m" x="24" y="172">mmk down</text>
+<text class="s" x="24" y="189">the whole last batch</text>
+<rect class="empty" x="262" y="158" width="108" height="36" rx="8"/>
+<rect class="empty" x="378" y="158" width="108" height="36" rx="8"/>
+<rect class="empty" x="494" y="158" width="108" height="36" rx="8"/>
+<rect class="hit" x="610" y="158" width="108" height="36" rx="8"/><text class="hitt" x="664" y="181" text-anchor="middle">undone</text>
+<rect class="hit" x="726" y="158" width="108" height="36" rx="8"/><text class="hitt" x="780" y="181" text-anchor="middle">undone</text>
+
+<text class="m" x="24" y="220">mmk down --batch 2</text>
+<text class="s" x="24" y="237">one batch, by number</text>
+<rect class="empty" x="262" y="206" width="108" height="36" rx="8"/>
+<rect class="empty" x="378" y="206" width="108" height="36" rx="8"/>
+<rect class="hit" x="494" y="206" width="108" height="36" rx="8"/><text class="hitt" x="548" y="229" text-anchor="middle">undone</text>
+<rect class="empty" x="610" y="206" width="108" height="36" rx="8"/>
+<rect class="empty" x="726" y="206" width="108" height="36" rx="8"/>
+
+<text class="m" x="24" y="268">mmk down --steps 3</text>
+<text class="s" x="24" y="285">the last 3, whatever the batch</text>
+<rect class="empty" x="262" y="254" width="108" height="36" rx="8"/>
+<rect class="empty" x="378" y="254" width="108" height="36" rx="8"/>
+<rect class="hit" x="494" y="254" width="108" height="36" rx="8"/><text class="hitt" x="548" y="277" text-anchor="middle">undone</text>
+<rect class="hit" x="610" y="254" width="108" height="36" rx="8"/><text class="hitt" x="664" y="277" text-anchor="middle">undone</text>
+<rect class="hit" x="726" y="254" width="108" height="36" rx="8"/><text class="hitt" x="780" y="277" text-anchor="middle">undone</text>
+
+<text class="m" x="24" y="316">mmk down …-users-index.js</text>
+<text class="s" x="24" y="333">one file, by name</text>
+<rect class="hit" x="262" y="302" width="108" height="36" rx="8"/><text class="hitt" x="316" y="325" text-anchor="middle">undone</text>
+<rect class="empty" x="378" y="302" width="108" height="36" rx="8"/>
+<rect class="empty" x="494" y="302" width="108" height="36" rx="8"/>
+<rect class="empty" x="610" y="302" width="108" height="36" rx="8"/>
+<rect class="empty" x="726" y="302" width="108" height="36" rx="8"/>
+
+<text class="s" x="24" y="360">Undone records stay in _mmk_migrations with status "reverted". Nothing is deleted.</text>
+</svg>

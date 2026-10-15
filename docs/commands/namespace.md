@@ -1,69 +1,83 @@
+---
+title: mmk namespace adopt
+description: Move a repo's existing migration records into its new namespace with mmk namespace adopt, when several repos share one MongoDB database.
+---
+
 # mmk namespace adopt
 
-Move this repo's migration records from before it had a `namespace` into its namespace. One-time,
-and only for an **existing** repo moving into a [namespace](/guide/shared-database) — new repos never
-need it, and an existing repo may also simply stay without a namespace.
+Moves this repo's older records, from before it had a [namespace](/guide/shared-database), into its
+namespace. You run it once.
 
 ```bash
-mmk namespace adopt [options]
+npx mmk namespace adopt [options]
 ```
 
-## When you need it
+::: tip You probably don't need this
+New repos never need it. And an existing repo can also stay without a namespace. This is only for
+an existing repo that you've decided to give a namespace.
+:::
 
-After you add `namespace: 'orders-api'` to a repo that already ran migrations, its old records still
-have no namespace, so in the new namespace those migrations would look pending — and `mmk up` would
-run them a second time. Until they're adopted, every command whose answer depends on what's applied
-refuses with `NAMESPACE_UNADOPTED`: `up`, `down`, `redo`, `import`, `dry-run`,
-`list --pending` / `--applied`, and `pendingMigrations()`. `status` and `list` keep working, warn, and
-mark those rows `unadopted`; `status --check` names `adopt` as the reason it fails.
+## Why it exists
+
+Say `orders-api` ran migrations for a year, then you added `namespace: 'orders-api'` to its config.
+Its old records have no namespace. In the new namespace, those migrations would look pending, and
+`mmk up` would run them all again.
+
+So mmk refuses until you move them. Every command whose answer depends on what's applied stops with
+`NAMESPACE_UNADOPTED`: `up`, `down`, `redo`, `import`, `dry-run`, `list --pending`, `list --applied`
+and `pendingMigrations()`. `status` and `list` still work, and mark those rows `unadopted`.
 
 ## Usage
 
+Always look at the dry run first:
+
 ```bash
-mmk namespace adopt --dry-run   # preview what would move
-mmk namespace adopt             # move it
-mmk namespace adopt --json      # machine-readable result
+npx mmk namespace adopt --dry-run
 ```
 
-The preview lists each record with who ran it, as a hint for review:
-
-```
+```text
 Namespace: orders-api
 ◎ Dry-run  Would adopt 2 record(s) into namespace "orders-api"
-┌──────────────────────────────────────────┬─────────┬───────┬─────────────────────┬─────────────┬────────────┐
-│ Migration                                │ Status  │ Batch │ Applied At          │ Executed By │ Service    │
-├──────────────────────────────────────────┼─────────┼───────┼─────────────────────┼─────────────┼────────────┤
-│ 20261001090000-create-orders-indexes.js  │ applied │ 1     │ 2026-10-01 09:00:02 │ deploy      │ orders-api │
-│ 20261001093000-backfill-order-totals.js  │ applied │ 1     │ 2026-10-01 09:00:05 │ deploy      │ orders-api │
-└──────────────────────────────────────────┴─────────┴───────┴─────────────────────┴─────────────┴────────────┘
+┌─────────────────────────────────────────┬─────────┬───────┬─────────────────────┬─────────────┬────────────┐
+│ Migration                               │ Status  │ Batch │ Applied At          │ Executed By │ Service    │
+├─────────────────────────────────────────┼─────────┼───────┼─────────────────────┼─────────────┼────────────┤
+│ 20261001090000-create-orders-indexes.js │ applied │ 1     │ 2026-10-01 09:00:02 │ deploy      │ orders-api │
+│ 20261001093000-backfill-order-totals.js │ applied │ 1     │ 2026-10-01 09:00:05 │ deploy      │ orders-api │
+└─────────────────────────────────────────┴─────────┴───────┴─────────────────────┴─────────────┴────────────┘
+```
+
+`Executed By` and `Service` help you check that these records really are this repo's. Then:
+
+```bash
+npx mmk namespace adopt
 ```
 
 ## What moves
 
-- Records **without a namespace** whose filename is in this repo's migrations folder — in any status.
-- Nothing else. Records whose file isn't here (deleted long ago, or another repo's) stay in the
-  default namespace; the result reports how many (`leftInDefault`).
+- Records with **no namespace** whose file is in this repo's migrations folder, whatever their status.
+- Nothing else. Records without a file here stay where they are. The result tells you how many
+  (`leftInDefault`).
 - Only within the current `migrationsCollection`.
 
-::: warning Adopt one repo at a time
-If two repos ever had a file with the same name, only one record exists, and whichever repo adopts
-first takes it — the other then gets `MIGRATION_NAME_CONFLICT`. Read the dry run (`Executed By`,
-`Service`) before adopting.
+::: warning One repo at a time
+If two repos ever had a file with the same name, there's only one record for it, and whichever repo
+adopts first takes it. The other one then gets `MIGRATION_NAME_CONFLICT`. Read the dry run before
+you adopt, especially the `Executed By` and `Service` columns.
 :::
 
 ## Options
 
-| Option | Description |
-|---|---|
-| `--dry-run` | Preview which records would move, without writing anything. |
-| `--no-lock` | Skip the concurrency lock (dev only). |
-| `--json` | Emit `{ namespace, rows, adopted, leftInDefault, dryRun }` as JSON. |
+| Option | What it does |
+| --- | --- |
+| `--dry-run` | Show what would move, write nothing. |
+| `--no-lock` | Don't take the lock. Only for local development. |
+| `--json` | Print `{ namespace, rows, adopted, leftInDefault, dryRun }`. |
 
-Plus the [global flags](/guide/configuration#global-cli-flags). Requires a `namespace` in the config
-(or `MMK_NAMESPACE`); without one it exits 1 with `INVALID_ARGUMENT`.
+It needs a `namespace` in the config (or `MMK_NAMESPACE`). Without one, it stops with
+`INVALID_ARGUMENT`.
 
-## Programmatic API
+## From code
 
 ```ts
-const result = await migrator.adopt({ dryRun: true }); // → AdoptResult
+const result = await migrator.adopt({ dryRun: true }); // AdoptResult
 ```

@@ -98,3 +98,172 @@
 .VPFeatures .VPFeature.link:hover .link-text-value {
   color: var(--vp-c-brand-1);
 }
+
+/* ─── Figures: terminal casts and diagrams ─────────────────────────────── */
+.mmk-figure {
+  margin: 1.5rem 0;
+}
+
+.mmk-diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Casts keep their natural size (so text is the same size in every recording) and shrink to fit. */
+.mmk-cast img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+.dark .mmk-cast img {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.mmk-figure figcaption {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--vp-c-text-2);
+  text-align: center;
+}
+
+/* ─── Home page sections below the feature cards ───────────────────────── */
+.home-section {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.home-section h2 {
+  margin-top: 3.5rem;
+  border-top: none;
+  padding-top: 0;
+}
+
+.home-section .lead {
+  font-size: 1.05rem;
+  color: var(--vp-c-text-2);
+  max-width: 46rem;
+}
+
+@media (min-width: 640px) {
+  .home-section {
+    padding: 0 48px;
+  }
+}
+
+@media (min-width: 960px) {
+  .home-section {
+    padding: 0 64px;
+  }
+}
+
+/* The four-step learning path on the home page and on /guide/ */
+ol.path,
+.vp-doc ol.path {
+  display: grid;
+  gap: 16px;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+@media (min-width: 768px) {
+  .path {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1100px) {
+  .home-section .path {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.path > li {
+  position: relative;
+  margin: 0 !important;
+  padding: 20px 20px 18px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
+  counter-increment: step;
+}
+
+.path > li::before {
+  content: counter(step);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.path .step-title {
+  display: block;
+  font-weight: 600;
+  font-size: 1.02rem;
+  color: var(--vp-c-text-1);
+}
+
+.path .step-time {
+  display: block;
+  margin: 2px 0 8px;
+  font-size: 0.8rem;
+  color: var(--vp-c-text-3);
+}
+
+.path p {
+  margin: 0 0 10px !important;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--vp-c-text-2);
+}
+
+.path a.step-link {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+/* "You are here" line at the top of guide pages that sit on the learning path */
+.page-meta {
+  margin: -0.5rem 0 1.5rem;
+  font-size: 0.85rem;
+  color: var(--vp-c-text-3);
+}
+
+/* On phones, keep casts and diagrams readable: they keep a minimum size and scroll sideways inside
+   their own frame instead of shrinking to unreadable text. */
+@media (max-width: 640px) {
+  .mmk-cast,
+  .mmk-diagram {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mmk-cast img {
+    max-width: none;
+    width: 620px;
+    margin: 0;
+  }
+
+  .mmk-diagram svg {
+    width: 620px;
+  }
+
+  .mmk-figure figcaption::before {
+    content: 'Scroll sideways to see all of it. ';
+  }
+}

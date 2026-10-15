@@ -1,195 +1,200 @@
 ---
-title: "Switching from migrate-mongo to mongo-migrate-kit: A Zero-Downtime, Non-Destructive Guide"
-description: "A step-by-step, zero-downtime guide to switching from migrate-mongo to mongo-migrate-kit without breaking anything that already works."
+title: "Switching from migrate-mongo to mongo-migrate-kit, step by step"
+description: "Move an existing project from migrate-mongo to mongo-migrate-kit without re-running old migrations, losing history, or touching your old changelog."
 date: 2026-06-17
 author: Santosh Gupta
 ---
 
-# Switching from migrate-mongo to mongo-migrate-kit: A Zero-Downtime, Non-Destructive Guide
+# Switching from migrate-mongo to mongo-migrate-kit, step by step
 
-If you're looking for a `migrate-mongo` alternative, the scariest question isn't "is the new tool better?" It's "how do I switch without breaking everything that already works?"
+When you look at a migrate-mongo alternative, the real question isn't "is it better?". It's "how do
+I switch without breaking what already works?"
 
-This guide answers that. We'll move an existing project from `migrate-mongo` to `mongo-migrate-kit` step by step. No re-running old migrations. No data loss. No editing your old changelog. If anything looks off at any point, you can stop and you've lost nothing.
+This post walks through moving an existing project over. Nothing old gets re-run, no history is
+lost, and your migrate-mongo `changelog` is never written to. If anything looks wrong at any step,
+you can stop and nothing has changed.
 
-Let's go.
+## What you need
 
-## Before you start
-
-You'll need:
-
-- A project already using `migrate-mongo` with some migrations applied.
-- Access to the same MongoDB database that `migrate-mongo` has been writing to.
+- A project using migrate-mongo, with some migrations already applied.
+- Access to the same database migrate-mongo writes to.
 - Node 18 or newer.
 
-That's it. You don't need to uninstall `migrate-mongo` yet. We'll leave it in place until you're confident.
+Leave migrate-mongo installed for now. You can remove it once you're happy.
 
-## Step 1 — Install mongo-migrate-kit
+## 1. Install mmk
 
 ```bash
 npm install mongo-migrate-kit
-npm install mongodb        # required peer dependency
 ```
 
-The CLI is `mmk`. You can run it with `npx mmk` if you'd rather not install it globally.
+You already have the `mongodb` driver from migrate-mongo, and mmk uses the same one.
 
-## Step 2 — Point it at the same database
+## 2. Point it at the same database
 
-`mmk` needs to know your connection string and database name. You have two ways to do this. Pick whichever fits your setup.
-
-**Option A — a config file.** Generate one:
+Either generate a config file:
 
 ```bash
 npx mmk init
 ```
 
-This creates an `mmk.config.js` in your project, fully commented. Open it and set your connection:
+and set the connection in `mmk.config.js`:
 
 ```js
 export default {
-  uri: 'mongodb://localhost:27017',  // the SAME database migrate-mongo uses
-  dbName: 'my_app',
-  migrationsDir: './migrations',     // where your migration files already live
+  uri: 'mongodb://localhost:27017', // the same database migrate-mongo uses
+  dbName: 'shop',
+  migrationsDir: './migrations',    // where your migration files already are
 };
 ```
 
-Use `mmk init --ts` if you want a TypeScript config instead.
-
-**Option B — no file at all.** `mmk` reads environment variables, so you can skip the config file completely:
+Or skip the file and use environment variables:
 
 ```bash
 export MMK_URI="mongodb://localhost:27017"
-export MMK_DB="my_app"
-export MMK_MIGRATIONS_DIR="./migrations"
+export MMK_DB="shop"
 ```
 
-The important thing in both cases: point `mmk` at the **same database** `migrate-mongo` has been using. That's how it can see your existing history.
+The one thing that matters: it has to be the **same database** migrate-mongo has been using. That's
+where your history is.
 
-## Step 3 — Preview the import (this writes nothing)
+## 3. Preview the import
 
-This is the step that makes the whole switch safe. Before changing anything, ask `mmk` to show you exactly what it plans to do:
+This is the step that makes the switch safe. Ask mmk what it would do, without doing it:
 
 ```bash
 npx mmk import --dry-run
 ```
 
-`mmk` reads your `migrate-mongo` changelog and prints a table of every migration it found and how it'll record it. It does **not** write anything. It does **not** touch your `migrate-mongo` data.
-
-Read the table. Does the list of migrations match what `migrate-mongo status` shows? Good. That's what we want.
-
-By default `mmk` reads a collection named `changelog` (that's `migrate-mongo`'s default). If your project renamed it, tell `mmk` where to look:
-
-```bash
-npx mmk import --dry-run --from my_changelog_collection
+```text
+◎ Dry-run  Would import 3 record(s) from "changelog" → "_mmk_migrations"
+┌─────────────────────────────────┬───────┬─────────────────────┬────────────┐
+│ Migration                       │ Batch │ Applied At          │ Checksum   │
+├─────────────────────────────────┼───────┼─────────────────────┼────────────┤
+│ 20250301100000-create-users.js  │ 1     │ 2025-03-01 15:35:00 │ recomputed │
+├─────────────────────────────────┼───────┼─────────────────────┼────────────┤
+│ 20250412083000-add-sku-index.js │ 2     │ 2025-04-12 14:10:00 │ recomputed │
+├─────────────────────────────────┼───────┼─────────────────────┼────────────┤
+│ 20250720140000-split-address.js │ 3     │ 2025-07-20 19:40:00 │ recomputed │
+└─────────────────────────────────┴───────┴─────────────────────┴────────────┘
 ```
 
-## Step 4 — Run the import for real
+Compare that list with `npx migrate-mongo status`. They should match.
 
-Happy with the preview? Run it without `--dry-run`:
+If your project renamed migrate-mongo's collection, point mmk at it with
+`--from your_collection_name`.
+
+## 4. Import for real
 
 ```bash
 npx mmk import
 ```
 
-Here's exactly what happens, so there are no surprises:
+What happens:
 
-- `mmk` **reads** your `migrate-mongo` changelog and records that history in its own changelog (a collection called `_mmk_migrations` by default). Your old changelog is **never modified**.
-- For each migration, it copies the filename, the applied date, and a checksum. It reuses `migrate-mongo`'s stored hash when it still matches the file on disk, and recomputes a fresh SHA-256 from disk otherwise.
-- Migration files that exist on disk but aren't in the changelog yet are left **pending**. They'll run on your next `mmk up`. This is correct — those are the new ones you haven't applied.
+- mmk **reads** migrate-mongo's changelog and writes the same history into its own collection,
+  `_mmk_migrations`. The old collection isn't changed.
+- Each record gets the file name, the date it was applied, and a checksum. If migrate-mongo stored
+  a file hash that still matches the file, it's reused. Otherwise mmk computes one from the file.
+- Files that are on disk but not in the old changelog stay **pending**. Those are migrations you
+  wrote but never ran, and they'll run on the next `mmk up`.
 
-It's a one-time, forward-only step. After this, `mmk` knows your past.
-
-## Step 5 — Confirm
-
-Check the status:
+## 5. Check, then carry on
 
 ```bash
 npx mmk status
 ```
 
-You should see all your previously-applied migrations marked as applied, with their dates, and any not-yet-run files marked pending. This should line up with what `migrate-mongo status` was telling you.
-
-Now run anything pending — these are migrations you wrote but hadn't applied yet:
+Everything migrate-mongo ran should show as `applied`, with its date. Anything new shows as
+`pending`. Run those:
 
 ```bash
 npx mmk up
 ```
 
-`mmk` runs only the new ones. It does not re-run the old ones, because the import told it they're already done. No re-created indexes. No duplicate seed data. Nothing touched that shouldn't be.
+Only the new ones run. Old indexes aren't rebuilt and seed data isn't inserted twice, because mmk
+knows they're done.
 
-That's the migration. You're now on `mmk`.
+Here's the whole switch in one recording:
 
-## What you get on the other side
+<Cast name="import" alt="Terminal: mmk import --dry-run previews three migrate-mongo records, mmk import copies them, and mmk up applies only the one new migration" />
 
-Now that you're moved over, here's what's new in your day-to-day.
+## 6. Switch your scripts and CI
 
-**Preview before you run.** Every command has a dry run:
+Change `migrate-mongo up` to `mmk up` in your `package.json` and pipelines. Do it for every
+environment at the same time, so the two tools never both run against one database.
 
-```bash
-npx mmk dry-run up
-npx mmk dry-run down
-```
+## What's different afterwards
 
-**Run or roll back a single file** instead of "all" or "the last one":
-
-```bash
-npx mmk up 20260101-add-index.js
-npx mmk down 20260101-add-index.js
-```
-
-**Roll back a whole batch** by number:
+The day-to-day is the same (`create`, `up`, `down`, `status`) with a few additions:
 
 ```bash
-npx mmk down --batch 3
+npx mmk dry-run up                 # see the plan first
+npx mmk up <file>                  # run one file
+npx mmk down <file>                # undo one file
+npx mmk down --batch 3             # undo an older release
+npx mmk redo                       # undo and run again, while developing
 ```
 
-**Redo** — undo and re-apply in one step, great while developing a migration:
+There's also a lock that's on by default, so two deploys can't run migrations at once, and checksums
+that tell you when someone edits a migration after it ran.
 
-```bash
-npx mmk redo
+## Writing new migrations
+
+The only change from migrate-mongo is the function arguments. migrate-mongo passes two arguments,
+mmk passes one object:
+
+::: code-group
+
+```js [migrate-mongo]
+module.exports = {
+  async up(db, client) {
+    await db.collection('users').createIndex({ email: 1 }, { unique: true });
+  },
+  async down(db, client) {
+    await db.collection('users').dropIndex('email_1');
+  },
+};
 ```
 
-**A lock** so two deploys can't migrate at the same time, and **checksums** that warn you if an already-applied migration file got edited. Both are on automatically.
+```js [mongo-migrate-kit]
+module.exports = {
+  async up({ db, client }) {
+    await db.collection('users').createIndex({ email: 1 }, { unique: true });
+  },
+  async down({ db, client }) {
+    await db.collection('users').dropIndex('email_1');
+  },
+};
+```
 
-## One thing to know about rollbacks
+:::
 
-The migrations you *imported* from `migrate-mongo` are forward-only — `mmk` won't roll them back.
+`npx mmk create add-users-email-index` makes a new file with this already set up.
 
-The reason is technical but it matters: `migrate-mongo` migrations use an `up(db, client)` signature, while `mmk` passes a single context object. Rather than run an old file's `down` in a way it can't fully guarantee, `mmk` refuses and tells you clearly:
+## Old migrations are forward-only
+
+Because of that difference in arguments, mmk won't roll back the migrations you imported. Running an
+old `down(db, client)` as `down({ db, client })` could do the wrong thing, so it refuses before
+touching anything:
 
 ```text
-✖ Cannot roll back 1 migrate-mongo-imported migration(s): 20260101-add-index.js
+✖ MIGRATION_IRREVERSIBLE: Cannot roll back migrate-mongo-imported migration(s): 20250101000000-legacy.js
 ```
 
-Every migration you write *after* switching is fully reversible. And if you genuinely need an old one to roll back under `mmk`, you just rewrite that single file in the native format (named `up`/`down` exports taking one context argument).
+Everything you write after the switch rolls back normally. If you need an old one to be reversible,
+add the braces to that file.
 
-## Writing migrations from here on
+## Backing out
 
-A `mmk` migration is an `up` and a `down`, like you're used to. The only change from `migrate-mongo` is the function signature — one context object instead of two arguments:
+If you decide mmk isn't for you, drop the `_mmk_migrations` collection. migrate-mongo's `changelog`
+was never touched, so you're exactly where you started.
 
-```js
-export const description = 'Add unique index on users.email';
-
-export async function up({ db }) {
-  await db.collection('users').createIndex({ email: 1 }, { unique: true });
-}
-
-export async function down({ db }) {
-  await db.collection('users').dropIndex('email_1');
-}
-```
-
-Create a new one with:
-
-```bash
-npx mmk create "add users email index"
-```
-
-## If you want to back out
-
-You won't break anything by trying this. `mmk import` never writes to your `migrate-mongo` changelog. If you decide to go back, you drop the `_mmk_migrations` collection and you're exactly where you started, with `migrate-mongo` still working.
-
-That's the whole point. A switch you can't undo isn't a switch, it's a gamble. This one isn't.
+The full reference is in the docs: [Moving from migrate-mongo](/guide/migrate-mongo).
 
 ---
 
-`mongo-migrate-kit` is on npm and GitHub under that name. If this guide saved you a stressful afternoon, a star helps others find it.
+### Related reading
+
+- [Why I built a new MongoDB migration tool](./why-i-built-mongo-migrate-kit)
+- [7 things I kept missing in migrate-mongo](./7-things-migrate-mongo-cant-do)

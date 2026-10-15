@@ -1,74 +1,87 @@
-# Lifecycle Hooks
+---
+title: Hooks
+description: Run your own code before and after MongoDB migrations with mongo-migrate-kit hooks. beforeAll, afterAll, beforeEach, afterEach and onError, with examples.
+---
 
-Hooks let you run code around the migration lifecycle — logging, metrics, Slack notifications, cache
-busting, and so on. Define them in your config under `hooks`.
+# Hooks
 
-::: warning Code-only option
-Hooks are functions, so they can only live in a `.ts`/`.js` config — not in `mmk.config.json`.
-:::
+<p class="page-meta">Step 3 of the learning path · about 4 minutes</p>
 
-## The five hooks
+Hooks are functions mmk calls at fixed points during a run. People use them to post to Slack when a
+migration fails, send timings to a metrics system, or clear a cache after the schema changes.
 
-```ts
-import type { MigrationHooks } from 'mongo-migrate-kit';
+They go in your config file under `hooks`. Since they're functions, they only work in
+`mmk.config.js` or `mmk.config.ts`, not in JSON.
 
+## An example
+
+```js
+// mmk.config.js
 export default {
-  uri: 'mongodb://localhost:27017',
-  dbName: 'my_app',
+  uri: process.env.MONGO_URL,
+  dbName: 'shop',
   hooks: {
-    /** Runs once before any migration in the batch starts */
-    beforeAll: async (ctx) => {
-      console.log('Starting migration batch…');
+    async beforeAll() {
+      console.log('Starting migrations');
     },
-    /** Runs once after all migrations in the batch complete */
-    afterAll: async (ctx) => {
-      console.log('Batch complete.');
+    async afterEach(name, duration) {
+      metrics.timing('migration.duration', duration, { name });
     },
-    /** Runs before each individual migration */
-    beforeEach: async (name, ctx) => {
-      console.log(`→ ${name}`);
+    async onError(name, error) {
+      await postToSlack(`Migration ${name} failed: ${error.message}`);
     },
-    /** Runs after each migration completes successfully */
-    afterEach: async (name, duration, ctx) => {
-      console.log(`✓ ${name} (${duration}ms)`);
+    async afterAll({ db }) {
+      await db.collection('cache').deleteMany({});
     },
-    /** Runs when a migration throws — before the error propagates */
-    onError: async (name, error, ctx) => {
-      await notifySlack(`Migration ${name} failed: ${error.message}`);
-    },
-  } satisfies MigrationHooks,
+  },
 };
 ```
 
-## Signatures
+## The five hooks
 
-| Hook | Signature | When it runs |
-|---|---|---|
-| `beforeAll` | `(ctx) => Promise<void>` | Once, before the first migration in the run |
-| `afterAll` | `(ctx) => Promise<void>` | Once, after the last migration succeeds |
-| `beforeEach` | `(name, ctx) => Promise<void>` | Before every individual migration |
-| `afterEach` | `(name, duration, ctx) => Promise<void>` | After each migration succeeds |
-| `onError` | `(name, error, ctx) => Promise<void>` | When a migration throws, before it propagates |
+| Hook | Arguments | When |
+| --- | --- | --- |
+| `beforeAll` | `(ctx)` | Once, before the first migration of the run. |
+| `beforeEach` | `(name, ctx)` | Before each migration. |
+| `afterEach` | `(name, duration, ctx)` | After each migration that worked. `duration` is in ms. |
+| `onError` | `(name, error, ctx)` | When a migration throws, before mmk stops and reports it. |
+| `afterAll` | `(ctx)` | Once, after the last migration, if everything worked. |
 
-`ctx` is the same [`MigrationContext`](/guide/writing-migrations#the-migration-context) passed to
-your migrations, so hooks have full database access.
+`ctx` is the same [migration context](/guide/writing-migrations#what-you-get-in-the-context) your
+migrations get, so hooks can read and write the database too.
 
-## Execution order
+Hooks don't run when there's nothing to do. If no migrations are pending, `mmk up` returns without
+calling any of them.
 
-For a run of two migrations `A` then `B`:
+## The order
 
-```
+A run with two migrations, A and B:
+
+```text
 beforeAll
-  beforeEach(A) → A.up() → afterEach(A)
-  beforeEach(B) → B.up() → afterEach(B)
+  beforeEach(A)  →  A.up()  →  afterEach(A)
+  beforeEach(B)  →  B.up()  →  afterEach(B)
 afterAll
 ```
 
-If `A.up()` throws:
+If A throws:
 
-```
+```text
 beforeAll
-  beforeEach(A) → A.up() ✖ → onError(A)   ← batch stops here, B never runs
+  beforeEach(A)  →  A.up() ✖  →  onError(A)
+                                 run stops here: B doesn't run, afterAll isn't called
 ```
 
-`afterAll` does **not** run when the batch stops on an error.
+So `afterAll` means "everything worked". If you need to clean up whether the run worked or not, do
+it in both `afterAll` and `onError`.
+
+## Mistakes mmk catches
+
+A misspelled hook would never fire, and you'd never know. So mmk checks the names when it loads your
+config: `beforeALL` is an error that asks "did you mean beforeAll?", and a hook that isn't a function
+is an error too.
+
+## Next
+
+[When something goes wrong](/guide/troubleshooting) covers the errors you're most likely to meet,
+what they mean, and how to fix them.

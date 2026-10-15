@@ -1,66 +1,77 @@
-# Sharing a Database
+---
+title: Sharing a database
+description: Run mongo-migrate-kit from several repos against one MongoDB database. One namespace per repo keeps each repo's migration history separate, with one shared lock.
+---
 
-When several repos run migrations against the **same database**, give each repo a `namespace`.
-That's the whole setup — one line per repo.
+# Sharing a database
+
+<p class="page-meta">Step 4 of the learning path · read when you need it</p>
+
+::: tip One repo, one database?
+Then you can skip this page. Without a `namespace`, nothing on this page applies to you, and nothing
+about your setup changes when you upgrade.
+:::
+
+Sometimes several repos write to the same database. An `orders-api` and a `billing` service share a
+`shop` database, say, and each has its own `migrations/` folder. Give each repo a `namespace` in its
+config. That's the whole setup:
 
 ```js
-// every repo on a shared database — the only new line is `namespace`
+// orders-api/mmk.config.js
 export default {
-  uri: process.env.MONGO_URI,
+  uri: process.env.MONGO_URL,
   dbName: 'shop',
   namespace: 'orders-api',
 };
 ```
 
-::: tip One repo, one database?
-You don't need any of this. Without a `namespace`, mongo-migrate-kit behaves exactly as before — same
-config, same records, same output.
-:::
+```js
+// billing/mmk.config.js
+export default {
+  uri: process.env.MONGO_URL,
+  dbName: 'shop',
+  namespace: 'billing',
+};
+```
+
+<Diagram name="shared-database" />
 
 ## Why you need it
 
-Without namespaces, every repo on a database shares one migration history (`_mmk_migrations`), so:
+Without namespaces, every repo on the database shares one history. That causes real problems:
 
-- `mmk status` shows other repos' migrations.
-- A plain `mmk down` can target **another repo's** last batch.
-- A filename one repo already applied is treated as applied in another repo.
-- Batch numbers interleave across repos and stop meaning anything.
+- `mmk status` in one repo lists the other repos' migrations.
+- `mmk down` in one repo can roll back **another repo's** last batch.
+- If two repos have a file with the same name, the second one never runs.
+- Batch numbers from different repos mix, and stop meaning anything.
 
-With a `namespace`, each repo's records carry its namespace and every query is scoped to it. Repos
-still share the same collections — a namespace never creates new ones.
+With a namespace, each repo's records carry its name, and every command only looks at its own. The
+collections are still shared. A namespace never creates new ones.
 
-## What it looks like
+## What you see
 
-Three repos on the `shop` database, each with its own `namespace`:
+In `orders-api`, `mmk status` starts with a `Namespace:` line and shows only that repo's migrations.
+`--all-namespaces` shows everyone's, read-only:
 
-```
-database: shop
-├── _mmk_migrations      namespaces: orders-api, orders-worker, notifications
-└── _mmk_locks           one lock for the whole database
-```
+<Cast name="namespaces" alt="Terminal in orders-api: mmk status shows Namespace: orders-api and one migration; mmk status --all-namespaces shows the billing and orders-api migrations side by side" />
+
+The records themselves get one extra field:
 
 ```js
-// _mmk_migrations — one new field, `namespace`; everything else is unchanged
-{ namespace: 'orders-api',    name: '20261001090000-create-orders-indexes.js', batch: 1, status: 'applied', … }
-{ namespace: 'notifications', name: '20261003120000-create-templates.js',      batch: 1, status: 'applied', … }
-{ namespace: 'orders-worker', name: '20261005080000-create-job-queue.js',      batch: 1, status: 'applied', … }
+{ namespace: 'orders-api', name: '20261014103000-add-orders-customer-index.js', batch: 1, status: 'applied', … }
+{ namespace: 'billing',    name: '20261013080000-add-invoices-index.js',        batch: 1, status: 'applied', … }
 ```
 
-- **Batch numbers are per namespace** — each repo has its own batch 1, and `mmk down` reverts this
-  repo's last batch only.
-- **`mmk status` shows only this repo's migrations.** `mmk status --all-namespaces` shows every
-  namespace in the collection (read-only).
-- **Records without a namespace** belong to the default namespace — that's every record written
-  before you set one, and every repo that doesn't set one.
+Batch numbers count per namespace, so each repo has its own batch 1.
 
-## Locking: repos take turns
+## Repos take turns
 
-Every repo on a database takes the **same** lock, whatever its namespace. So no two migration runs
-ever touch a database at the same time — the strictest guarantee, with nothing to configure.
+Every repo on a database uses **the same lock**, whatever its namespace. Two migration runs never
+touch the database at the same time, which is the safest option and needs no setup.
 
-If a run finds the lock busy, it fails immediately and names the holder:
+When a run finds the lock busy, it stops at once and names the holder, including its namespace:
 
-```
+```text
 ✖ LOCK_ALREADY_HELD: The migration lock is held by namespace "orders-worker"
   Holder: host worker-7c9f, pid 41, user deploy, since 2026-10-14 12:00:03 (8s ago)
   Why: all repos on this database take turns — one migration run at a time
@@ -68,90 +79,92 @@ If a run finds the lock busy, it fails immediately and names the holder:
   Try: run again when it finishes (app start: runMigrations({ onLockHeld: "wait" }))
 ```
 
-In CI, re-run the pipeline. If you migrate on app start, [`runMigrations({ onLockHeld: 'wait' })`](/guide/api)
-waits for its turn instead.
+In CI, re-run the job. If you migrate on app start, `runMigrations({ onLockHeld: 'wait' })` waits
+for its turn.
 
-Each holder's own `lockTTLSeconds` is respected: a repo with a short TTL can't take over the lock from
-a repo with a long one, and staleness is judged on the database server's clock, so a machine whose
-clock is off can't mistake a fresh lock for a stale one.
+Each repo's own `lockTTLSeconds` is respected, and staleness is judged by the database server's
+clock. A repo with a short TTL can't steal the lock from one with a long TTL, and a machine with a
+wrong clock can't mistake a fresh lock for an old one.
 
-## Several products in one database (optional)
+## The rules
 
-If different **products or teams** share a database, you can also give each group its own changelog
-collection with the existing `migrationsCollection` setting — and still a `namespace` per repo:
+- **Set the namespace once and never change it.** It decides which migrations count as applied.
+  Change it and every migration looks pending. (mmk notices and refuses to run. See below.)
+- **Put it in the repo's config file.** Not in a CI-wide `MMK_NAMESPACE`, which would give every repo
+  built on that runner the same one.
+- **Keep timestamped file names** (the default). `0001-` style names clash between repos.
+- **Every repo on the database needs mongo-migrate-kit 1.5 or newer.** Older versions don't know
+  about namespaces and see everyone's records.
+- **Use the same `lockCollection` everywhere** (the default is fine). A repo with a different one
+  stops taking turns with the others.
+- **MongoDB 4.2 or newer.**
+- **Monorepo?** One namespace per folder that has its own migrations, each with its own config:
+  `npx mmk --config services/orders/mmk.config.js up`.
+
+With a namespace set, mmk also keeps one small document in a `_mmk_meta` collection. It records the
+storage format, so an older mmk version refuses to run against data it would misread. If your
+deploy user has tight permissions, give it read and write access to `_mmk_migrations`, `_mmk_locks`
+and `_mmk_meta`. Repos without a namespace never create `_mmk_meta`.
+
+## Separate products in one database
+
+If whole products or teams share a database, you can also give each group its own history
+collection with `migrationsCollection`, and still use a namespace per repo:
 
 ```js
 // checkout-api/mmk.config.js
 export default {
-  uri: process.env.MONGO_URI,
+  uri: process.env.MONGO_URL,
   dbName: 'commerce',
-  migrationsCollection: '_mmk_migrations_checkout', // product
-  namespace: 'checkout-api',                        // repo
+  migrationsCollection: '_mmk_migrations_checkout', // the product
+  namespace: 'checkout-api',                        // the repo
 };
 ```
 
-Use a separate collection only where **ownership or access** differs: MongoDB grants permissions per
-collection, so it's the only way to stop one team's deploy user from writing another team's history.
+Only do this when ownership or access really differs. MongoDB grants permissions per collection, so
+it's the one way to stop one team's deploy user from writing to another team's history.
 
-| Your setup | Configure |
-|---|---|
-| One repo, own database | Nothing |
-| Several repos, one database, one team | `namespace` per repo |
-| Several products sharing a database | `migrationsCollection` per product + `namespace` per repo |
-| Database permissions per service, or `sequential` filenames | `migrationsCollection` per repo |
-
-## Rules
-
-- **Treat the namespace as permanent.** It decides which migrations count as applied — changing it
-  makes every migration look pending. mmk refuses to run if it spots this (see below).
-- **Put it in each repo's config file**, not in a CI-runner or organisation-level `MMK_NAMESPACE`,
-  which would give every repo built there the same namespace.
-- **Use timestamped filenames** (the default). Filenames must be unique within a changelog
-  collection; `sequential` names (`0001-init.js`) clash between repos, so repos using them need their
-  own `migrationsCollection`.
-- **Every repo on the database must run mongo-migrate-kit 1.5 or newer.** Older versions don't know
-  about namespaces and see every repo's records.
-- **Keep the same `lockCollection` in every repo** (the default `_mmk_locks`). A repo with a different
-  one stops taking turns with the others.
-- **Monorepos:** one namespace per service folder that has its own migrations, each with its own
-  config file (`mmk --config services/orders/mmk.config.js up`).
-- Requires MongoDB server **4.2 or newer**.
-- With a namespace, mmk also keeps one document in a small **`_mmk_meta`** collection recording the
-  storage format, so an older mongo-migrate-kit refuses to run against data it would misread. If your
-  deploy user has narrowly scoped permissions, grant it read/write on `_mmk_migrations` (or your
-  `migrationsCollection`), `_mmk_locks` and `_mmk_meta`. Repos without a namespace never create it.
+| Your setup | What to set |
+| --- | --- |
+| One repo, its own database | Nothing |
+| Several repos, one database, one team | `namespace` in each repo |
+| Several products in one database | `migrationsCollection` per product, and `namespace` per repo |
+| Strict per-service permissions, or `sequential` file names | `migrationsCollection` per repo |
 
 ## Adding a namespace to a repo that already ran migrations
 
-**New repos never need this.** A repo that has its `namespace` set before its first `mmk up` is done —
-there is nothing to move.
+New repos never need this. If the namespace is set before the first `mmk up`, you're done.
 
-It only matters for an **existing** repo whose migrations ran before it had a namespace — for
-example, a repo that had the database to itself until other repos joined. Its records have no
-namespace, so you have two choices:
+It only matters for a repo that ran migrations **before** it had a namespace, for example the first
+repo on a database that others joined later. Its records have no namespace. You have two options:
 
-- **Leave it without a namespace.** The repo that had the database first may stay as it is: its
-  records belong to the default namespace, which coexists safely with the named namespaces of the
-  repos that join later. Zero extra steps.
-- **Give it a namespace too** — for example, so every repo follows the same naming rule. After you
-  set it, mmk refuses `up`/`down`/`redo` until this repo's records are moved into it (otherwise they
-  would look pending and run a second time). Move them once:
+**Leave it as it is.** Records without a namespace belong to the "default" namespace, which works
+fine alongside the named ones. Nothing to do.
 
-  ```bash
-  mmk namespace adopt --dry-run   # preview: which records move, who ran them
-  mmk namespace adopt             # move them
-  ```
+**Give it a namespace too**, so every repo follows the same rule. After you set it, mmk refuses
+`up`, `down` and `redo` until the old records are moved over (otherwise they'd look pending and run
+again). Move them once:
 
-  Only records whose file is in this repo's migrations folder move; the rest stay where they are.
-  If several repos already shared one changelog without namespaces, do this **one repo at a time**
-  and read each dry run first. See [`mmk namespace adopt`](/commands/namespace).
+```bash
+npx mmk namespace adopt --dry-run   # which records would move, and who ran them
+npx mmk namespace adopt             # move them
+```
+
+Only records whose file is in this repo's migrations folder move. If several repos already shared
+one history without namespaces, do this **one repo at a time**, and read each dry run first. See
+[`mmk namespace adopt`](/commands/namespace).
 
 ## Mistakes mmk catches
 
 | Situation | What happens |
-|---|---|
-| A namespace was set, but older records have none yet | `NAMESPACE_UNADOPTED` — run `mmk namespace adopt`. Every command that answers "what's applied or pending" refuses until then (`up`, `down`, `redo`, `import`, `dry-run`, `list --pending/--applied`, `pendingMigrations()`); `status` and `list` show those rows as `unadopted` |
-| The namespace was changed or mistyped | `MIGRATION_NAME_CONFLICT`: "These N files are recorded under namespace … Did the namespace change?" — nothing runs |
-| Two repos used the same filename | `MIGRATION_NAME_CONFLICT` naming the other namespace — nothing runs |
-| Applied records have no file in this repo (deleted, or a copied config) | `mmk status` ends with one info line; nothing is blocked |
-| A newer mongo-migrate-kit wrote the database in a newer format | `SCHEMA_TOO_NEW` on connect — upgrade this repo |
+| --- | --- |
+| A namespace was set, but the repo's older records have none | `NAMESPACE_UNADOPTED`: run `mmk namespace adopt`. Commands that depend on what's applied refuse until then. `status` and `list` still work and mark those rows `unadopted`. |
+| The namespace was changed or mistyped | `MIGRATION_NAME_CONFLICT`: "These N files are recorded under namespace … Did the namespace change?" Nothing runs. |
+| Two repos used the same file name | `MIGRATION_NAME_CONFLICT`, naming the other namespace. Nothing runs. |
+| Applied records have no file in this repo | `mmk status` ends with one info line. Nothing is blocked. |
+| A newer mmk wrote the database in a newer format | `SCHEMA_TOO_NEW` when connecting: upgrade this repo. |
+
+## Next
+
+[Moving from migrate-mongo](/guide/migrate-mongo) shows how to bring an existing project over
+without running anything twice.

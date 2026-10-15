@@ -1,53 +1,62 @@
+---
+title: mmk redo
+description: Roll back and re-apply a MongoDB migration in one step with mmk redo. The quickest loop while you write a migration.
+---
+
 # mmk redo
 
-Roll back then re-apply a migration in one step — the last applied, or a specific file.
+Rolls a migration back and runs it again, in one command. Without a file name it uses the migration
+that ran most recently.
 
 ```bash
-mmk redo [file] [options]
+npx mmk redo [file] [options]
 ```
 
-## Usage
+## Examples
 
 ```bash
-mmk redo            # down + up the most recently applied migration
-mmk redo <file>     # down + up a specific migration
+npx mmk redo           # the most recently applied migration
+npx mmk redo <file>    # a specific one
 ```
 
-## How it works
+## When to use it
 
-`mmk redo` runs `down()` then `up()` for the target. It's the fast loop for iterating on a migration
-during development:
+Mostly while you're writing a migration. You run it, look at the data, change your mind, edit the
+file, and want to try again from a clean state:
 
+```text
+$ npx mmk redo
+Loaded config from mmk.config.js
+↩ Reverted 20261015224137-index-orders-by-customer.js   [5ms]
+✔ Applied  20261015224137-index-orders-by-customer.js   [128ms]
 ```
-↩ Reverted 20260605120000-add-users-index.js     [18ms]
-✔ Applied  20260605120000-add-users-index.js     [40ms]
-```
+
+<Cast name="devloop" alt="Terminal: mmk up, the file is edited, mmk redo reverts and re-applies it, then mmk down checks the rollback" />
 
 ## Options
 
-| Option | Description |
-|---|---|
-| `[file]` | Redo a specific migration file instead of the last applied one. |
-| `--no-lock` | Skip the concurrency lock. **Dev only.** |
-| `--json` | Emit the run results as a JSON array on stdout. |
+| Option | What it does |
+| --- | --- |
+| `[file]` | Redo this file instead of the most recent one. |
+| `--no-lock` | Don't take the lock. Only for local development. |
+| `--json` | Print the results as JSON on stdout. |
 
-Plus the [global flags](/guide/configuration#global-cli-flags).
+The [global flags](/guide/configuration#command-line-flags) work here too.
 
-## Notes
+## Good to know
 
-- The whole `down` → `up` runs under a **single lock acquisition**, so no other process can interleave
-  between the revert and the re-apply (and the migration can't be stranded in a reverted state if the
-  re-apply fails to start).
-- The `down` half is **forced past the [checksum guard](/commands/down#checksum-verification)** —
-  redoing an *edited* migration is the usual reason to run `redo`, so a drifted file does not block it.
-- `redo` inherits the [forward-only guard](/commands/down#forward-only-imported-migrations): an
-  imported `migrate-mongo` record cannot be redone and is rejected up front.
-- Because the `down` half reverts the record and the `up` half re-applies it, the audit trail keeps
-  both events.
+- **One lock for both halves.** The rollback and the re-run happen under a single lock, so nothing
+  else can run in between, and the migration can't be left rolled back if the second half fails to
+  start.
+- **Edited files are fine.** Unlike [`mmk down`](/commands/down#edited-files-are-refused), redo
+  doesn't refuse a file that changed since it ran. Editing it is usually why you're running redo.
+  It runs the **current** `down()`, so make sure that still matches what the old `up()` did.
+- **Both events are recorded.** The history shows the rollback and the new run.
+- **Imported migrate-mongo records can't be redone**, for the same reason they can't be rolled back.
 
 ## Exit codes
 
 | Code | Meaning |
-|---|---|
-| `0` | The migration was reverted and re-applied. |
-| `1` | Either half threw, or the target isn't applied / is irreversible. |
+| --- | --- |
+| `0` | Rolled back and applied again. |
+| `1` | Either half failed, the file isn't applied, or it was imported from migrate-mongo. |

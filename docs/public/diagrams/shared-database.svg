@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="dg" width="856" height="380" viewBox="0 0 856 380" role="img" aria-label="Two repos, orders-api and billing, each with its own namespace, write to one shop database. Each repo's records carry its namespace, and both share one lock.">
+<style>
+.dg{--bg:#f5f8f6;--card:#fff;--line:#cdd6d2;--tx:#1c2521;--mut:#5d6a64;--acc:#00875c;--accs:#d8f3e5;--b:#3451b2;--bs:#e3e8fb;--f:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;--fm:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){.dg{--bg:#171b1a;--card:#1f2523;--line:#3a4541;--tx:#e4eae7;--mut:#9aa7a1;--acc:#3ddc84;--accs:#143a28;--b:#8fa6ff;--bs:#1f2747}}
+html .dg{--bg:var(--vp-c-bg-soft);--card:var(--vp-c-bg);--line:var(--vp-c-divider);--tx:var(--vp-c-text-1);--mut:var(--vp-c-text-2);--acc:var(--vp-c-brand-1);--accs:var(--vp-c-brand-soft);--b:var(--vp-c-indigo-1);--bs:var(--vp-c-indigo-soft);--f:var(--vp-font-family-base);--fm:var(--vp-font-family-mono)}
+.dg text{font-family:var(--f);fill:var(--tx)}
+.dg .m{font-family:var(--fm);font-size:13px}
+.dg .s{font-size:12.5px;fill:var(--mut)}
+.dg .h{font-size:15px;font-weight:600}
+.dg .ch{font-size:13.5px;font-weight:600}
+.dg .card{fill:var(--card);stroke:var(--line)}
+.dg .hit{fill:var(--accs);stroke:var(--acc);stroke-width:1.5}
+.dg .hitt{fill:var(--acc);font-weight:600}
+.dg .ok{fill:var(--mut);font-size:13px}
+.dg .ar{fill:none;stroke:var(--mut);stroke-width:1.5}
+.dg .arh{fill:var(--mut)}
+.dg .num{fill:var(--acc)}
+.dg .numt{fill:var(--card);font-size:12px;font-weight:700}
+.dg .bgc{fill:var(--bg)}
+.dg .bl{fill:var(--bs);stroke:var(--b);stroke-width:1.5}
+.dg .blt{fill:var(--b);font-weight:600}
+.dg .arg{fill:none;stroke:var(--acc);stroke-width:1.6}
+.dg .arb{fill:none;stroke:var(--b);stroke-width:1.6}
+.dg .inner{fill:var(--bg);stroke:var(--line)}
+</style>
+<rect class="bgc" width="856" height="380" rx="14"/>
+<text class="h" x="24" y="36">Two repos, one database</text>
+<text class="s" x="24" y="56">Each repo sees only its own history. All of them share one lock.</text>
+
+<rect class="card" x="24" y="78" width="284" height="122" rx="10"/>
+<text class="ch" x="42" y="104">orders-api</text>
+<rect class="hit" x="42" y="114" width="200" height="24" rx="12"/>
+<text class="m hitt" x="142" y="131" text-anchor="middle">namespace: 'orders-api'</text>
+<text class="m" x="42" y="164">20261014-orders-index.js</text>
+<text class="m" x="42" y="186">20261016-order-status.js</text>
+
+<rect class="card" x="24" y="216" width="284" height="100" rx="10"/>
+<text class="ch" x="42" y="242">billing</text>
+<rect class="bl" x="42" y="252" width="174" height="24" rx="12"/>
+<text class="m blt" x="129" y="269" text-anchor="middle">namespace: 'billing'</text>
+<text class="m" x="42" y="302">20261013-invoices-index.js</text>
+
+<rect class="card" x="380" y="78" width="452" height="258" rx="10"/>
+<text class="ch" x="398" y="104">database: shop</text>
+<rect class="inner" x="398" y="116" width="416" height="134" rx="8"/>
+<text class="ch" x="414" y="140">_mmk_migrations</text>
+<text class="s" x="414" y="164">namespace</text><text class="s" x="534" y="164">name</text><text class="s" x="798" y="164" text-anchor="end">batch</text>
+<rect class="hit" x="410" y="172" width="100" height="22" rx="11"/><text class="m hitt" x="460" y="188" text-anchor="middle">orders-api</text>
+<text class="m" x="534" y="188">20261014-orders-index.js</text><text class="m" x="798" y="188" text-anchor="end">1</text>
+<rect class="hit" x="410" y="198" width="100" height="22" rx="11"/><text class="m hitt" x="460" y="214" text-anchor="middle">orders-api</text>
+<text class="m" x="534" y="214">20261016-order-status.js</text><text class="m" x="798" y="214" text-anchor="end">2</text>
+<rect class="bl" x="410" y="224" width="100" height="22" rx="11"/><text class="m blt" x="460" y="240" text-anchor="middle">billing</text>
+<text class="m" x="534" y="240">20261013-invoices-index.js</text><text class="m" x="798" y="240" text-anchor="end">1</text>
+
+<rect class="inner" x="398" y="262" width="416" height="60" rx="8"/>
+<text class="ch" x="414" y="286">_mmk_locks</text>
+<text class="s" x="414" y="308">One lock for every repo on this database. Runs take turns.</text>
+
+<path class="arg" d="M310 140C350 140 360 196 404 196" marker-end="url(#sd-a)"/>
+<path class="arb" d="M310 266C356 266 360 236 404 236" marker-end="url(#sd-b)"/>
+
+<text class="s" x="24" y="364">In orders-api, mmk status lists 2 migrations. mmk status --all-namespaces lists all 3.</text>
+<defs>
+<marker id="sd-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--acc)"/></marker>
+<marker id="sd-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--b)"/></marker>
+</defs>
+</svg>

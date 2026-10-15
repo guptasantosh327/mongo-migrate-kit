@@ -1,146 +1,167 @@
 ---
-title: "MongoDB Migration Best Practices: Lessons From a Bad Friday Deploy"
-description: "Ten MongoDB migration best practices learned the hard way — reversibility, checksums, locking, dry runs, transactions, never deleting history, and running them in CI."
+title: "Habits that make MongoDB migrations safe"
+description: "MongoDB migration best practices learned the hard way: reversible migrations, rolling back one file, dry runs, locking, checksums, transactions, batches, expand and contract, and keeping history."
 date: 2026-07-29
 author: Santosh Gupta
 ---
 
-# MongoDB Migration Best Practices: Lessons From a Bad Friday Deploy
+# Habits that make MongoDB migrations safe
 
-I learned most of these the hard way — specifically on a Friday afternoon when I shipped a bad
-migration, couldn't cleanly roll it back, and ended up doing database surgery by hand. This is the
-checklist I wish I'd had before that day.
+I learned most of these on a Friday afternoon when I shipped a bad migration, couldn't roll it back
+cleanly, and ended up fixing the database by hand. This is the list I wish I'd had before that day.
 
-It's tool-agnostic advice. Where a practice maps to something concrete, I'll show it with
-**mongo-migrate-kit** (`mmk`), the tool I [eventually built](./why-i-built-mongo-migrate-kit)
-because my old setup didn't support half of this list.
+Most of it applies whatever tool you use. Where a habit maps to a command, I'll show it with
+mongo-migrate-kit (`mmk`), the tool I [ended up building](./why-i-built-mongo-migrate-kit).
 
-## 1. Every migration must be reversible
+## 1. Write the `down` when you write the `up`
 
-Write the `down()` when you write the `up()`, not "later." Later never comes, and the one time you
-need to roll back is the one time you'll discover there's no path back.
+Not "later". Later doesn't come, and the one day you need to roll back is the day you find there's
+no way back.
 
-```js
-export async function up({ db })   { await db.collection('users').createIndex({ email: 1 }, { unique: true }); }
-export async function down({ db }) { await db.collection('users').dropIndex('email_1'); }
-```
-
-If a migration is *genuinely* irreversible (a destructive data transform), say so loudly in the
-file's description and treat deploying it as a one-way door. Don't pretend a no-op `down()` is a
-rollback.
-
-## 2. Be able to roll back ONE migration, not just "the last one"
-
-This is the practice that started everything for me. "Undo the most recent migration" falls apart
-the moment you've deployed several together or have multiple environments. You want to revert a
-*specific* file:
-
-```bash
-mmk down <file>          # exactly one
-mmk down --batch <n>     # one whole release
-mmk down --steps <n>     # the last N, ignoring batches
-```
-
-If your tool can't do this, you'll eventually do it by hand. (I wrote a
-[whole post on it](./rollback-specific-mongodb-migration) because it's that common.)
-
-## 3. Preview before you run — always, in production
-
-Never run a migration against production without first seeing the plan. A dry run that touches
-nothing turns "leap of faith" into "informed decision":
-
-```bash
-mmk dry-run up      # prints the plan, writes nothing
-```
-
-Two seconds. Do it every time.
-
-## 4. Lock against concurrent runs
-
-Two deploys, two CI jobs, or two app instances booting at once can all race to apply the same
-migration. Without a lock, that's silent corruption. With one, the second run waits or fails fast.
-This should be **on by default**, not something you remember to enable. (How a real lock survives
-crashed holders and long migrations: [the locking deep-dive](./mongodb-migration-locking-concurrent-deploys).)
-
-## 5. Checksum your migrations to catch edits
-
-Here's a quiet killer: a migration runs in production, then someone *edits* that file (a "quick fix")
-and it ships again. Now the code on disk doesn't match what actually ran. Different environments
-silently diverge.
-
-Record a SHA-256 of each file when it's applied, and verify it on every subsequent run. If a file was
-edited after being applied, you want to *know* — not find out during an incident. `mmk` flags it in
-`status` and refuses to roll back a file whose checksum drifted, unless you explicitly `--force`.
-
-## 6. Use transactions for multi-step migrations
-
-If a migration does three writes and dies after the second, you're left in a state that's neither
-"before" nor "after." On a replica set or sharded cluster, wrap it in a transaction so it's all or
-nothing:
+And make `down` undo only what `up` did. If `up` sets `status: 'active'` on users who had no status,
+`down` shouldn't remove `status` from everyone. Mark what you changed, or filter carefully:
 
 ```js
-export const useTransaction = true;
-export async function up({ db, client }) {
-  // every write here commits together, or none of them do
+export async function up({ db }) {
+  await db.collection('users').updateMany(
+    { status: { $exists: false } },
+    { $set: { status: 'active', statusSetByMigration: true } },
+  );
+}
+
+export async function down({ db }) {
+  await db.collection('users').updateMany(
+    { statusSetByMigration: true },
+    { $unset: { status: '', statusSetByMigration: '' } },
+  );
 }
 ```
 
-Bonus: the migration's *changelog record* should commit inside the same transaction, so you never
-get the nasty "the migration ran but wasn't recorded, so it runs again next time" window. (`mmk`
-does this — the record is written before commit, atomically with the migration's writes.)
+If a change really can't be undone (you deleted data), make `down` throw with a clear message. Don't
+pretend an empty `down` is a rollback.
 
-## 7. Never delete migration history
+## 2. Then actually run the `down`
 
-When you roll a migration back, **don't erase the record** — mark it reverted and keep it. The
-question "what ran against this database, when, and by whom" is one you'll need answered during an
-incident or an audit. A migration tool that deletes rows on rollback is throwing away the exact
-evidence you'll want at 2am. Keep duration, checksum, environment, and user on every record.
+A `down` that has never run probably doesn't work. Before you commit, run `up`, then `down`, then
+`up` again on your machine. Better still, have CI do it on every pull request.
 
-## 8. Run migrations in CI, not from laptops
+<Cast name="devloop" alt="Terminal: mmk up, the file is edited, mmk redo reverts and re-applies it, then mmk down checks the rollback works" />
 
-The moment more than one person ships, "I ran it locally" stops being a deployment strategy. Put
-migrations in the pipeline: a gate that fails the build if something's pending
-(`mmk status --check`), a dry-run preview step, and an apply step on deploy. Same way every time,
-logged, reviewable. (A full [GitHub Actions setup here](./mongodb-migrations-ci-cd-github-actions).)
+## 3. Be able to roll back one migration
 
-## 9. Keep config out of the repo
+"Undo the most recent one" stops being enough once you ship several migrations together or have
+more than one environment. You want to undo a specific file, or a specific release:
 
-Connection strings don't belong in committed files. Drive everything from environment variables
-(`MMK_URI`, `MMK_DB`, …) so the same migration commands work locally, in CI, and in production with
-zero file changes — and so a secret never lands in git history. Better still, load the URI from a
-secret manager at runtime.
+```bash
+npx mmk down <file>          # one file
+npx mmk down --batch <n>     # one release
+npx mmk down --steps <n>     # the last N, whatever the release
+```
 
-## 10. Name migrations so order is obvious
+(There's a [whole post on this](./rollback-specific-mongodb-migration).)
 
-Timestamp- or sequence-prefix every file (`20260101120000-add-users-index.js`). Migrations are
-order-dependent; the filename should make that order unambiguous at a glance, and sort correctly in
-a directory listing. `mmk create <name>` does this for you.
+## 4. Look before you run
 
-## The one-paragraph version
+Never run a migration against production without seeing the plan first:
 
-Write reversible migrations and test the `down`. Be able to roll back one file, not just the last.
-Dry-run before production. Lock against concurrency. Checksum to catch edits. Use transactions for
-multi-step changes. Never delete history. Run it all in CI. Keep secrets out of the repo. Name files
-so order is obvious. Do those ten things and migrations stop being the scary part of a deploy.
+```bash
+npx mmk dry-run up
+```
 
-Most of them, I only adopted *after* the Friday that taught me why they matter. You don't have to
-wait for your own.
+It writes nothing and takes a second. Make it a step in your deploy job so it ends up in the log.
+
+## 5. Lock against two runs at once
+
+Two deploys, a retried CI job, or several app instances booting together can all try to apply the
+same migration. With a lock, the second one stops. It should be on by default, not something you
+remember to turn on. (How a good lock handles crashes and long migrations:
+[the locking post](./mongodb-migration-locking-concurrent-deploys).)
+
+## 6. Notice edits to migrations that already ran
+
+A migration runs in production. Then someone edits the file (a "small fix") and it ships. Now the
+file doesn't match what changed the database, and environments drift apart without anyone noticing.
+
+Save a checksum of each file when it runs, and compare later. `mmk status` shows `MISMATCH` for an
+edited file, and `mmk down` refuses to run an edited rollback unless you `--force` it. The rule for
+people is simpler: once a migration has run anywhere, it's history. Changes go in a new file.
+
+## 7. Use transactions for changes with several steps
+
+If a migration makes three writes and dies after the second, the database is neither "before" nor
+"after". On a replica set or sharded cluster, wrap it in a transaction, so it's all or nothing:
+
+```js
+export const useTransaction = true;
+
+export async function up({ db, session }) {
+  await db.collection('plans').updateMany({}, { $set: { legacy: true } }, { session });
+  await db.collection('plans').insertOne({ _id: 'pro', price: 29 }, { session });
+}
+```
+
+Pass `session` to every call, or that call won't be part of the transaction. mmk also writes its own
+history record inside the same transaction, so a migration can never be "done but not recorded"
+and run again next deploy.
+
+## 8. Work in batches on big collections
+
+`updateMany` over ten million documents can run for a long time, load your primary, and push your
+secondaries behind. Loop over `_id` ranges and update a few thousand at a time. Write it so a second
+run picks up where the first stopped (filter on documents that still need the change). Big data
+changes also don't fit in a transaction, which is another reason to make them safe to repeat.
+
+## 9. Change the schema in steps the running code can live with
+
+During a deploy, old and new versions of your app run side by side for a while. A migration that
+renames `name` to `fullName` breaks whichever version expects the other field.
+
+The safe pattern is **expand, then contract**:
+
+1. **Expand:** add `fullName` next to `name`. Deploy code that writes both and reads `fullName`,
+   falling back to `name`.
+2. **Backfill:** a migration copies `name` into `fullName` where it's missing.
+3. **Contract:** once nothing reads `name` any more, a later migration removes it.
+
+<Diagram name="expand-contract" />
+
+Three small migrations over a few deploys, instead of one that has to be perfectly timed.
+
+## 10. Keep the history, all of it
+
+When you roll a migration back, don't delete its record. Mark it reverted and keep it. "What ran
+against this database, when, and who ran it" is the first question in an incident. mmk keeps the
+batch, dates, duration, checksum, environment, who ran it and who wrote it on every record.
+
+## 11. Run migrations from the pipeline, with config from the environment
+
+Once more than one person ships, "I ran it from my laptop" isn't a process. Run migrations in CI,
+the same way every time ([here's a GitHub Actions setup](./mongodb-migrations-ci-cd-github-actions)).
+Keep connection strings in environment variables or a secret manager, never in the repo.
+
+## The short version
+
+Write the `down` and run it. Roll back one file when one file is wrong. Look before you run. Lock.
+Notice edits. Use transactions for multi-step changes and batches for big ones. Change schemas in
+steps. Keep the history. Run it from CI.
+
+I picked up most of these after the Friday that taught me why they matter. You don't have to wait for
+your own.
 
 ## Try it
 
 ```bash
 npm install mongo-migrate-kit mongodb
-mmk dry-run up    # start with the safest possible command
+npx mmk dry-run up    # the safest possible first command
 ```
 
-Docs and recipes for every practice above: **https://mongo-migrate-kit.vercel.app** · npm/GitHub:
-**mongo-migrate-kit**.
+The [docs](/guide/) start with a five-minute quick start. The package is on
+[npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 
 ### Related reading
 
-- [How to Roll Back a Single MongoDB Migration](./rollback-specific-mongodb-migration) —
-  best practice #2, in depth.
-- [Why I Built a New MongoDB Migration Tool](./why-i-built-mongo-migrate-kit) — the Friday
-  these lessons came from.
+- [How to roll back a single MongoDB migration](./rollback-specific-mongodb-migration)
+- [Why I built a new MongoDB migration tool](./why-i-built-mongo-migrate-kit)

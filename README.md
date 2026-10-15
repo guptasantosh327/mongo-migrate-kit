@@ -1,12 +1,10 @@
 <div align="center">
 
-<img src="assets/logo-icon-b-alt2.png" alt="mongo-migrate-kit" width="420" />
+<img src="assets/logo-icon-b-alt2.png" alt="mongo-migrate-kit" width="360" />
 
 # mongo-migrate-kit
 
-**Elegant, fast, TypeScript-first MongoDB migrations for Node.js.**
-
-_A modern, drop-in replacement for `migrate-mongo` etc._
+**MongoDB migrations for Node.js that you can preview, run one at a time, and undo.**
 
 [![npm version](https://img.shields.io/npm/v/mongo-migrate-kit?style=flat-square&color=1E9E57&logo=npm&logoColor=white)](https://www.npmjs.com/package/mongo-migrate-kit)
 [![Docs](https://img.shields.io/badge/docs-online-1E9E57?style=flat-square&logo=readthedocs&logoColor=white)](https://mongo-migrate-kit.vercel.app/)
@@ -14,15 +12,24 @@ _A modern, drop-in replacement for `migrate-mongo` etc._
 [![Known Vulnerabilities](https://snyk.io/test/npm/mongo-migrate-kit/badge.svg)](https://snyk.io/test/npm/mongo-migrate-kit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1E9E57?style=flat-square)](https://opensource.org/licenses/MIT)
 
+**[Documentation](https://mongo-migrate-kit.vercel.app/guide/)** ·
+**[Quick start](https://mongo-migrate-kit.vercel.app/guide/getting-started)** ·
+**[Why another migration tool?](https://mongo-migrate-kit.vercel.app/guide/why)**
 
-Precise, safe migrations for MongoDB. Run a single file, roll back anything, and preview every
-change before it touches your database.
+<br>
 
-### 📖 [Read the documentation →](https://mongo-migrate-kit.vercel.app/)
+<img src="https://mongo-migrate-kit.vercel.app/casts/hero.svg" alt="mmk dry-run up lists three pending migrations, mmk up applies them, mmk down rolls back one file by name, and mmk status shows the result" width="860" />
+
+<sub>A real session: preview, run, roll back one file, check the status.</sub>
 
 </div>
 
 ---
+
+You write small migration files with an `up` function (make a change) and a `down` function (undo
+it). The `mmk` command runs them in order, records what ran in your database, and can roll back
+exactly the one you mean: the last deploy, an older batch, the last few files, or a single file by
+name.
 
 ## Reasons to choose it
 
@@ -37,829 +44,172 @@ change before it touches your database.
 - **TypeScript, ESM & CommonJS** — all run with no `ts-node` plumbing.
 - **Zero config files required** — drive everything from env vars if you prefer.
 
-### How it compares to `migrate-mongo`
+## Quick start
+
+```bash
+npm install mongo-migrate-kit mongodb
+```
+
+```bash
+npx mmk init                                  # writes mmk.config.js, set your uri and dbName there
+npx mmk create add-users-email-index          # makes migrations/<timestamp>-add-users-email-index.js
+```
+
+Fill in the file:
+
+```js
+export const description = 'Unique index on users.email';
+
+export async function up({ db }) {
+  await db.collection('users').createIndex({ email: 1 }, { unique: true });
+}
+
+export async function down({ db }) {
+  await db.collection('users').dropIndex('email_1');
+}
+```
+
+Then run it, look at it, and roll it back:
+
+```text
+$ npx mmk up
+✔ Applied  20261015223650-add-users-email-index.js   [117ms]
+
+$ npx mmk status
+┌─────────────────────────────────────────┬─────────┬───────┬─────────────────────┬──────────┬──────────┐
+│ Migration                               │ Status  │ Batch │ Applied At          │ Checksum │ Author   │
+├─────────────────────────────────────────┼─────────┼───────┼─────────────────────┼──────────┼──────────┤
+│ 20261015223650-add-users-email-index.js │ applied │ 1     │ 2026-10-15 22:36:51 │ ok       │ Asha Rao │
+└─────────────────────────────────────────┴─────────┴───────┴─────────────────────┴──────────┴──────────┘
+
+$ npx mmk down
+↩ Reverted 20261015223650-add-users-email-index.js   [5ms]
+```
+
+No config file? `MMK_URI` and `MMK_DB` in your environment (or a `.env` file) are enough.
+
+The generated files use `export`, so your `package.json` needs `"type": "module"`. For a CommonJS
+project, see [CommonJS projects](https://mongo-migrate-kit.vercel.app/guide/writing-migrations#commonjs-projects).
+
+**Next:** the [tutorial](https://mongo-migrate-kit.vercel.app/guide/tutorial) walks through a
+realistic example in about 15 minutes.
+
+## Learn it step by step
+
+The docs are laid out as a path. Each step builds on the one before, and you can stop when you have
+what you need.
+
+| Step | Pages | Time |
+| --- | --- | --- |
+| 1. Get it running | [Quick start](https://mongo-migrate-kit.vercel.app/guide/getting-started), [Tutorial](https://mongo-migrate-kit.vercel.app/guide/tutorial) | 10 to 20 min |
+| 2. Understand it | [How it works](https://mongo-migrate-kit.vercel.app/guide/concepts), [Writing migrations](https://mongo-migrate-kit.vercel.app/guide/writing-migrations), [A normal day with mmk](https://mongo-migrate-kit.vercel.app/guide/workflow) | 15 min |
+| 3. Use it in production | [Configuration](https://mongo-migrate-kit.vercel.app/guide/configuration), [Deploying and CI](https://mongo-migrate-kit.vercel.app/guide/ci-cd), [Running from your code](https://mongo-migrate-kit.vercel.app/guide/api), [Transactions](https://mongo-migrate-kit.vercel.app/guide/transactions), [When something goes wrong](https://mongo-migrate-kit.vercel.app/guide/troubleshooting) | 30 min |
+| 4. Bigger setups | [Sharing a database](https://mongo-migrate-kit.vercel.app/guide/shared-database), [Moving from migrate-mongo](https://mongo-migrate-kit.vercel.app/guide/migrate-mongo) | when needed |
+
+Looking something up instead? [CLI cheatsheet](https://mongo-migrate-kit.vercel.app/reference/cli) ·
+[Error codes](https://mongo-migrate-kit.vercel.app/reference/error-codes) ·
+[FAQ](https://mongo-migrate-kit.vercel.app/guide/faq)
+
+## How it compares to `migrate-mongo`
 
 | Capability                                      | `migrate-mongo` | `mongo-migrate-kit` |
 | ----------------------------------------------- | :-------------: | :-----------------: |
 | Run a single migration file                     |        ❌        |          ✅          |
 | Roll back a specific batch (not just the last)  |        ❌        |          ✅          |
+| Roll back a single migration file               |        ❌        |          ✅          |
 | Dry-run preview                                 |        ❌        |          ✅          |
 | `redo` (down + up)                              |        ❌        |          ✅          |
-| Checksum / tamper detection                     |        ❌        |          ✅          |
+| Concurrency lock on by default                  |        ❌        |          ✅          |
+| Refuses to roll back an edited migration        |        ❌        |          ✅          |
 | Lifecycle hooks                                 |        ❌        |          ✅          |
-| First-class TypeScript (built-in)               |        ❌        |          ✅          |
 | History kept on rollback (never deleted)        |        ❌        |          ✅          |
-| Adopt an existing `migrate-mongo` changelog | — | ✅ `mmk import` |
+| Adopt an existing `migrate-mongo` changelog     |        —        |          ✅          |
 
-<sub>Reflects `migrate-mongo`'s documented CLI as of mid-2026. It has since added transaction access
+<sub>Reflects `migrate-mongo`'s documented CLI as of mid-2026. It also gives migrations transaction access
 via a `client` argument; `mmk` exposes the same plus a declarative per-file `useTransaction` flag.</sub>
 
-> [!TIP]
-> ### 🔄 Already using `migrate-mongo`? Switch in under a minute.
->
-> `mmk` adopts your existing `changelog` **as-is** — no re-running migrations, no data loss, no rewriting
-> files. Point it at the same database and bring your whole history over in one command:
->
-> ```bash
-> mmk import     # one-time: adopt your migrate-mongo changelog (it's never modified)
-> mmk up         # applies only what's new — your past migrations are recognized as already applied
-> ```
->
-> Your applied history is preserved and new migrations run normally. Your `up`/`down`/`create`/`status`
-> mental model carries over 1:1 — you just gain dry-runs, single-file control, real rollbacks, hooks,
-> and locking. → **[See how it works](#advanced-features)**
+## Coming from migrate-mongo?
 
----
-
-## Quick start
+Point mmk at the same database and run `mmk import`. It copies your existing history into mmk's own
+collection and never changes the old one. After that, `mmk up` only runs what's new.
 
 ```bash
-npm install mongo-migrate-kit
-npm install mongodb          # required peer dependency
+npx mmk import --dry-run    # see what would be copied, write nothing
+npx mmk import              # copy it
+npx mmk up                  # runs only migrations migrate-mongo never ran
 ```
 
-```bash
-# 1 · create a configuration file mmk.config.*. (pass --ts if need ts file)
-npx mmk init
+<img src="https://mongo-migrate-kit.vercel.app/casts/import.svg" alt="mmk import --dry-run previews three migrate-mongo records, mmk import copies them, and mmk up applies only the new migration" width="760" />
 
-# 2 · create your first migration
-npx mmk create "add users email index"
-
-# 3 · run everything pending
-npx mmk up
-
-# 4 · see where you stand
-npx mmk status
-```
-
-A migration is just an `up` and a `down`:
-
-```ts
-import type { MigrationContext } from 'mongo-migrate-kit';
-
-export const description = 'Add unique index on users.email';
-export const author = 'Jane Doe <jane@example.com>'; // filled in by `mmk create`
-
-export async function up({ db }: MigrationContext): Promise<void> {
-  await db.collection('users').createIndex({ email: 1 }, { unique: true });
-}
-
-export async function down({ db }: MigrationContext): Promise<void> {
-  await db.collection('users').dropIndex('email_1');
-}
-```
-
-> Prefer no files at all? Skip `mmk init` and export `MMK_URI` and `MMK_DB` — that is enough to run.
-
----
-
-## Documentation
-
-Full docs, guides, and the API reference live at
-**[mongo-migrate-kit.vercel.app](https://mongo-migrate-kit.vercel.app/)**.
-
-- [Why mongo-migrate-kit?](https://mongo-migrate-kit.vercel.app/guide/why) — how it compares to `migrate-mongo`
-- [Core Concepts](https://mongo-migrate-kit.vercel.app/guide/concepts) — migrations, batches, the changelog, locking
-- [Getting Started](https://mongo-migrate-kit.vercel.app/guide/getting-started) & [Tutorial](https://mongo-migrate-kit.vercel.app/guide/tutorial)
-- [Configuration](https://mongo-migrate-kit.vercel.app/guide/configuration) · [Writing Migrations](https://mongo-migrate-kit.vercel.app/guide/writing-migrations) · [Transactions](https://mongo-migrate-kit.vercel.app/guide/transactions) · [Hooks](https://mongo-migrate-kit.vercel.app/guide/hooks)
-- [Programmatic API](https://mongo-migrate-kit.vercel.app/guide/api) · [CI/CD](https://mongo-migrate-kit.vercel.app/guide/ci-cd) · [Troubleshooting](https://mongo-migrate-kit.vercel.app/guide/troubleshooting)
-- Reference: [CLI Cheatsheet](https://mongo-migrate-kit.vercel.app/reference/cli) · [Error Codes](https://mongo-migrate-kit.vercel.app/reference/error-codes)
-- [Ideas](https://github.com/guptasantosh327/mongo-migrate-kit/blob/main/IDEAS.md) — directions being explored (not a roadmap or a commitment); feedback welcome
-
----
+Imported migrations are forward-only, because migrate-mongo calls `up(db, client)` and mmk calls
+`up({ db, client })`. New migrations roll back normally.
+[The switching guide](https://mongo-migrate-kit.vercel.app/guide/migrate-mongo) has the details.
 
 ## Commands
 
-Every command accepts the global flags `--uri`, `--db`, `--dir`, and `--config`.
-
 | Command | What it does |
-|---|---|
-| `mmk init` | Create a documented `mmk.config.*` in the current directory |
-| `mmk import` | Adopt an existing `migrate-mongo` changelog (one-time, forward-only) |
-| `mmk create <name>` | Generate a timestamped migration file |
-| `mmk up [file]` | Run all pending migrations, or one named file |
-| `mmk down [file]` | Roll back the last batch, a chosen batch, the last N steps, or one file |
-| `mmk redo [file]` | Roll back then re-apply (the last migration, or one file) |
-| `mmk status` | Print the full migration status table (`--check` to fail CI on pending) |
-| `mmk list` | List migrations, filtered by status |
-| `mmk dry-run <up\|down> [file]` | Preview a run without touching the database |
-| `mmk unlock` | Force-release a stuck lock left behind by a crashed run |
-| `mmk namespace adopt` | Move records from before a repo had a `namespace` into it (one-time) |
-
-Most data commands (`up`, `down`, `redo`, `status`, `list`, `dry-run`, `import`, `create`,
-`unlock`, `namespace adopt`) accept **`--json`** for machine-readable output — see [CI & automation](#ci--automation).
-
-<details>
-<summary><b>Options for every command</b></summary>
-
-```bash
-# init — generate a config file
-mmk init                     # mmk.config.js (default)
-mmk init --js                # mmk.config.js (explicit default)
-mmk init --ts                # mmk.config.ts
-mmk init --json              # mmk.config.json  (NOTE: here --json picks the file format)
-mmk init --secret-provider   # async config that loads the URI from a secret manager (js/ts only)
-mmk init --force             # overwrite an existing config file
-mmk init --uri mongodb://localhost:27017 --db my_app   # prefill the generated config
-
-# import — adopt an existing migrate-mongo changelog
-mmk import                   # read `changelog`, write the mmk changelog
-mmk import --from <name>     # read a differently-named source collection
-mmk import --to <name>       # write to a specific collection (default: config migrationsCollection)
-mmk import --dry-run         # preview the mapping, write nothing
-mmk import --trust-hash      # reuse migrate-mongo's fileHash instead of recomputing
-mmk import --force           # proceed even if the mmk changelog already has records
-mmk import --no-lock         # skip the concurrency lock (local dev only)
-mmk import --json            # machine-readable output
-
-# create — generate a migration file
-mmk create <name>            # file type follows config `createExtension` (default .js)
-mmk create <name> --ts       # force a .ts file
-mmk create <name> --js       # force a .js file
-mmk create <name> --template <path>   # use a custom template
-mmk create <name> --author "Jane <jane@example.com>"  # set the author (default: your git identity)
-mmk create <name> --json     # machine-readable output ({ "path": "..." })
-
-# up — apply migrations
-mmk up                       # all pending (one shared batch for the run)
-mmk up <file>                # one specific file
-mmk up --step                # apply each file as its own batch (revert individually later)
-mmk up <file> --force        # re-run an ALREADY-applied file (asks for confirmation)
-mmk up <file> --force --yes  # confirm a re-run non-interactively (required with --json)
-mmk up --strict              # abort on any checksum mismatch
-mmk up --no-lock             # skip the concurrency lock (local dev only)
-mmk up --json                # machine-readable output (array of run results)
-
-# down — roll back
-mmk down                     # the last batch (may be several files)
-mmk down <file>              # one specific file
-mmk down --batch <n>         # a specific batch number
-mmk down --steps <n>         # the last N migrations, newest first, ignoring batches
-mmk down --force             # roll back even if a file drifted (asks for confirmation)
-mmk down --force --yes       # confirm a forced rollback non-interactively (required with --json)
-mmk down --no-lock           # skip the concurrency lock (local dev only)
-mmk down --json              # machine-readable output (array of run results)
-
-# redo — down then up
-mmk redo                     # the most recently applied migration
-mmk redo <file>              # a specific file
-mmk redo --json              # machine-readable output (array of run results)
-
-# status — full status table
-mmk status                   # the full status table
-mmk status --check           # exit 1 if any migration is pending (CI gate)
-mmk status --json            # machine-readable output (array of status rows)
-
-# list — filtered status
-mmk list                     # all migrations
-mmk list --pending           # only pending
-mmk list --applied           # only applied
-mmk list --json              # machine-readable output (array of status rows)
-
-# dry-run — preview, never writes
-mmk dry-run up [file]
-mmk dry-run down [file]
-mmk dry-run down --steps <n> # preview a step rollback (the last N migrations)
-mmk dry-run up --json        # machine-readable output (array of status rows)
-
-# unlock — clear a stuck lock after a crash
-mmk unlock                   # shows the holder, prompts y/N
-mmk unlock --yes             # skip the prompt
-mmk unlock --json            # machine-readable output ({ "released": ..., "holder": ... })
-```
-
-**Global flags** (available on all commands): `--uri <uri>` (override `MMK_URI`),
-`--db <name>` (override `MMK_DB`), `--dir <path>` (override `MMK_MIGRATIONS_DIR`),
-`--config <path>` (explicit config file, overrides auto-discovery).
-
-**`--json`** is accepted by every data command above (`up`, `down`, `redo`, `status`, `list`,
-`dry-run`, `import`, `create`, `unlock`) and prints one JSON document to stdout — see
-[CI & automation](#ci--automation). On `mmk init` only, `--json` instead selects the config
-**file format** (`mmk.config.json`).
-
-</details>
-
----
-
-## Advanced features
-
-<details id="migrating-from-migrate-mongo">
-<summary><b>Migrating from <code>migrate-mongo</code></b> — adopt an existing changelog with <code>mmk import</code></summary>
-
-<br>
-
-`mmk import` reads your existing `migrate-mongo` changelog and records that history in the `mmk`
-changelog, so `mmk up` knows what is already applied and runs only what is new. It is a **one-time,
-forward-only** step.
-
-```bash
-# point mmk at the same database, then:
-mmk import --dry-run     # preview the mapping first (writes nothing)
-mmk import               # adopt the history
-mmk up                   # apply only the migrations added since
-```
-
-**What it does**
-
-- Reads the source collection (`changelog` by default; `--from` to override) and **never modifies it** —
-  the mapped records are written to the `mmk` changelog (your config's `migrationsCollection`,
-  `_mmk_migrations` by default; `--to` to write to a different collection).
-- Maps `fileName → name`, `appliedAt → appliedAt`, and resolves a checksum: it reuses `migrate-mongo`'s
-  `fileHash` when it matches the file on disk, otherwise recomputes a SHA-256 from disk (`--trust-hash`
-  reuses the stored hash as-is). Records whose files are missing are still imported.
-- Assigns each migration a **unique, sequential batch number** in apply order. If the `mmk` changelog
-  already has records, imported batches **continue after** the existing maximum (use `--force` to import
-  into a non-empty changelog).
-- Leaves migration files that exist on disk but are **not** in the source changelog **pending** — they
-  run on the next `mmk up`, exactly as expected for newly added migrations.
-
-**Options**
-
-| Flag | Default | What it does |
-|---|---|---|
-| `--from <collection>` | `changelog` | Source collection to read (never modified). |
-| `--to <collection>` | config `migrationsCollection` (`_mmk_migrations`) | Target collection to write the adopted history to. |
-| `--dry-run` | off | Preview the mapping and print the table; writes nothing. |
-| `--trust-hash` | off | Reuse `migrate-mongo`'s stored `fileHash` as-is instead of recomputing the checksum from disk. |
-| `--force` | off | Import into a changelog that already has records (imported batches continue after the existing max). |
-| `--no-lock` | off | Skip the MongoDB concurrency lock (local dev only). |
-
-Plus the global flags `--uri`, `--db`, `--dir`, and `--config`.
-
-**Forward-only — imported migrations cannot be rolled back**
-
-Adopted records are tagged `origin: 'migrate-mongo'`. `migrate-mongo` files use a positional
-`up(db, client)` signature, which `mmk` does not execute (it passes a single context object). To avoid
-ever corrupting your data, `mmk down` / `mmk redo` **refuse** an imported migration up front, before
-running or writing anything, and tell you why:
-
-```text
-✖ Cannot roll back 1 migrate-mongo-imported migration(s): 20260101-add-index.js
-```
-
-If you need an old migration to be reversible under `mmk`, re-author its file in the native format
-(named exports, single context argument — see [Migration file formats](#migration-file-formats)).
-
-</details>
-
-<details>
-<summary><b>Transactions</b> — wrap a migration in an all-or-nothing MongoDB transaction</summary>
-
-<br>
-
-Opt in per file with `export const useTransaction = true` (or globally via config). The runner opens a
-session, passes it through the context, and commits on success or aborts on any error. Pass the
-`session` to every operation so it joins the transaction:
-
-```ts
-export const useTransaction = true;
-
-export async function up({ db, session }: MigrationContext): Promise<void> {
-  await db.collection('accounts').insertOne({ balance: 100 }, { session });
-  await db.collection('ledger').insertOne({ delta: 100 }, { session });
-}
-```
-
-> Transactions require a replica set or sharded cluster — MongoDB's own requirement, not a library
-> limit. `mmk` detects a standalone deployment up front and **fails fast** with
-> `TRANSACTIONS_UNSUPPORTED` *before* running the migration, instead of erroring half-way at commit.
-
-**The changelog record is written inside the transaction**, with `w: 'majority'`. So a migration and
-its "applied" record commit (or roll back) **atomically** — there is no window where the data is
-committed but unrecorded, which would otherwise let the migration re-run on the next deploy. For
-non-idempotent migrations against production, prefer `useTransaction: true` for exactly this reason.
-
-</details>
-
-<details>
-<summary><b>Lifecycle hooks</b> — run code around the batch and each migration</summary>
-
-<br>
-
-Define hooks in your config file. Use them to seed data, emit metrics, or alert on failure:
-
-```ts
-hooks: {
-  beforeAll:  async (ctx) => { /* once, before the batch */ },
-  afterAll:   async (ctx) => { /* once, after the batch */ },
-  beforeEach: async (name, ctx) => { /* before each file */ },
-  afterEach:  async (name, durationMs, ctx) => { /* after each file */ },
-  onError:    async (name, error, ctx) => { /* a file threw — alert, then it re-throws */ },
-}
-```
-
-</details>
-
-<details>
-<summary><b>Loading secrets at runtime</b> — AWS, Google, Vault, Azure, anything</summary>
-
-<br>
-
-A `.ts`/`.js` config may export a **function** (sync or async) instead of an object.
-`mmk` calls it once per command, so you can fetch the connection from a secret manager at run time.
-The secret is **never written to disk**, and a rotated value is picked up automatically on the next run.
-
-The library ships **no** cloud SDKs — you bring the one you already use, so any provider works:
-
-```js
-// mmk.config.js — AWS Secrets Manager
-import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-
-export default async () => {
-  const sm = new SecretsManagerClient({ region: 'us-east-1' });
-  const res = await sm.send(new GetSecretValueCommand({ SecretId: 'prod/mongo' }));
-  const { uri, dbName } = JSON.parse(res.SecretString ?? '{}');
-  return { uri, dbName };  // merged at the config-file tier — env vars / flags still override
-};
-```
-
-Run `mmk init --secret-provider` to scaffold this form with an AWS example you can swap for any provider.
-If the function throws, it surfaces as a `ConfigInvalidError` with the cause attached.
-
-</details>
-
-<details>
-<summary><b>Batches &amp; step rollback</b> — group a deploy, or revert file-by-file</summary>
-
-<br>
-
-A **batch** is one `mmk up` run. By default every migration applied in a single run shares one batch
-number, so `mmk down` rolls back that whole run as a unit — the same model used by **Laravel** and
-**Knex**. That keeps a deploy atomic: one command applied it, one command reverts it.
-
-When you want finer control, two flags mirror Laravel's `migrate --step` / `migrate:rollback --step`:
-
-- **`mmk up --step`** — apply each file in the run as its **own** sequential batch instead of one shared
-  batch. A later `mmk down` then peels them off one at a time.
-- **`mmk down --steps <n>`** — revert the **last N applied migrations**, newest first, counted as
-  individual files **regardless of batch**. `mmk down --steps 1` reverts just the single most-recently
-  applied migration; a larger N can cross batch boundaries, so preview it first with
-  `mmk dry-run down --steps <n>`.
-
-`--steps` is mutually exclusive with `--batch` and a filename. Migrations are always reverted
-newest-first, so `up` followed by `down --steps <same n>` returns you to the starting state.
-
-</details>
-
-<details>
-<summary><b>Concurrency lock &amp; checksums</b> — safe concurrent deploys, tamper detection</summary>
-
-<br>
-
-**Lock.** Each run acquires an atomic lock document in `_mmk_locks`, so two deploys can never migrate
-at once. A lock older than `lockTTLSeconds` is treated as stale and reclaimed; while a migration runs,
-a heartbeat renews the lock at half the TTL so a long migration can't have its lock stolen mid-run.
-The lock is always released in a `finally` block. The lock collection is read and written with
-`w: 'majority'` / `readConcern: 'majority'` so the mutual-exclusion guarantee survives a primary
-failover. `--no-lock` bypasses it for local development (and warns loudly). If a process crashes hard
-and leaves a lock behind, clear it with **`mmk unlock`** (it shows you who held it and asks for
-confirmation).
-
-**Checksums.** Every applied migration stores a SHA-256 of its file. On later runs `mmk` compares the
-two and surfaces drift in `status`.
-
-- **`up`** — with `strict: true` (or `--strict`) a mismatch on an already-applied file aborts the run;
-  otherwise it warns and skips. To intentionally re-run an edited, already-applied file, use
-  `mmk up <file> --force`.
-- **`down`** — the rollback **verifies the checksum first and refuses to run if the file drifted**,
-  regardless of `strict` (running edited rollback code against production is the riskiest case). The
-  whole rollback aborts up front so nothing is left half-reverted. Use `mmk down --force` (it prompts
-  for confirmation; `--yes` to skip) to roll back the drifted file anyway with its current `down()`.
-
-</details>
-
-<details id="ci--automation">
-<summary><b>CI &amp; automation</b> — JSON output, deploy gates, scripting</summary>
-
-<br>
-
-**Machine-readable output.** Add `--json` to any data command (`up`, `down`, `redo`, `status`,
-`list`, `dry-run`, `import`, `create`, `unlock`) to get a single JSON document on **stdout** — all
-human logs and the spinner are redirected to stderr, so the stream is safe to pipe into `jq` or parse
-in a script. On failure the command prints `{ "error": { "code": "...", "message": "..." } }` to
-stdout and exits `1`.
-
-```bash
-# Apply pending migrations and capture the result in CI
-mmk up --json | jq '.[] | select(.status == "applied") | .file'
-
-# Fail a deploy step if the database isn't fully migrated
-mmk status --check          # exits 1 when anything is pending, 0 otherwise
-
-# Inspect status as data
-mmk status --json | jq 'map(select(.status == "pending")) | length'
-```
-
-A typical pipeline gate:
-
-```yaml
-# .github/workflows/deploy.yml (excerpt)
-- name: Fail if migrations are pending
-  run: npx mmk status --check --uri "$MONGO_URI" --db "$MONGO_DB"
-```
-
-> Note: `mmk init --json` is the one exception — there `--json` means "write `mmk.config.json`",
-> not machine-readable output (kept for backwards compatibility).
-
-</details>
-
-<details>
-<summary><b>Audit trail</b> — a complete, append-only history</summary>
-
-<br>
-
-Every record in `_mmk_migrations` stores `batch`, `status`, `appliedAt`, `revertedAt`, `duration`,
-`checksum`, `environment`, `executedBy`, `author`, and — when set — `namespace`. Rolling back **updates** a record's status to
-`reverted` and stamps `revertedAt` — it is **never deleted**, so the full history stays intact for
-compliance.
-
-Records also carry `service`, the `package.json` name of the codebase that applied them. It is
-**deprecated** in favour of [`namespace`](#sharing-one-database-across-repos) and stops being written in
-2.0; setting it explicitly prints a notice.
-
-`author` records **who wrote** the migration; `executedBy` records **who ran** it. `mmk create`
-writes an `export const author = '…'` line into every new file, using `--author`, then the `author`
-config key / `MMK_AUTHOR`, then your git `user.name <user.email>`, then your OS username. It is
-looked up once, on your machine, and committed with the file — so `mmk up` never needs git, and
-because the line is part of the file it is covered by the checksum like any other change. `mmk
-status` shows it in an `Author` column.
-
-To make authorship mandatory, set `requireAuthor: true` (or `MMK_REQUIRE_AUTHOR=true`). `mmk up`
-then checks every file it is about to apply **before running any of them**, and refuses the run
-with a list of the files that have no author. Files that were already applied before you turned it
-on are not checked.
-
-> Custom `--template` files are copied as-is, so add an `export const author = '…'` line to your
-> template yourself.
-
-</details>
-
-<details>
-<summary><b>Sharing one database across repos</b> — one <code>namespace</code> per repo</summary>
-
-<br>
-
-<a id="sharing-one-database-across-repos"></a>
-
-When several repos run migrations against the same database, give each one a `namespace`:
-
-```js
-export default { uri: process.env.MONGO_URI, dbName: 'shop', namespace: 'orders-api' };
-```
-
-Each repo's records carry its namespace and every query is scoped to it: `mmk status` shows only
-this repo's migrations, batch numbers are per repo, and `mmk down` never touches another repo's
-batch. The collections stay shared — a namespace never creates new ones — and every repo on the
-database still takes turns on **one lock** (a busy lock names the repo holding it).
-
-- Set it once and never change it: it decides which migrations count as applied.
-- Put it in the repo's config file, not on a shared CI runner.
-- Every repo on the database needs mongo-migrate-kit 1.5+; MongoDB 4.2+.
-- With a namespace, mmk keeps one storage-format document in a small `_mmk_meta` collection (grant
-  your deploy user access to it if its permissions are narrowly scoped).
-- New repos need nothing else. An existing repo whose migrations ran before it had a namespace can
-  simply stay without one (the default namespace coexists with named ones), or move its history into
-  a namespace once with `mmk namespace adopt`.
-- `mmk status --all-namespaces` shows every repo's records.
-- Separate products or teams can additionally use their own `migrationsCollection`.
-
-Without a `namespace`, nothing changes. Full guide:
-[Sharing a Database](https://mongo-migrate-kit.vercel.app/guide/shared-database).
-
-</details>
-
-<details>
-<summary><b>Programmatic API</b> — run migrations from your own code</summary>
-
-<br>
-
-#### Run pending migrations on app start
-
-`runMigrations()` is the blessed one-call entry point. It opens its own connection, applies every
-pending migration, and **always disconnects** — even if a migration throws, so a failed boot never
-leaks a MongoDB connection. A failing migration aborts startup instead of letting your app serve
-traffic against a half-migrated database:
+| --- | --- |
+| [`mmk init`](https://mongo-migrate-kit.vercel.app/commands/create#mmk-init) | Create a commented config file |
+| [`mmk create <name>`](https://mongo-migrate-kit.vercel.app/commands/create) | Create a migration file |
+| [`mmk up [file]`](https://mongo-migrate-kit.vercel.app/commands/up) | Run pending migrations, or one file |
+| [`mmk down [file]`](https://mongo-migrate-kit.vercel.app/commands/down) | Roll back the last batch, `--batch <n>`, `--steps <n>`, or one file |
+| [`mmk redo [file]`](https://mongo-migrate-kit.vercel.app/commands/redo) | Roll back and run again |
+| [`mmk status`](https://mongo-migrate-kit.vercel.app/commands/status) | Show every migration (`--check` exits 1 if any are pending) |
+| [`mmk list`](https://mongo-migrate-kit.vercel.app/commands/status#mmk-list) | `--pending` or `--applied` only |
+| [`mmk dry-run <up\|down>`](https://mongo-migrate-kit.vercel.app/commands/dry-run) | Show what would run, change nothing |
+| [`mmk import`](https://mongo-migrate-kit.vercel.app/commands/import) | Copy a migrate-mongo history into mmk |
+| [`mmk unlock`](https://mongo-migrate-kit.vercel.app/commands/unlock) | Remove a lock left by a crashed run |
+| [`mmk namespace adopt`](https://mongo-migrate-kit.vercel.app/commands/namespace) | For repos sharing a database: move older records into this repo's namespace |
+
+Every command takes `--uri`, `--db`, `--dir` and `--config`. All the flags are on the
+[CLI cheatsheet](https://mongo-migrate-kit.vercel.app/reference/cli).
+
+## Running from your code
 
 ```ts
 import { runMigrations } from 'mongo-migrate-kit';
 
-// Call this before your server starts listening.
-const { applied, upToDate } = await runMigrations({
-  uri: process.env.MONGO_URI!,
-  dbName: 'my_app',
-  migrationsDir: './migrations',
-});
-
-if (!upToDate) console.log(`Applied ${applied.length} migration(s)`);
-// then: app.listen(...)
-```
-
-#### Multiple instances booting together
-
-When several instances start at once, only one wins the lock. Set `onLockHeld: 'wait'` so the others
-block until the migrating peer finishes, then confirm there's nothing left to apply before returning:
-
-```ts
-await runMigrations(
-  { uri: process.env.MONGO_URI!, dbName: 'my_app' },
-  { onLockHeld: 'wait', lockWaitTimeoutMs: 30_000 }, // default 'throw'
+// before the server starts listening
+const { applied, upToDate } = await runMigrations(
+  { uri: process.env.MONGO_URL!, dbName: 'shop' },
+  { onLockHeld: 'wait' }, // other instances wait instead of failing
 );
 ```
 
-#### Serverless / cold start
-
-The same call works in a Lambda/Cloud Function bootstrap. Keep `onLockHeld: 'wait'` so concurrent
-cold starts don't fail, and rely on the auto-disconnect so each invocation cleans up after itself.
-
-#### Fail a deploy/health check when the DB is behind (no writes)
-
-`pendingMigrations()` is a connection-managed, read-only readiness probe:
-
-```ts
-import { pendingMigrations } from 'mongo-migrate-kit';
-
-const pending = await pendingMigrations({ uri, dbName: 'my_app' });
-if (pending.length > 0) {
-  throw new Error(`Database is behind by ${pending.length} migration(s)`);
-}
-```
-
-With a `namespace` whose older records haven't been adopted yet, it throws `NamespaceUnadoptedError`
-(as `runMigrations()` would) instead of counting already-applied migrations as pending.
-
-#### Full control
-
-For everything else, every CLI command is a method on `MigratorKit` (you manage the lifecycle):
-
-```ts
-import { MigratorKit } from 'mongo-migrate-kit';
-
-const migrator = new MigratorKit({ uri, dbName: 'my_app', migrationsDir: './migrations' });
-await migrator.connect();
-const rows = await migrator.status();   // StatusRow[]
-await migrator.disconnect();
-```
-
-All errors extend `MmkError` and carry a typed `code` (`LOCK_ALREADY_HELD`, `CHECKSUM_MISMATCH`,
-`NOT_APPLIED`, …), so `catch` blocks stay type-safe.
-
-</details>
-
----
+It opens its own connection and always closes it. If a migration fails, it throws, so your app
+doesn't start on a half-migrated database. `pendingMigrations()` gives you a read-only list for
+health checks. See [Running from your code](https://mongo-migrate-kit.vercel.app/guide/api).
 
 ## Configuration
 
-`mmk` resolves settings in this order (**highest wins**):
-
-> **CLI flags → environment variables → config file → built-in defaults**
-
-A config file is optional and auto-discovered in the working directory as `mmk.config.ts`,
-`mmk.config.js`, or `mmk.config.json`. Run `mmk init` to generate one — it ships fully commented,
-so every setting lives in one documented place:
+Settings come from (highest wins) command-line flags, `MMK_*` environment variables, a
+`mmk.config.js`/`.ts`/`.json` file, then defaults. Only `uri` and `dbName` are required.
 
 ```js
-// mmk.config.js — generated by `mmk init`, every option explained
-/** @type {import('mongo-migrate-kit').MmkConfig} */
+// mmk.config.js
 export default {
-  // ── Connection (required) ───────────────────────────────────────────────
-  uri: 'mongodb://localhost:27017', // MongoDB connection string
-  dbName: 'my_app',                 // database to run migrations against
-
-  // ── Files ───────────────────────────────────────────────────────────────
-  migrationsDir: './migrations',    // where migration files live
-  fileExtensions: ['.ts', '.js'],   // which files count as migrations
-  createExtension: 'js',            // default type for `mmk create` ('js' | 'ts'); --js/--ts override
-  sequential: false,                // true → 0001-style numbering instead of timestamps
-  // templatePath: './migration.template.ts', // custom template for `mmk create`
-  // author: 'Jane Doe <jane@example.com>',    // author for `mmk create` (default: git identity)
-
-  // ── Bookkeeping collections ─────────────────────────────────────────────
-  migrationsCollection: '_mmk_migrations', // the append-only audit trail
-  lockCollection: '_mmk_locks',            // the concurrency lock
-  lockTTLSeconds: 60,                       // a lock older than this is reclaimable
-
-  // ── Safety ──────────────────────────────────────────────────────────────
-  strict: false,        // true → abort on a checksum mismatch (instead of warn + skip)
-  useTransaction: false, // true → wrap every migration in a transaction (override per file)
-  requireAuthor: false,  // true → `mmk up` refuses files without an `author` export
-
-  // ── Code-only options (omit in mmk.config.json) ─────────────────────────
-  // hooks: { beforeAll, afterAll, beforeEach, afterEach, onError },
-  // mongoose: myMongooseInstance, // pass if your migrations use Mongoose models
-  // logger: null,                 // null silences all output (handy in CI/tests)
-  // mongoClientOptions: {         // extra MongoClient options for connection hardening
-  //   tls: true,                  //   (TLS, timeouts, auth, read/write prefs).
-  //   serverSelectionTimeoutMS: 10000, // mmk applies safe defaults; these override them.
-  // },
+  uri: process.env.MONGO_URL ?? 'mongodb://localhost:27017',
+  dbName: 'shop',
+  migrationsDir: './migrations',
 };
 ```
 
-> **Connection hardening.** `mmk` constructs the `MongoClient` with safe defaults
-> (`serverSelectionTimeoutMS`/`connectTimeoutMS` of 10s and `retryWrites`) so a bad URI fails fast. It
-> deliberately does **not** force a client-wide write concern — your migrations keep whatever durability
-> your URI/cluster specifies. Durability is enforced only where it matters: the bookkeeping collections
-> (`_mmk_locks`, `_mmk_migrations`) are always written with `w: 'majority'` (and the lock is read with
-> `readConcern: 'majority'`), independent of your URI. Use `mongoClientOptions` to enable TLS, tune
-> timeouts, or set auth/read-preference for your production cluster — it's merged last, so it overrides
-> the defaults above.
+The config can also be an async function, for loading the connection string from a secret manager
+at runtime. All settings and environment variables are on the
+[Configuration](https://mongo-migrate-kit.vercel.app/guide/configuration) page.
 
-<details>
-<summary><b>Environment variables</b> — the zero-file way to configure everything</summary>
+## Requirements
 
-<br>
+- Node.js 18 or newer. For `.ts` migrations without a loader, Node 22.18 or newer.
+- The `mongodb` driver, version 5 or newer (a peer dependency).
+- MongoDB server 4.2 or newer. Transactions need a replica set or a sharded cluster.
+- `mongoose` 7 or newer, only if your migrations use it.
 
-| Env var | Config key | Default |
-|---|---|---|
-| `MMK_URI` | `uri` | — *(required)* |
-| `MMK_DB` | `dbName` | — *(required)* |
-| `MMK_MIGRATIONS_DIR` | `migrationsDir` | `./migrations` |
-| `MMK_COLLECTION` | `migrationsCollection` | `_mmk_migrations` |
-| `MMK_LOCK_COLLECTION` | `lockCollection` | `_mmk_locks` |
-| `MMK_LOCK_TTL` | `lockTTLSeconds` | `60` |
-| `MMK_NAMESPACE` | `namespace` | — *(default namespace; set per repo only when repos share a database)* |
-| `MMK_STRICT` | `strict` | `false` |
-| `MMK_USE_TRANSACTION` | `useTransaction` | `false` |
-| `MMK_SEQUENTIAL` | `sequential` | `false` |
-| `MMK_CREATE_EXTENSION` | `createExtension` | `js` |
-| `MMK_SERVICE` | `service` *(deprecated — use `namespace`)* | nearest `package.json` name |
-| `MMK_AUTHOR` | `author` | git `user.name <user.email>`, then OS username |
-| `MMK_REQUIRE_AUTHOR` | `requireAuthor` | `false` |
+## Contributing
 
-`.env` files are loaded automatically. An empty value (`MMK_STRICT=`) counts as unset, so you can
-comment a setting out without deleting the line. A value that can't be parsed is an error, not a
-silent fallback — see below.
-
-</details>
-
-<details>
-<summary><b>Configuration errors</b> — what you see when something is missing or wrong</summary>
-
-<br>
-
-Every configuration problem is reported up front, before `mmk` touches your database, and **all
-problems at once** rather than one per run. Each one names the option, the value that was actually
-read, the layer it came from, and every accepted way to set it:
-
-```
-✖ CONFIG_INVALID: Invalid mongo-migrate-kit configuration — 2 problems found:
-
-  1. uri is required but was not set
-     Set it with: the --uri <uri> CLI flag, the MMK_URI environment variable,
-     "uri" in mmk.config.js (see `mmk init`), or the config object passed to MigratorKit
-
-  2. lockTTLSeconds must be a whole number, e.g. 60
-     Received: "abc"
-     Read from: the MMK_LOCK_TTL environment variable
-     Set it with: the MMK_LOCK_TTL environment variable, "lockTTLSeconds" in mmk.config.js, …
-```
-
-What is checked:
-
-| Mistake | What you get |
-|---|---|
-| `uri` / `dbName` not set | Named as required, with all three ways to supply it |
-| `uri` isn't a connection string (`localhost:27017`) | Told it must start with `mongodb://` or `mongodb+srv://` |
-| `dbName` contains `/ \ . " $ * < > : \| ?` or a space | Named before the driver rejects it at connect time |
-| `MMK_LOCK_TTL=abc`, `MMK_STRICT=maybe`, `MMK_CREATE_EXTENSION=py` | Rejected naming the variable, the value, and the accepted format — never silently coerced or ignored |
-| A typo'd option in a config file (`migrationDir`) | Rejected with `rename it to "migrationsDir"` — an unknown key is otherwise silently inert |
-| A typo'd env var (`MMK_MIGRATION_DIR`) | Warned, with the real variable suggested |
-| `fileExtensions: ['ts']` (no leading dot) | Named per element, instead of silently matching no files |
-| `strict: 'true'` (string, not boolean) | Named as needing a real boolean |
-| A misspelled hook (`beforeALL`) or a non-function hook | Named with the valid hook list — a misspelled hook otherwise never fires |
-| An incomplete custom `logger` | Told exactly which methods are missing |
-| `migrationsDir` points nowhere | Warned with the resolved path, instead of a silent "nothing to migrate" |
-| Config file is malformed JSON, exports a non-object, or can't be imported | Named with the file path and the underlying reason |
-
-In `--json` mode the same information is machine-readable on stdout:
-
-```jsonc
-{
-  "error": {
-    "code": "CONFIG_INVALID",
-    "message": "Invalid mongo-migrate-kit configuration — 1 problem found: …",
-    "details": {
-      "issues": [
-        {
-          "key": "uri",
-          "problem": "is required but was not set",
-          "howToSet": "the --uri <uri> CLI flag, the MMK_URI environment variable, …"
-        }
-      ]
-    }
-  }
-}
-```
-
-Programmatically, the same array is on `error.context.issues`, typed as the exported `ConfigIssue`:
-
-```ts
-import { runMigrations, ConfigInvalidError, type ConfigIssue } from 'mongo-migrate-kit';
-
-try {
-  await runMigrations({ uri: process.env.MONGO_URL, dbName: 'my_app' });
-} catch (error) {
-  if (error instanceof ConfigInvalidError) {
-    for (const issue of (error.context?.issues ?? []) as ConfigIssue[]) {
-      console.error(`${issue.key} ${issue.problem}`, issue.source, issue.howToSet);
-    }
-  }
-  throw error;
-}
-```
-
-</details>
-
-<details>
-<summary><b>Argument errors</b> — what you see when a command is wrong</summary>
-
-<br>
-
-The same rule applies to what you type as to what you configure: **nothing is a silent no-op**. Bad
-flags are caught *before* mmk connects, so a typo costs nothing:
-
-```
-$ mmk down --batch abc
-✖ INVALID_ARGUMENT: --batch must be a positive whole number
-  Received: "abc"
-  Try: mmk down --batch 3
-
-$ mmk up 0001-add-user.ts
-✖ MIGRATION_FILE_NOT_FOUND: Migration file not found: "0001-add-user.ts"
-  Looked in: /app/migrations
-  Did you mean "0001-add-users.ts"?
-  Migrations in that directory: 0001-add-users.ts, 0002-backfill.ts
-  Run `mmk status` to see every migration mmk knows about
-
-$ mmk down 0002-backfill.ts
-✖ NOT_APPLIED: Cannot roll back "0002-backfill.ts" — it is not currently applied
-  It has no changelog record
-  Currently applied: 0001-add-users.ts
-  Run `mmk status` to see what is applied
-
-$ mmk stauts
-error: unknown command 'stauts'
-(Did you mean status?)
-```
-
-| Mistake | Before | Now |
-|---|---|---|
-| `mmk down --batch abc` | `Nothing to rollback`, **exit 0** | Rejected before connecting, naming the value |
-| `mmk down --batch 99` (no such batch) | `Nothing to rollback`, **exit 0** | Rejected, listing the batches that do have applied migrations |
-| `mmk create "   "` | Wrote a file named `20240526143021-.js` | Rejected — the name slugifies to nothing |
-| `mmk create x --js --ts` | Silently picked `.ts` | Rejected as contradictory |
-| `mmk import --from c --to c` | Read and rewrote the same collection | Rejected — `--from` and `--to` must differ |
-| `mmk up typo.js` | `Migration file not found` | Names the directory, suggests the real file, lists what's there |
-| `mmk down not-applied.js` | `Migration is not applied` | Lists what *is* applied |
-| `mmk dry-run sideways` | Connected first, then `CONFIG_INVALID` | Rejected before connecting, with both valid directions |
-| A migration missing `down()` | `must export async up() and down()` | Says which one is missing (or the wrong type) and lists the exports found |
-| `mmk down file --steps 2` | `Cannot combine a filename with --steps` | Spells out what each option would do instead |
-
-Argument problems carry the `INVALID_ARGUMENT` code, distinct from `CONFIG_INVALID` — so you always
-know whether to fix your command or your config. In `--json` mode they arrive the same way:
-
-```jsonc
-{
-  "error": {
-    "code": "INVALID_ARGUMENT",
-    "message": "--batch must be a positive whole number\n  Received: \"abc\"\n  Try: mmk down --batch 3",
-    "details": { "flag": "--batch", "received": "abc" }
-  }
-}
-```
-
-</details>
-
----
-
-## Migration file formats
-
-`mmk` loads TypeScript and both JavaScript module systems with no extra setup:
-
-```ts
-// TypeScript / ESM — named exports (native on Node 22.18+, or under a loader like tsx)
-export async function up({ db }) { /* ... */ }
-export async function down({ db }) { /* ... */ }
-```
-
-```js
-// CommonJS — default export
-module.exports = {
-  async up({ db }) { /* ... */ },
-  async down({ db }) { /* ... */ },
-};
-```
-
-Optional per-file exports: `description` (shown in `status`), `author` (who wrote it — recorded on
-the changelog record), and `useTransaction`. Note that `up`/`down`
-receive a **single context object** (`{ db, client, mongoose?, session? }`) — not `migrate-mongo`'s
-positional `(db, client)`.
-
-> **ESM vs CommonJS:** Node decides a file's module system from its extension and the nearest
-> `package.json` `"type"`. In a project with `"type": "module"`, a `.js` file is an ES module, so
-> `module.exports = …` throws *"module is not defined in ES module scope."* Use named `export`s (above),
-> or name the file `.cjs` and add `'.cjs'` to `fileExtensions` in your config.
-
----
+Issues and pull requests are welcome. [ARCHITECTURE.md](./ARCHITECTURE.md) explains how the code is
+put together and how to add a command. Ideas being explored (not promises) are in
+[IDEAS.md](./IDEAS.md).
 
 ## License
 

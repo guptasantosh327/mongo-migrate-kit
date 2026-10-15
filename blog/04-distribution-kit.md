@@ -1,284 +1,322 @@
-# Distribution Kit — mongo-migrate-kit
+# Distribution kit: mongo-migrate-kit
 
-Platform-native versions of the three blog posts. Each platform has its own etiquette, so these
-aren't copy-paste clones — they're written the way people actually post on each one.
+Ready-to-paste versions of the first three posts for each platform. Each platform has its own
+habits, so these aren't copies of each other. They're written the way people actually post there.
 
-**Golden rules:**
-- Replace `LINK` with the real Medium (or Dev.to) URL once published.
+**Ground rules**
+
+- Replace `LINK` with the real URL once a post is live.
 - Don't post the same thing everywhere on the same day. Space it out.
-- On Reddit and the MongoDB forum, **be a person sharing something, not a brand advertising.** Reply to
-  comments. That's where the real reach comes from.
+- On Reddit and the MongoDB forum, be a person sharing something you made, not a brand. Reply to
+  comments. That's where the reach comes from.
+- **Images:** Medium, Dev.to, Hashnode and LinkedIn don't show SVG. Use the GIFs and PNGs instead:
+  - Terminal recordings: `https://mongo-migrate-kit.vercel.app/gifs/<name>.gif`
+    (`hero`, `quickstart`, `tutorial`, `rollback`, `lock`, `checksum`, `failure`, `import`,
+    `devloop`, `ci-check`, `namespaces`, `config-error`)
+  - Diagrams: `https://mongo-migrate-kit.vercel.app/diagrams/png/<name>.png`
+    (`batches`, `how-up-works`, `transaction`, `shared-database`, `expand-contract`)
+  - The draft posts in this folder already use these URLs. Regenerate them with
+    `node scripts/casts/gif.mjs` after re-recording the casts.
 
 ---
 
 ## 1. Dev.to (full cross-post)
 
-Dev.to lets you paste the whole article. Put this frontmatter at the very top, then paste the post body
-below it. The `canonical_url` tells Google "Medium is the original," so you don't compete with yourself.
+Dev.to takes the whole article. Put this front matter at the top, then paste the post body under
+it. `canonical_url` tells Google which copy is the original, so the two don't compete.
 
-### Post 1 — Origin story
+### Post 1: the story
+
 ```markdown
 ---
-title: "Why I Built a New MongoDB Migration Tool — and Migrated Off migrate-mongo in One Command"
+title: "Why I built a new MongoDB migration tool"
 published: true
-description: "migrate-mongo couldn't roll back a single migration. So I built a tool that can — and made switching a one-command, non-destructive step."
+description: "One bad migration on a Friday, a tool that could only undo the last one, and switching an existing project over in one command."
 tags: mongodb, node, typescript, opensource
 canonical_url: LINK
+cover_image: https://mongo-migrate-kit.vercel.app/gifs/hero.gif
 ---
 
-(paste the full body of 01-why-i-built-mongo-migrate-kit.md here)
+(paste the body of 01-why-i-built-mongo-migrate-kit.md here)
 ```
 
-### Post 2 — Switch guide
+### Post 2: the switching guide
+
 ```markdown
 ---
-title: "Switching from migrate-mongo to mongo-migrate-kit: A Zero-Downtime, Non-Destructive Guide"
+title: "Switching from migrate-mongo to mongo-migrate-kit, step by step"
 published: true
-description: "A step-by-step guide to moving an existing project off migrate-mongo without re-running old migrations or losing history."
+description: "Move an existing project off migrate-mongo without re-running old migrations, losing history, or touching the old changelog."
 tags: mongodb, node, database, tutorial
 canonical_url: LINK
 ---
 
-(paste the full body of 02-switching-from-migrate-mongo-guide.md here)
+(paste the body of 02-switching-from-migrate-mongo-guide.md here)
 ```
 
-### Post 3 — Listicle
+### Post 3: the list
+
 ```markdown
 ---
-title: "7 Things migrate-mongo Can't Do (That Cost Me in Production)"
+title: "7 things I kept missing in migrate-mongo"
 published: true
-description: "Seven real gaps in migrate-mongo that bit me in production — and what I do instead now."
+description: "Seven gaps in migrate-mongo that cost me time in production, and what I do now."
 tags: mongodb, node, webdev, opensource
 canonical_url: LINK
 ---
 
-(paste the full body of 03-7-things-migrate-mongo-cant-do.md here)
+(paste the body of 03-7-things-migrate-mongo-cant-do.md here)
 ```
 
-> Dev.to allows a max of 4 tags. Keep them broad — `mongodb`, `node`, `typescript`, `webdev` get the
-> most traffic.
+> Dev.to allows four tags. Broad ones (`mongodb`, `node`, `typescript`, `webdev`) get the most
+> traffic.
 
 ---
 
 ## 2. Hashnode (full cross-post)
 
-Same idea as Dev.to. In the Hashnode editor, open **Article Settings → SEO → Canonical URL** and paste
-your Medium link there. Then paste the article body.
+Same idea as Dev.to. In the Hashnode editor, open **Article Settings → SEO → Canonical URL**, paste
+the original link, then paste the body.
 
-Suggested tags (Hashnode lets you add more than Dev.to):
+Tags (Hashnode allows more than Dev.to):
 - Post 1: `MongoDB`, `Node.js`, `TypeScript`, `Open Source`, `Databases`
 - Post 2: `MongoDB`, `Node.js`, `Databases`, `Tutorial`, `Backend`
 - Post 3: `MongoDB`, `Node.js`, `Web Development`, `DevOps`, `Open Source`
 
-Suggested subtitles (Hashnode shows a subtitle field):
-- Post 1: "The story behind mongo-migrate-kit — and the one command that makes switching painless."
-- Post 2: "Move off migrate-mongo without re-running a single old migration."
-- Post 3: "The gaps that bit me in production, and what I reach for now."
+Subtitles:
+- Post 1: "One bad Friday, and the one command that made switching easy."
+- Post 2: "Move off migrate-mongo without running a single old migration again."
+- Post 3: "The gaps that bit me in production, and what I use now."
 
 ---
 
 ## 3. LinkedIn
 
-LinkedIn rewards a personal story with short lines and white space. No big paragraphs. Put the link in
-the **first comment**, not the post body (LinkedIn throttles posts with outbound links). End with a
-soft question to invite comments — that's what feeds the algorithm.
+LinkedIn does best with a personal story in short lines. Put the link in the **first comment**, not
+the post (LinkedIn shows posts with links to fewer people). Attach `hero.gif` to the post itself:
+a moving terminal stops people scrolling better than any sentence.
 
-### Version A — the story (best performer)
+### Version A: the story
+
 ```
-A bad migration on a Friday afternoon is how this started.
+I started writing a migration tool because of one bad Friday.
 
-I'd run three database migrations. The third was wrong.
+I'd shipped three database migrations together. The third one was wrong.
 I wanted to undo just that one.
 
-My tool could only undo "the last one."
-No way to target a single file. No way to preview a rollback.
+Our tool could only undo "the last one", and by then
+someone else had deployed on top. There was no way to
+point at a single file, and no way to see what a rollback
+would do before running it.
 
-So I did it by hand. On production. Coffee went cold.
+So I fixed it by hand. On production.
 
-That afternoon I started a list of everything a MongoDB
-migration tool should do but didn't:
+That evening I started a list of what I wanted instead:
+- undo one specific migration, not just the last one
+- see the plan before anything touches the database
+- a lock, on by default, so two deploys can't collide
+- notice when someone edits a migration that already ran
+- keep the history when something is rolled back
 
-→ roll back a single file, not just the last one
-→ preview a run before it touches the database
-→ a lock so two deploys can't collide
-→ checksums to catch edited migrations
-→ never delete history on rollback
+That list became mongo-migrate-kit. The GIF is a real session:
+preview, run, undo one file, check the status.
 
-I built it. It's called mongo-migrate-kit.
+If you're on migrate-mongo, switching is one command.
+It copies your history and never touches the old collection.
 
-The part I'm proudest of: if you're already on migrate-mongo,
-you switch in one command. It reads your existing history,
-never touches your old data, and runs only what's new.
+Link in the first comment.
 
-Link in the comments. 👇
+What's the worst migration you've had to undo by hand?
 
-What's the worst migration story you've lived through?
-
-#MongoDB #NodeJS #TypeScript #OpenSource #BackendDevelopment
+#MongoDB #NodeJS #OpenSource
 ```
+
 First comment:
+
 ```
-Here's the write-up (and the repo): LINK
-Would genuinely love feedback if you give it a try.
+The write-up and the repo: LINK
+If you try it, I'd really like to hear what's confusing.
 ```
 
-### Version B — short and direct
+### Version B: short
+
 ```
-I open-sourced a MongoDB migration toolkit for Node.js.
+I open-sourced a MongoDB migration tool for Node.js.
 
 If you've used migrate-mongo and wished you could:
-• roll back a single migration (not just the last one)
-• dry-run before touching production
-• stop two deploys racing each other
+- roll back one specific migration
+- dry-run before touching production
+- have a lock that's on by default
 
-...this does all of that.
-
-And switching is one command — it adopts your existing
-migrate-mongo history without re-running anything.
-
-TypeScript and JavaScript both work out of the box.
+this does that. Switching is one command: it copies your
+existing migrate-mongo history and doesn't re-run anything.
 
 Link in the comments.
 
-#MongoDB #NodeJS #OpenSource #Database
+#MongoDB #NodeJS #OpenSource
 ```
 
 ---
 
 ## 4. Reddit
 
-Reddit is the highest-reward and least-forgiving. Rules:
-- **No marketing voice.** Write like you're telling a colleague.
-- Put context/story in the **post body**, put the link in a **comment** or at the end, low-key.
-- Read each subreddit's self-promo rules first. Most allow "I built this" if you engage in the comments.
+Reddit pays off the most and forgives the least.
+
+- No marketing voice. Write like you're telling a colleague.
+- Story in the post body. Link at the end, low-key.
+- Read each subreddit's self-promotion rules first. Most allow "I built this" if you stick around
+  in the comments.
 - Reply to every comment for the first few hours.
 
-### r/node — title
-`I kept hitting the same migrate-mongo limitations, so I built a MongoDB migration tool that fixes them`
+### r/node
+
+Title:
+
+`I kept running into the same migrate-mongo gaps, so I built a MongoDB migration tool`
+
 Body:
+
 ```
-I've used migrate-mongo for years on Node projects. It's solid, but a few
-gaps kept biting me as projects grew:
+I've used migrate-mongo on Node projects for years. It's good, but a few
+things kept costing me time as projects grew:
 
-- can't roll back a single migration, only the last one
-- no dry-run before it touches the DB
-- no lock, so two CI deploys could race
-- no checksum, so an edited migration silently drifts
-- rolling back deletes the changelog entry (bad for audits)
+- down only undoes the last migration (or the last block), never a specific file
+- no dry run, so you find out what will run by running it
+- the lock is off unless you configure it, and we hadn't
+- edits to applied migrations go unnoticed
+- rolling back deletes the changelog entry, which hurts when you're
+  trying to work out what happened
 
-So I built mongo-migrate-kit. Single-file up/down, dry-runs, a MongoDB-native
-lock, SHA-256 checksums, redo, and an append-only history that never gets deleted.
-TS and JS both work with no ts-node setup.
+So I built mongo-migrate-kit. You can run or roll back a single file, roll
+back an older batch, dry-run anything, and there's a lock in MongoDB that's
+on by default. It keeps a checksum of each file and refuses to roll back
+edited code unless you force it. Rollbacks mark records as reverted
+instead of deleting them.
 
-The thing I worked hardest on is switching: `mmk import` adopts your existing
-migrate-mongo changelog in one command without touching your old data, so
-it knows what's already applied and only runs what's new.
+The part I spent the most time on is switching: `mmk import` copies an
+existing migrate-mongo history without touching the old collection, so
+nothing runs twice.
 
-Repo + npm: mongo-migrate-kit. Happy to answer anything, and genuinely open
-to "this already exists" or "you got X wrong" — that's why I'm posting.
+It's on npm and GitHub as mongo-migrate-kit, with docs here: LINK
+
+Happy to hear "this already exists" or "you got X wrong". That's why
+I'm posting.
 ```
 
-### r/mongodb — title
-`Built a migration tool with a native lock, checksums, and single-file rollbacks`
-Body: same as above, but open with the MongoDB-specific bits (lock document in a collection, transactions
-via session, checksum tamper detection) since that crowd cares about the DB internals more than the CLI.
+### r/mongodb
 
-### r/typescript — title
-`A TypeScript-first MongoDB migration toolkit (no ts-node setup, fully typed context)`
-Body: lead with the TypeScript angle — strict types, typed `MigrationContext`, typed errors with codes,
-`.ts`/ESM/CJS all first-class — then mention the feature list.
+Title:
 
-> Tip: don't post to all three on the same day. Space them several days apart. Cross-posting the exact
-> same thing the same day looks like spam and gets removed.
+`Built a Node migration tool: lock document, checksums, single-file rollbacks`
+
+Body: the same story, but open with the MongoDB details this crowd cares about: the lock is one
+document taken with an atomic `findOneAndUpdate` upsert, with an expiry on the server clock and a
+heartbeat for long migrations; transactions write the history record in the same session; the
+history and lock are written with `w: 'majority'`.
+
+### r/typescript
+
+Title:
+
+`A MongoDB migration tool with a typed migration context and typed error codes`
+
+Body: lead with the types (`MigrationContext`, every error has a `code`, `--json` output for
+scripts), mention that `.ts` migrations run directly on Node 22.18+, then the feature list.
+
+> Don't post to all three on the same day. Space them a few days apart. The same post in three
+> places on one day looks like spam and gets removed.
 
 ---
 
 ## 5. MongoDB Community Forums
 
-The forum (community.mongodb.com) is for genuinely helpful, technical posts. Pick the **"Developer Tools"**
-or relevant category. Lead with the problem and the design, not the pitch.
+The forum (community.mongodb.com) is for useful, technical posts. Use the "Developer Tools" category
+or whichever fits. Lead with the problem and the design, not the pitch.
 
 Title:
-`Open-sourced a MongoDB migration toolkit for Node.js — feedback welcome`
+
+`Open-sourced a MongoDB migration tool for Node.js, feedback welcome`
+
 Body:
+
 ```
 Hi all,
 
-I've released an open-source MongoDB migration toolkit for Node.js called
-mongo-migrate-kit, and I'd value feedback from this community.
+I've released an open-source migration tool for Node.js called
+mongo-migrate-kit, and I'd like feedback from people who know MongoDB
+better than I do.
 
-A few design choices I made specifically around MongoDB that I'd love thoughts on:
+A few design choices I'd love thoughts on:
 
-- Concurrency lock: an atomic lock document (findOneAndUpdate with upsert) in a
-  dedicated collection, with a TTL so a crashed process doesn't leave it stuck.
-  Goal is to stop two deploys migrating the same database at once.
-- Transactions: opt-in per migration via a flag; the runner opens a session,
-  passes it through, commits on success, aborts on error. (Requires a replica
-  set / sharded cluster, per MongoDB's own rules.)
-- Tamper detection: stores a SHA-256 of each migration file and compares on later
-  runs to catch files edited after they were applied.
-- Append-only audit trail: a rollback updates the record's status to "reverted"
-  rather than deleting it, so the full history is preserved for compliance.
-- Adoption path: it can read an existing migrate-mongo changelog (read-only,
-  never modified) and adopt that history so you don't re-run applied migrations.
+- Lock: one document in a dedicated collection, taken with an atomic
+  findOneAndUpdate upsert. Each holder writes an expiry based on the
+  server's clock, and renews it while a migration runs, so a crashed
+  process can't block everyone forever and a long migration doesn't
+  lose its lock.
+- Transactions: opt-in per migration. The runner starts a session,
+  passes it to the migration, and writes the history record in the
+  same transaction before committing, so the change and its record
+  commit together.
+- Edited files: it stores a SHA-256 of each migration file. Rolling
+  back a file that changed since it ran is refused unless forced.
+- History: a rollback marks the record "reverted" instead of
+  deleting it.
+- Switching: it can read an existing migrate-mongo changelog (read-only)
+  and copy that history, so applied migrations don't run again.
 
-It supports TypeScript and JavaScript (ESM + CJS). Peer-deps on the native driver,
-optional Mongoose.
+Docs and repo: LINK
 
-Repo: <link>
-
-I'd especially appreciate scrutiny on the lock approach and the transaction
-handling — if there's an edge case I've missed, I want to hear it.
+I'd especially appreciate a hard look at the lock and the transaction
+handling. If there's an edge case I've missed, I want to know.
 
 Thanks!
 ```
 
-> The forum crowd respects "tell me what I got wrong." That framing gets real engineering replies
-> instead of crickets.
+> This crowd responds to "tell me what I got wrong". That framing gets real engineering replies.
 
 ---
 
-## 6. Discord (MongoDB Discord, Node.js Discord, etc.)
+## 6. Discord (MongoDB, Node.js and similar servers)
 
-Discord is casual and fast. One or two lines, drop it in the right channel (usually `#showcase`,
-`#i-made-this`, or `#show-and-tell`). Don't paste a wall of text. Don't @everyone.
+Casual and quick. One or two lines in the right channel (`#showcase`, `#i-made-this`,
+`#show-and-tell`). No walls of text, no @everyone.
 
-### Short version
+### Short
+
 ```
-Made a MongoDB migration toolkit for Node — mongo-migrate-kit 🚀
-Single-file rollbacks, dry-runs, a native lock, checksums, and an audit trail
-that never deletes history. TS + JS both work out of the box.
-
-If you're on migrate-mongo, it adopts your existing changelog in one command.
-Repo: LINK — feedback very welcome 🙏
-```
-
-### Even shorter (for fast-moving channels)
-```
-Built an open-source MongoDB migration tool for Node: single-file rollbacks,
-dry-runs, locking, checksums. Switches from migrate-mongo in one command. LINK
+I made a MongoDB migration tool for Node: mongo-migrate-kit.
+Roll back one specific migration, dry-run before you touch prod, a lock
+that's on by default, and history that's kept when you roll back.
+If you're on migrate-mongo, it imports your existing history in one command.
+LINK (feedback very welcome)
 ```
 
-> After posting, hang around and answer questions. On Discord, a couple of good replies do more than
-> the post itself.
+### Shorter (for busy channels)
+
+```
+Open-source MongoDB migration tool for Node: single-file rollbacks, dry runs,
+locking, checksums, one-command switch from migrate-mongo. LINK
+```
+
+> After posting, stay around and answer questions. A couple of good replies do more than the post.
 
 ---
 
-## Posting schedule (suggested)
+## Suggested schedule
 
-Don't fire everything at once. A calm rollout over ~2 weeks looks organic and keeps each post fresh:
+Don't post everything at once. Spreading it over about two weeks keeps each post fresh:
 
-| Day | Action |
-|---|---|
-| 1 | Publish Post 1 (story) on Medium. Share on LinkedIn (Version A). |
-| 2 | Cross-post Post 1 to Dev.to + Hashnode (canonical → Medium). |
-| 4 | Post to r/node. Spend the day replying to comments. |
-| 6 | Publish Post 3 (listicle) on Medium + Dev.to. |
-| 7 | Post to r/mongodb (lead with the DB internals). |
-| 9 | MongoDB Community Forums post. |
-| 10 | Drop the Discord one-liner in 1–2 showcase channels. |
-| 12 | Publish Post 2 (switch guide) on Medium + Dev.to — the long-term SEO piece. |
-| 14 | LinkedIn Version B, linking the switch guide. |
+| Day | What |
+| --- | --- |
+| 1 | Publish post 1 (the story). LinkedIn version A with `hero.gif`. |
+| 2 | Cross-post post 1 to Dev.to and Hashnode (canonical pointing to the original). |
+| 4 | r/node. Spend the day replying. |
+| 6 | Publish post 3 (the list) and cross-post. |
+| 7 | r/mongodb, leading with the database details. |
+| 9 | MongoDB Community Forums. |
+| 10 | Discord one-liner in one or two showcase channels. |
+| 12 | Publish post 2 (the switching guide) and cross-post. |
+| 14 | LinkedIn version B, linking the switching guide. |
 
-The switch guide goes last on purpose: it's the one that keeps pulling Google traffic for months, so it
-doesn't need the launch-day burst.
+The switching guide goes last on purpose. It's the one that keeps bringing in search traffic for
+months, so it doesn't need the launch-day burst.

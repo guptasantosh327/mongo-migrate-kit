@@ -1,6 +1,6 @@
 ---
 title: Blog
-description: Articles on MongoDB migrations — single-file rollbacks, native locking, transactions, CI/CD, running on startup, and hard-won best practices.
+description: Notes on running MongoDB migrations in real projects. Rolling back one file, locking, transactions, CI pipelines, running on app start, and habits that keep production safe.
 aside: false
 ---
 
@@ -18,8 +18,9 @@ const sortedPosts = computed(() =>
 
 # Blog
 
-Practical writing on MongoDB migrations — safe rollbacks, locking for concurrent deploys,
-running migrations in CI/CD and on app startup, and lessons from real production incidents.
+Notes from running MongoDB migrations in real projects: rolling back the right thing, keeping two
+deploys from colliding, running migrations in CI and on app start, and the habits I picked up the
+hard way. New here? The [guide](/guide/) is the better place to start.
 
 <div class="blog-sort">
   <span class="blog-sort-label">Sort by date:</span>

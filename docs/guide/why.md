@@ -1,15 +1,11 @@
 # Why mongo-migrate-kit?
 
-Most MongoDB migration tools run every pending migration, then only undo the last one.
-`mongo-migrate-kit` gives you precise control over what runs and what rolls back — and won't leave
-your database half-migrated when something fails.
+I built it after a bad Friday. One migration out of three in a release was wrong, and the tool we
+used could only roll back "the last one". Fixing it meant connecting to production and undoing the
+change by hand. ([The longer story is on the blog](/blog/why-i-built-mongo-migrate-kit).)
 
-::: info Where to start
-**New to migrations?** Read [Core Concepts](/guide/concepts), then follow the
-[Tutorial](/guide/tutorial). <br>
-**Done this before?** Jump to [Getting Started](/guide/getting-started), the
-[CLI Cheatsheet](/reference/cli), or the [Programmatic API](/guide/api).
-:::
+So the main idea is simple: you should be able to run, preview and undo exactly the migration you
+mean, and the tool should stop you before it does something you didn't expect.
 
 ## Reasons to choose it
 
@@ -24,25 +20,40 @@ your database half-migrated when something fails.
 - **TypeScript, ESM & CommonJS** — all run with no `ts-node` plumbing.
 - **Zero config files required** — drive everything from env vars if you prefer.
 
-## vs. migrate-mongo
+## Compared with migrate-mongo
+
+migrate-mongo is the tool most Node projects use, and it's a good tool. This table is only about
+the features where they differ.
 
 | Capability                                      | `migrate-mongo` | `mongo-migrate-kit` |
 | ----------------------------------------------- | :-------------: | :-----------------: |
 | Run a single migration file                     |        ❌        |          ✅          |
 | Roll back a specific batch (not just the last)  |        ❌        |          ✅          |
+| Roll back a single migration file               |        ❌        |          ✅          |
 | Dry-run preview                                 |        ❌        |          ✅          |
 | `redo` (down + up)                              |        ❌        |          ✅          |
-| Checksum / tamper detection                     |        ❌        |          ✅          |
+| Concurrency lock on by default                  |        ❌        |          ✅          |
+| Refuses to roll back an edited migration        |        ❌        |          ✅          |
 | Lifecycle hooks                                 |        ❌        |          ✅          |
-| First-class TypeScript (built-in)               |        ❌        |          ✅          |
 | History kept on rollback (never deleted)        |        ❌        |          ✅          |
+| Adopt an existing `migrate-mongo` changelog     |        —        |          ✅          |
 
-::: tip Already on migrate-mongo?
-Switch in one command — `mmk import` adopts your existing `changelog` as-is, with no re-running and
-no data loss. See [Migrating from migrate-mongo](/guide/migrate-mongo).
-:::
+<p style="font-size:.85rem;color:var(--vp-c-text-2)">Reflects <code>migrate-mongo</code>'s documented CLI as of mid-2026. It also gives migrations transaction access through a <code>client</code> argument; <code>mmk</code> exposes the same plus a declarative per-file <code>useTransaction</code> flag.</p>
+
+If you already use migrate-mongo, you don't have to start over. `mmk import` copies your existing
+history, so nothing runs twice. See [Moving from migrate-mongo](/guide/migrate-mongo).
+
+## When it's not the right fit
+
+To be fair about it:
+
+- If you need a schema tool for SQL databases, this isn't it. It only talks to MongoDB.
+- If your whole team is happy with migrate-mongo and never needs to undo a specific migration,
+  switching may not be worth it.
+- If you want migrations generated for you from model changes, mmk doesn't do that. You write the
+  `up` and `down` yourself.
 
 ## Next
 
-- [Getting Started](/guide/getting-started) — install and run your first migration.
-- [Writing Migrations](/guide/writing-migrations) — the `up`/`down` contract.
+[Quick start](/guide/getting-started) gets you from zero to a migration you can roll back in about
+five minutes.

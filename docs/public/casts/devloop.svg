@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="641" height="334" viewBox="0 0 641 334" role="img" aria-label="Writing a migration: mmk up, edit the file, mmk redo, then mmk down to check the rollback works">
+<title>Writing a migration: mmk up, edit the file, mmk redo, then mmk down to check the rollback works</title>
+<style>
+svg{font-family:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','DejaVu Sans Mono',monospace;font-size:14px}
+text{white-space:pre;fill:#d5dde3}
+.k{fill:#7f8b93}.r{fill:#ff7b72}.g{fill:#4fd27f}.y{fill:#e6b84f}.b{fill:#79b8ff}.m{fill:#d2a8ff}.c{fill:#5fd0dc}.w{fill:#f3f6f8}
+.d{fill-opacity:.62}.o{font-weight:700}
+.p{fill:#3ddc84;font-weight:700}.cm{fill:#7d8a92}
+.t{fill:#8a969e;font-size:12.5px}.lb{fill:#8a969e;font-size:12px}
+.cur{fill:#d5dde3;animation:blink 1.05s step-end infinite}
+@keyframes blink{0%{opacity:1}50%{opacity:0}}
+.sp{opacity:0;animation:spin .8s step-end infinite}
+@keyframes spin{0%{opacity:1}10%{opacity:0}100%{opacity:0}}
+
+@media (prefers-reduced-motion:reduce){.sc0{transform:translateY(-0px)}}
+.s0{opacity:0;animation:s0 31514ms step-end infinite}@keyframes s0{0%{opacity:0}1.587%{opacity:1}100%{opacity:1}}
+.ty1{opacity:0;animation:ty1 31514ms step-end infinite}@keyframes ty1{0%{opacity:0;transform:translateX(0)}1.587%{opacity:1;transform:translateX(0)}3.332%{opacity:1;transform:translateX(0);animation-timing-function:steps(39,end)}8.530%{opacity:1;transform:translateX(327.6px)}9.355%{opacity:0;transform:translateX(327.6px)}100%{opacity:0;transform:translateX(327.6px)}}
+.s2{opacity:0;animation:s2 31514ms step-end infinite}@keyframes s2{0%{opacity:0}9.355%{opacity:1}100%{opacity:1}}
+.s3{opacity:0;animation:s3 31514ms step-end infinite}@keyframes s3{0%{opacity:0}9.393%{opacity:1}100%{opacity:1}}
+.s4{opacity:0;animation:s4 31514ms step-end infinite}@keyframes s4{0%{opacity:0}14.000%{opacity:1}100%{opacity:1}}
+.ty5{opacity:0;animation:ty5 31514ms step-end infinite}@keyframes ty5{0%{opacity:0;transform:translateX(0)}14.000%{opacity:1;transform:translateX(0)}15.745%{opacity:1;transform:translateX(0);animation-timing-function:steps(10,end)}17.078%{opacity:1;transform:translateX(84px)}17.903%{opacity:0;transform:translateX(84px)}100%{opacity:0;transform:translateX(84px)}}
+.s6{opacity:0;animation:s6 31514ms step-end infinite}@keyframes s6{0%{opacity:0}17.903%{opacity:1}100%{opacity:1}}
+.s7{opacity:0;animation:s7 31514ms step-end infinite}@keyframes s7{0%{opacity:0}17.903%{opacity:1}19.966%{opacity:0}100%{opacity:0}}
+.s8{opacity:0;animation:s8 31514ms step-end infinite}@keyframes s8{0%{opacity:0}19.966%{opacity:1}22.028%{opacity:0}100%{opacity:0}}
+.s9{opacity:0;animation:s9 31514ms step-end infinite}@keyframes s9{0%{opacity:0}22.066%{opacity:1}100%{opacity:1}}
+.s10{opacity:0;animation:s10 31514ms step-end infinite}@keyframes s10{0%{opacity:0}26.674%{opacity:1}100%{opacity:1}}
+.ty11{opacity:0;animation:ty11 31514ms step-end infinite}@keyframes ty11{0%{opacity:0;transform:translateX(0)}26.674%{opacity:1;transform:translateX(0)}28.419%{opacity:1;transform:translateX(0);animation-timing-function:steps(69,end)}37.615%{opacity:1;transform:translateX(579.6px)}38.440%{opacity:0;transform:translateX(579.6px)}100%{opacity:0;transform:translateX(579.6px)}}
+.s12{opacity:0;animation:s12 31514ms step-end infinite}@keyframes s12{0%{opacity:0}41.296%{opacity:1}100%{opacity:1}}
+.ty13{opacity:0;animation:ty13 31514ms step-end infinite}@keyframes ty13{0%{opacity:0;transform:translateX(0)}41.296%{opacity:1;transform:translateX(0)}43.041%{opacity:1;transform:translateX(0);animation-timing-function:steps(12,end)}44.640%{opacity:1;transform:translateX(100.80000000000001px)}45.466%{opacity:0;transform:translateX(100.80000000000001px)}100%{opacity:0;transform:translateX(100.80000000000001px)}}
+.s14{opacity:0;animation:s14 31514ms step-end infinite}@keyframes s14{0%{opacity:0}45.466%{opacity:1}100%{opacity:1}}
+.s15{opacity:0;animation:s15 31514ms step-end infinite}@keyframes s15{0%{opacity:0}45.466%{opacity:1}47.528%{opacity:0}100%{opacity:0}}
+.s16{opacity:0;animation:s16 31514ms step-end infinite}@keyframes s16{0%{opacity:0}47.528%{opacity:1}49.591%{opacity:0}100%{opacity:0}}
+.s17{opacity:0;animation:s17 31514ms step-end infinite}@keyframes s17{0%{opacity:0}49.629%{opacity:1}100%{opacity:1}}
+.s18{opacity:0;animation:s18 31514ms step-end infinite}@keyframes s18{0%{opacity:0}49.591%{opacity:1}51.653%{opacity:0}100%{opacity:0}}
+.s19{opacity:0;animation:s19 31514ms step-end infinite}@keyframes s19{0%{opacity:0}51.729%{opacity:1}100%{opacity:1}}
+.s20{opacity:0;animation:s20 31514ms step-end infinite}@keyframes s20{0%{opacity:0}56.559%{opacity:1}100%{opacity:1}}
+.ty21{opacity:0;animation:ty21 31514ms step-end infinite}@keyframes ty21{0%{opacity:0;transform:translateX(0)}56.559%{opacity:1;transform:translateX(0)}58.304%{opacity:1;transform:translateX(0);animation-timing-function:steps(51,end)}65.101%{opacity:1;transform:translateX(428.40000000000003px)}65.926%{opacity:0;transform:translateX(428.40000000000003px)}100%{opacity:0;transform:translateX(428.40000000000003px)}}
+.s22{opacity:0;animation:s22 31514ms step-end infinite}@keyframes s22{0%{opacity:0}68.147%{opacity:1}100%{opacity:1}}
+.ty23{opacity:0;animation:ty23 31514ms step-end infinite}@keyframes ty23{0%{opacity:0;transform:translateX(0)}68.147%{opacity:1;transform:translateX(0)}69.893%{opacity:1;transform:translateX(0);animation-timing-function:steps(12,end)}71.492%{opacity:1;transform:translateX(100.80000000000001px)}72.317%{opacity:0;transform:translateX(100.80000000000001px)}100%{opacity:0;transform:translateX(100.80000000000001px)}}
+.s24{opacity:0;animation:s24 31514ms step-end infinite}@keyframes s24{0%{opacity:0}72.317%{opacity:1}100%{opacity:1}}
+.s25{opacity:0;animation:s25 31514ms step-end infinite}@keyframes s25{0%{opacity:0}72.317%{opacity:1}74.380%{opacity:0}100%{opacity:0}}
+.s26{opacity:0;animation:s26 31514ms step-end infinite}@keyframes s26{0%{opacity:0}74.380%{opacity:1}76.442%{opacity:0}100%{opacity:0}}
+.s27{opacity:0;animation:s27 31514ms step-end infinite}@keyframes s27{0%{opacity:0}76.480%{opacity:1}100%{opacity:1}}
+.s28{opacity:0;animation:s28 31514ms step-end infinite}@keyframes s28{0%{opacity:0}86.673%{opacity:1}100%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.l,.cg,.sp{animation:none!important}.fin{opacity:1}.spl,.cg{opacity:0}}</style>
+<rect x=".5" y=".5" width="640" height="333" rx="10" fill="#0f1417" stroke="#2a3238"/>
+<path d="M10.5 .5h620a10 10 0 0 1 10 10v23.5h-640v-23.5a10 10 0 0 1 10-10z" fill="#1a2024"/>
+<circle cx="20" cy="17" r="6" fill="#ff5f57"/><circle cx="40" cy="17" r="6" fill="#febc2e"/><circle cx="60" cy="17" r="6" fill="#28c840"/>
+<text class="t" x="320.5" y="21.5" text-anchor="middle">~/shop-api</text>
+<clipPath id="clip0"><rect x="0" y="34" width="640.8000000000001" height="297"/></clipPath>
+<g clip-path="url(#clip0)"><g class="sc0">
+<g class="l s0 fin"><text x="18" y="61"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk create index-orders-by-customer</tspan></tspan></text></g>
+<g class="ty1 cg"><rect x="34.8" y="48" width="336" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="49" width="8.4" height="16"/></g>
+<g class="l s2 fin"><text y="78"><tspan x="18.0" class="d">Loaded config from mmk.config.js</tspan></text></g>
+<g class="l s3 fin"><text y="95"><tspan x="18.0" class="g">✔ Created  20261015225007-index-orders-by-customer.js</tspan></text></g>
+<g class="l s4 fin"><text x="18" y="112"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk up</tspan></tspan></text></g>
+<g class="ty5 cg"><rect x="34.8" y="99" width="92.4" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="100" width="8.4" height="16"/></g>
+<g class="l s6 fin"><text y="129"><tspan x="18.0" class="d">Loaded config from mmk.config.js</tspan></text></g>
+<g class="l s7 spl"><text class="sp c" x="18" y="146" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="146" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="146" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="146" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="146" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="146" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="146" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="146" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="146" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="146" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="146">Connecting to MongoDB…</text></g>
+<g class="l s8 spl"><text class="sp c" x="18" y="146" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="146" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="146" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="146" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="146" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="146" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="146" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="146" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="146" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="146" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="146">Applying 20261015225007-index-orders-by-customer.js…</text></g>
+<g class="l s9 fin"><text y="146"><tspan x="18.0" class="g">✔ Applied  20261015225007-index-orders-by-customer.js   [139ms]</tspan></text></g>
+<g class="l s10 fin"><text x="18" y="163"><tspan class="p">$</tspan><tspan x="34.8"><tspan class="cm"># hmm, it should only cover open orders. Edit the file and try again:</tspan></tspan></text></g>
+<g class="ty11 cg"><rect x="34.8" y="150" width="588" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="151" width="8.4" height="16"/></g>
+<g class="l s12 fin"><text x="18" y="180"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk redo</tspan></tspan></text></g>
+<g class="ty13 cg"><rect x="34.8" y="167" width="109.20000000000002" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="168" width="8.4" height="16"/></g>
+<g class="l s14 fin"><text y="197"><tspan x="18.0" class="d">Loaded config from mmk.config.js</tspan></text></g>
+<g class="l s15 spl"><text class="sp c" x="18" y="214" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="214" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="214" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="214" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="214" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="214" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="214" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="214" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="214" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="214" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="214">Connecting to MongoDB…</text></g>
+<g class="l s16 spl"><text class="sp c" x="18" y="214" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="214" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="214" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="214" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="214" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="214" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="214" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="214" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="214" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="214" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="214">Reverting 20261015225007-index-orders-by-customer.js…</text></g>
+<g class="l s17 fin"><text y="214"><tspan x="18.0" class="g">↩ Reverted 20261015225007-index-orders-by-customer.js   [6ms]</tspan></text></g>
+<g class="l s18 spl"><text class="sp c" x="18" y="231" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="231" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="231" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="231" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="231" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="231" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="231" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="231" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="231" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="231" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="231">Applying 20261015225007-index-orders-by-customer.js…</text></g>
+<g class="l s19 fin"><text y="231"><tspan x="18.0" class="g">✔ Applied  20261015225007-index-orders-by-customer.js   [128ms]</tspan></text></g>
+<g class="l s20 fin"><text x="18" y="248"><tspan class="p">$</tspan><tspan x="34.8"><tspan class="cm"># before committing, make sure down() really works:</tspan></tspan></text></g>
+<g class="ty21 cg"><rect x="34.8" y="235" width="436.8" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="236" width="8.4" height="16"/></g>
+<g class="l s22 fin"><text x="18" y="265"><tspan class="p">$</tspan><tspan x="34.8"><tspan>npx mmk down</tspan></tspan></text></g>
+<g class="ty23 cg"><rect x="34.8" y="252" width="109.20000000000002" height="17" fill="#0f1417"/><rect class="cur" x="34.8" y="253" width="8.4" height="16"/></g>
+<g class="l s24 fin"><text y="282"><tspan x="18.0" class="d">Loaded config from mmk.config.js</tspan></text></g>
+<g class="l s25 spl"><text class="sp c" x="18" y="299" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="299" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="299" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="299" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="299" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="299" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="299" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="299" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="299" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="299" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="299">Connecting to MongoDB…</text></g>
+<g class="l s26 spl"><text class="sp c" x="18" y="299" style="animation-delay:-0.80s">⠋</text><text class="sp c" x="18" y="299" style="animation-delay:-0.72s">⠙</text><text class="sp c" x="18" y="299" style="animation-delay:-0.64s">⠹</text><text class="sp c" x="18" y="299" style="animation-delay:-0.56s">⠸</text><text class="sp c" x="18" y="299" style="animation-delay:-0.48s">⠼</text><text class="sp c" x="18" y="299" style="animation-delay:-0.40s">⠴</text><text class="sp c" x="18" y="299" style="animation-delay:-0.32s">⠦</text><text class="sp c" x="18" y="299" style="animation-delay:-0.24s">⠧</text><text class="sp c" x="18" y="299" style="animation-delay:-0.16s">⠇</text><text class="sp c" x="18" y="299" style="animation-delay:-0.08s">⠏</text><text x="34.8" y="299">Reverting 20261015225007-index-orders-by-customer.js…</text></g>
+<g class="l s27 fin"><text y="299"><tspan x="18.0" class="g">↩ Reverted 20261015225007-index-orders-by-customer.js   [5ms]</tspan></text></g>
+<g class="l s28 fin"><text x="18" y="316"><tspan class="p">$</tspan><tspan x="34.8"><tspan></tspan></tspan></text></g>
+<g class="s28 cg"><rect class="cur" x="34.8" y="304" width="8.4" height="16"/></g>
+</g></g>
+</svg>

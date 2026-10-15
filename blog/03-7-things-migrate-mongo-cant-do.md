@@ -1,137 +1,138 @@
-# 7 Things migrate-mongo Can't Do (That Cost Me in Production)
+<!--
+SEO target keyword: "migrate-mongo limitations"
+Meta description: Seven gaps in migrate-mongo that cost me time in production: single-file rollback,
+dry runs, locking that's off by default, edited files, redo, lost history and older batches.
+Published copy: docs/blog/7-things-migrate-mongo-cant-do.md (edit that one first, then run node scripts/blog-sync.mjs).
+-->
 
-I used `migrate-mongo` for years. It's a solid, simple tool. But every one of the gaps below cost me real time, real stress, or a real late-night incident at some point. This is the honest list.
+# 7 things I kept missing in migrate-mongo
 
-For each one, I'll show what went wrong and what I do now instead. (The "instead" is `mongo-migrate-kit`, a tool I built after living through all of these. Fair warning.)
+I used migrate-mongo for years. It's simple and it does the basics well. But each of the gaps below
+cost me time, stress, or a late night at some point, so here's the list.
 
-## 1. You can't roll back a single migration
+For each one I'll say what went wrong and what I do now. Fair warning: "what I do now" is
+mongo-migrate-kit, the tool I built after running into all of these.
 
-This is the one that hurt the most.
+## 1. Rolling back one specific migration
 
-I ran three migrations in one deploy. The third had a bug. I wanted to undo *just that one*. But `migrate-mongo down` only reverts the most recently applied migration, and there's no way to say "roll back this specific file."
+This one hurt the most. I shipped three migrations together and the third had a bug. I wanted to
+undo just that one.
 
-So I either roll back all three (including two that were fine) or I do it by hand. I did it by hand. On production. It was not fun.
+migrate-mongo's `down` undoes the most recently applied migration, and `down --block` undoes the
+last group. Neither lets you say "this file". So I either rolled back two good migrations with the
+bad one, or fixed it by hand. I fixed it by hand, on production.
 
-**What I do now:**
-
-```bash
-mmk down 20260101-the-broken-one.js
-```
-
-Roll back exactly one file. Or roll back a whole batch by number if you do want all three:
-
-```bash
-mmk down --batch 3
-```
-
-## 2. You can't preview a migration before it runs
-
-`migrate-mongo` runs migrations the moment you tell it to. There's no "show me what you're about to do" mode.
-
-In production, that's a leap of faith every single time. Which migrations are pending? What order will they run in? You find out by running them. People have been [asking for a dry run since 2019](https://github.com/seppevs/migrate-mongo/issues/43).
-
-**What I do now** — every command has a dry run that touches nothing:
+**Now:**
 
 ```bash
-mmk dry-run up
-mmk dry-run down
+npx mmk down 20261014103000-add-orders-customer-index.js   # just this one
+npx mmk down --batch 3                                     # or an older release, by number
 ```
 
-It prints the exact plan and writes nothing to the database. I run this before every production deploy now. It costs two seconds and has saved me more than once.
+## 2. Seeing the plan before it runs
 
-## 3. There's no lock, so two deploys can collide
+migrate-mongo runs migrations as soon as you ask. There's no "show me what you're about to do". In
+production that's a small leap of faith every time. People have asked for a dry run in the
+[issue tracker](https://github.com/seppevs/migrate-mongo/issues/43).
 
-Here's a fun one. Two CI jobs kicked off close together. Both ran migrations. Against the same database. At the same time.
-
-You can imagine the mess. Half-applied state, a confused changelog, an afternoon of cleanup. `migrate-mongo` has no concurrency lock, so nothing stopped them.
-
-**What I do now:** `mmk` takes an atomic lock in the database before running. If a second run starts while the first holds the lock, it stops and tells you who's holding it. Nothing to configure — it's on by default. (A stale lock past its TTL gets reclaimed automatically, and the lock is always released even if a migration throws.)
-
-For local development where you don't care, you can skip it:
+**Now:**
 
 ```bash
-mmk up --no-lock
+npx mmk dry-run up
+npx mmk dry-run down
 ```
 
-## 4. You can't tell if a migration file was edited after it ran
+Both print the plan and write nothing. I run one before every production deploy.
 
-Someone edits an already-applied migration. Maybe to "fix" it. Maybe by accident in a merge. The file on disk no longer matches what actually ran against the database.
+## 3. A lock that's on by default
 
-`migrate-mongo` has no idea. The changelog just says the filename ran. Whether the file still contains the same code? Not tracked. So your environments quietly drift apart and nobody knows until something breaks differently in staging and prod.
+Two CI jobs started close together, and both ran migrations against the same database at the same
+time. Cleaning that up took an afternoon.
 
-**What I do now:** `mmk` stores a SHA-256 checksum of every migration when it runs. On later runs it compares, and shows you drift right in the status table. You can make it strict so a mismatch stops everything:
+To be fair, newer migrate-mongo versions have a lock. But it's off unless you set `lockTtl`, and we
+hadn't. Most setups I've seen haven't either.
+
+**Now:** mmk takes a lock in MongoDB before every run. A second run stops and tells you who holds
+it. A crashed run's lock expires on its own, and long migrations keep renewing theirs. Nothing to
+set up.
+
+![Two terminals: deploy A runs a slow migration; deploy B starts two seconds later and is stopped with LOCK_ALREADY_HELD naming the holder; when A finishes, B finds nothing to migrate](https://mongo-migrate-kit.vercel.app/gifs/lock.gif)
+
+## 4. Noticing when an applied file was edited
+
+Someone edits a migration that already ran. Maybe a "quick fix", maybe a bad merge. The file no
+longer matches what actually changed the database, and environments quietly drift apart.
+
+By default migrate-mongo only records the file name. Its `useFileHash` option stores a hash, but uses
+it to re-run files whose contents changed, which is a different goal.
+
+**Now:** mmk saves a checksum of each file when it runs. `mmk status` shows `MISMATCH` for edited
+files, and `mmk down` refuses to run an edited file's rollback unless you add `--force`.
+
+![Terminal: a line is appended to an applied migration; mmk status shows MISMATCH; mmk down refuses with CHECKSUM_MISMATCH](https://mongo-migrate-kit.vercel.app/gifs/checksum.gif)
+
+## 5. Redo
+
+While writing a migration, my loop is: run it, check the data, it's wrong, undo, fix, run again. In
+migrate-mongo that's `down` then `up` every time, and you'd better hope `down` undoes the right
+thing.
+
+**Now:**
 
 ```bash
-mmk up --strict
+npx mmk redo           # undo the latest and run it again
+npx mmk redo <file>    # or a specific one
 ```
 
-And if you *meant* to change and re-run a file, you say so explicitly:
+Small thing. I use it all the time.
+
+## 6. Keeping history after a rollback
+
+When migrate-mongo rolls a migration back, it deletes the changelog entry. The record that it ever
+ran is gone.
+
+That's the opposite of what you want for an audit trail. "Did this run last Tuesday and get rolled
+back, or did it never run?" You can't answer that once the evidence is deleted.
+
+**Now:** a rollback marks the record `reverted` and adds the time. Every record keeps its batch,
+dates, duration, checksum, environment, who ran it and who wrote it.
+
+## 7. Undoing an older release
+
+Releases pile up. Sometimes the problem is two releases back, and everything since is fine.
+migrate-mongo can undo the last block, but not an older one.
+
+**Now:** each `mmk up` gets a batch number, and `mmk down --batch 2` undoes that one release.
+`mmk down --steps 3` undoes the last three files whatever release they were in. This picture shows
+the difference:
+
+![Which migrations mmk down, mmk down --batch 2, mmk down --steps 3 and mmk down with a file name undo](https://mongo-migrate-kit.vercel.app/diagrams/png/batches.png)
+
+## To be fair
+
+migrate-mongo isn't bad. For a small project that stays small, it's fine, and using it is how I
+learned what I actually needed.
+
+But each gap above shows up as a project grows: more migrations, more environments, more people
+deploying. That's exactly when manual cleanup is most expensive.
+
+If some of these sound familiar, switching is easier than you'd think, because mmk can import your
+existing history:
 
 ```bash
-mmk up 20260101-add-index.js --force
+npm install mongo-migrate-kit
+npx mmk import --dry-run    # see what would be copied, write nothing
+npx mmk import              # your old changelog isn't touched
+npx mmk up
 ```
 
-## 5. There's no redo
+It's on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit). If this list saved you from learning
+one of these the hard way, a star helps the next person find it.
 
-When I'm writing a migration, my loop is: run it, check the result, it's wrong, undo it, fix the code, run it again. Over and over.
+---
 
-In `migrate-mongo` that's two commands every cycle, `down` then `up`, and you'd better hope `down` rolls back the right thing.
+### Related reading
 
-**What I do now:**
-
-```bash
-mmk redo
-```
-
-One command. Undo the last applied migration, run it again. Or redo a specific file:
-
-```bash
-mmk redo 20260101-add-index.js
-```
-
-Small thing. I use it constantly.
-
-## 6. Rolling back deletes your history
-
-When you roll back in `migrate-mongo`, the changelog entry is removed. The record that the migration ever ran is gone.
-
-For an audit trail, that's the opposite of what you want. "Did this migration run last Tuesday and get rolled back, or did it never run?" You can't answer that if the evidence was deleted.
-
-**What I do now:** `mmk` never deletes a record. A rollback *updates* the entry — it sets the status to `reverted` and stamps the time it happened. The history stays complete. Every record keeps its batch, status, applied time, reverted time, duration, checksum, environment, and who ran it. When something goes wrong months later, the full story is still there.
-
-## 7. TypeScript is a setup chore
-
-Plenty of teams write migrations in TypeScript. With `migrate-mongo` that means wiring up `ts-node` or a compile step yourself. It works, but it's plumbing you have to maintain, and it's one more thing that breaks.
-
-**What I do now:** TypeScript is built in. So is plain JavaScript, in both ESM and CommonJS. A `.ts` migration just runs. The context is fully typed:
-
-```ts
-import type { MigrationContext } from 'mongo-migrate-kit';
-
-export async function up({ db }: MigrationContext): Promise<void> {
-  await db.collection('users').createIndex({ email: 1 }, { unique: true });
-}
-
-export async function down({ db }: MigrationContext): Promise<void> {
-  await db.collection('users').dropIndex('email_1');
-}
-```
-
-No `ts-node` config. No build step in the way. It just works.
-
-## The honest bit
-
-`migrate-mongo` isn't bad. For a small project that never grows complicated, it's genuinely fine, and I'm grateful for it — using it is what taught me what I actually needed.
-
-But every gap above is something that bites *as a project gets bigger*. More migrations, more environments, more people deploying. That's exactly when you can least afford the manual cleanup.
-
-If any of these felt familiar, the switch is easier than you'd think, because the tool I built to fix them can adopt your existing `migrate-mongo` history in one command:
-
-```bash
-npm install mongo-migrate-kit mongodb
-mmk import --dry-run    # preview, writes nothing
-mmk import              # adopt your history (your old changelog is never touched)
-mmk up                  # carry on
-```
-
-It's on npm and GitHub as **mongo-migrate-kit**. If this list saved you from learning any of these the hard way, a star helps the next person find it too.
+- [Switching from migrate-mongo, step by step](./02-switching-from-migrate-mongo-guide.md)
+- [How to roll back a single MongoDB migration](./05-rollback-specific-mongodb-migration.md)

@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="dg" width="856" height="404" viewBox="0 0 856 404" role="img" aria-label="mmk up compares the files in the migrations folder with the records in _mmk_migrations, finds the pending ones, and for each one takes the lock, runs up(), saves a record and releases the lock">
+<style>
+.dg{--bg:#f5f8f6;--card:#fff;--line:#cdd6d2;--tx:#1c2521;--mut:#5d6a64;--acc:#00875c;--accs:#d8f3e5;--f:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;--fm:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){.dg{--bg:#171b1a;--card:#1f2523;--line:#3a4541;--tx:#e4eae7;--mut:#9aa7a1;--acc:#3ddc84;--accs:#143a28}}
+html .dg{--bg:var(--vp-c-bg-soft);--card:var(--vp-c-bg);--line:var(--vp-c-divider);--tx:var(--vp-c-text-1);--mut:var(--vp-c-text-2);--acc:var(--vp-c-brand-1);--accs:var(--vp-c-brand-soft);--f:var(--vp-font-family-base);--fm:var(--vp-font-family-mono)}
+.dg text{font-family:var(--f);fill:var(--tx)}
+.dg .m{font-family:var(--fm);font-size:13px}
+.dg .s{font-size:12.5px;fill:var(--mut)}
+.dg .h{font-size:15px;font-weight:600}
+.dg .ch{font-size:13.5px;font-weight:600}
+.dg .card{fill:var(--card);stroke:var(--line)}
+.dg .hit{fill:var(--accs);stroke:var(--acc);stroke-width:1.5}
+.dg .hitt{fill:var(--acc);font-weight:600}
+.dg .ok{fill:var(--mut);font-size:13px}
+.dg .ar{fill:none;stroke:var(--mut);stroke-width:1.5}
+.dg .arh{fill:var(--mut)}
+.dg .num{fill:var(--acc)}
+.dg .numt{fill:var(--card);font-size:12px;font-weight:700}
+.dg .bgc{fill:var(--bg)}
+</style>
+<defs><marker id="hu-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arh" d="M0 0L10 5L0 10z"/></marker></defs>
+<rect class="bgc" width="856" height="404" rx="14"/>
+<text class="h" x="24" y="36">What happens when you run mmk up</text>
+
+<rect class="card" x="24" y="54" width="184" height="44" rx="10"/>
+<circle class="num" cx="46" cy="76" r="11"/><text class="numt" x="46" y="80" text-anchor="middle">1</text>
+<text class="ch" x="66" y="81">Take the lock</text>
+<path class="ar" d="M210 76H228" marker-end="url(#hu-arrow)"/>
+<rect class="card" x="232" y="54" width="184" height="44" rx="10"/>
+<circle class="num" cx="254" cy="76" r="11"/><text class="numt" x="254" y="80" text-anchor="middle">2</text>
+<text class="ch" x="274" y="81">Find what's pending</text>
+<path class="ar" d="M418 76H436" marker-end="url(#hu-arrow)"/>
+<rect class="card" x="440" y="54" width="184" height="44" rx="10"/>
+<circle class="num" cx="462" cy="76" r="11"/><text class="numt" x="462" y="80" text-anchor="middle">3</text>
+<text class="ch" x="482" y="81">Run each one</text>
+<path class="ar" d="M626 76H644" marker-end="url(#hu-arrow)"/>
+<rect class="card" x="648" y="54" width="184" height="44" rx="10"/>
+<circle class="num" cx="670" cy="76" r="11"/><text class="numt" x="670" y="80" text-anchor="middle">4</text>
+<text class="ch" x="690" y="81">Release the lock</text>
+<text class="s" x="116" y="118" text-anchor="middle">one run at a time</text>
+<text class="s" x="324" y="118" text-anchor="middle">see below</text>
+<text class="s" x="532" y="118" text-anchor="middle">up(), then save its record</text>
+<text class="s" x="740" y="118" text-anchor="middle">always, even after an error</text>
+
+<text class="s" x="24" y="154">Step 2 up close: a file is pending when the database has no record of it.</text>
+
+<rect class="card" x="24" y="166" width="320" height="176" rx="10"/>
+<text class="ch" x="42" y="192">migrations/</text>
+<text class="s" x="132" y="192">files in your repo</text>
+<text class="ok" x="42" y="222">✓</text><text class="m" x="62" y="222">20261012-users-index.js</text>
+<text class="ok" x="42" y="248">✓</text><text class="m" x="62" y="248">20261012-order-status.js</text>
+<text class="ok" x="42" y="274">✓</text><text class="m" x="62" y="274">20261014-orders-index.js</text>
+<rect class="hit" x="34" y="286" width="300" height="28" rx="6"/>
+<text class="m hitt" x="62" y="305">20261015-rename-name.js</text>
+<text class="s hitt" x="322" y="305" text-anchor="end">new</text>
+
+<rect class="card" x="512" y="166" width="320" height="176" rx="10"/>
+<text class="ch" x="530" y="192">_mmk_migrations</text>
+<text class="s" x="658" y="192">records in MongoDB</text>
+<text class="m" x="530" y="222">20261012-users-index.js</text><text class="s" x="814" y="222" text-anchor="end">batch 1</text>
+<text class="m" x="530" y="248">20261012-order-status.js</text><text class="s" x="814" y="248" text-anchor="end">batch 1</text>
+<text class="m" x="530" y="274">20261014-orders-index.js</text><text class="s" x="814" y="274" text-anchor="end">batch 2</text>
+<text class="s" x="530" y="305">no record for rename-name yet</text>
+
+<path class="ar" d="M350 254H392" marker-end="url(#hu-arrow)"/>
+<path class="ar" d="M506 254H464" marker-end="url(#hu-arrow)"/>
+<text class="ch" x="428" y="250" text-anchor="middle">compare</text>
+<text class="s" x="428" y="267" text-anchor="middle">by file name</text>
+<path class="ar" d="M428 278V346" marker-end="url(#hu-arrow)"/>
+<rect class="hit" x="268" y="352" width="320" height="30" rx="15"/>
+<text class="hitt" x="428" y="372" text-anchor="middle" style="font-size:13px">pending: 20261015-rename-name.js</text>
+</svg>

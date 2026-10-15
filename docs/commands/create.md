@@ -1,109 +1,126 @@
-# mmk create &amp; mmk init
+---
+title: mmk create and mmk init
+description: Create a new MongoDB migration file with mmk create, and a commented config file with mmk init. File types, templates, authors and options.
+---
 
-Author new migration files and generate a config.
+# mmk create and mmk init
+
+`mmk create` makes a new migration file. `mmk init` makes a config file. Neither one connects to the
+database, so they work without a connection string.
 
 ## mmk create
 
-Create a new, timestamped migration file with `up`/`down` stubs.
-
 ```bash
-mmk create <name> [options]
+npx mmk create <name> [options]
 ```
 
-```bash
-mmk create add-users-index            # → 20260605143021-add-users-index.js
-mmk create add-users-index --ts       # force a .ts file
-mmk create add-users-index --js       # force a .js file
-mmk create add-users-index --template ./my-template.ts
-mmk create add-users-index --author "Jane Doe <jane@example.com>"
+```text
+$ npx mmk create add-users-email-index
+Loaded config from mmk.config.js
+✔ Created  20261015223650-add-users-email-index.js
 ```
 
-### File type resolution
+The name gets a timestamp in front, so files sort in the order they were created. Spaces become
+dashes: `npx mmk create "add users email index"` gives the same file name as above.
 
-The generated extension is resolved as: `--js` / `--ts` flag → `createExtension` config / env →
-built-in default (`js`).
-
-| Option | Description |
-|---|---|
-| `<name>` | Migration name; slugified into the filename after the timestamp prefix. |
-| `--ts` | Generate a `.ts` migration (overrides config). |
-| `--js` | Generate a `.js` migration (overrides config). |
-| `--template <path>` | Use a custom template file instead of the built-in stub. |
-| `--author <name>` | Author written into the file. Overrides the `author` config key. |
-| `--json` | Emit the created file path as JSON. |
-
-### Author
-
-Every file from the built-in template starts with an `author` export:
+The new file looks like this:
 
 ```js
 export const description = '';
-export const author = 'Jane Doe <jane@example.com>';
-```
+export const author = 'Asha Rao';
 
-The value is resolved in this order, first match wins:
+/** @param {import('mongo-migrate-kit').MigrationContext} ctx */
+export async function up({ db }) {
+  // TODO: implement migration
+}
 
-1. `--author <name>`
-2. the `author` config key / `MMK_AUTHOR`
-3. git `user.name <user.email>` (either one alone if only one is set), read from the migrations directory
-4. your OS username
-
-If none is found, the line is written as `export const author = '';` for you to fill in. The
-author is looked up **only here**, on your machine, and committed inside the file — `mmk up` reads
-it from the file and never runs git. It is stored on the changelog record when the migration is
-applied. See [Writing migrations](/guide/writing-migrations#author).
-
-::: warning Custom templates
-A `--template` file is copied verbatim, so the author is **not** injected. Add an
-`export const author = '…';` line to your template yourself.
-:::
-
-::: tip
-`mmk create` never connects to the database, so it needs no `uri`/`db`.
-:::
-
-## mmk init
-
-Generate a fully-commented config file in the current directory.
-
-```bash
-mmk init [options]
-```
-
-```bash
-mmk init                     # → mmk.config.js (default)
-mmk init --ts                # → mmk.config.ts
-mmk init --json              # → mmk.config.json
-mmk init --secret-provider   # → a runtime secret-loading config (js/ts only)
-mmk init --force             # overwrite an existing config file
-mmk init --namespace orders-api   # write this repo's namespace (repos sharing a database)
+/** @param {import('mongo-migrate-kit').MigrationContext} ctx */
+export async function down({ db }) {
+  // TODO: implement rollback
+}
 ```
 
 ### Options
 
-| Option | Description |
-|---|---|
-| `--ts` | Create `mmk.config.ts`. |
-| `--js` | Create `mmk.config.js` (the explicit default). |
-| `--json` | Create `mmk.config.json` (omits code-only options like `hooks`). |
-| `--secret-provider` | Generate a factory-function config wired to a secret manager (AWS example, provider-agnostic). `--json --secret-provider` is rejected. |
-| `--force` | Overwrite an existing config file (otherwise exits 1 with `CONFIG_FILE_EXISTS`). |
-| `--namespace <ns>` | Write `namespace: '<ns>'` into the file, for [repos sharing a database](/guide/shared-database). Without it the file has a commented-out example — the value is never guessed. An invalid value exits 1 with `INVALID_ARGUMENT`. |
+| Option | What it does |
+| --- | --- |
+| `<name>` | What the migration does. Becomes part of the file name. |
+| `--ts` | Make a `.ts` file. |
+| `--js` | Make a `.js` file. |
+| `--template <path>` | Start from your own template file instead of the built-in one. |
+| `--author <name>` | Put this in the `author` line. |
+| `--json` | Print `{ "path": "..." }` instead of the usual line. |
 
-The generated JS/TS templates document every option in its own `/** … */` block — what it does, its
-default, and its env var or flag:
+### .js or .ts?
+
+The flag wins if you give one. Otherwise mmk uses `createExtension` from your config (or
+`MMK_CREATE_EXTENSION`). If neither is set, it makes `.js`, because `.js` runs on every supported Node
+version with no setup. See [Writing migrations → TypeScript](/guide/writing-migrations#typescript).
+
+### Where the author comes from
+
+mmk uses the first of these it finds:
+
+1. `--author "Name <email>"`
+2. the `author` setting, or `MMK_AUTHOR`
+3. your git `user.name <user.email>`, read in the migrations folder
+4. your OS username
+
+If it finds nothing, it writes `export const author = '';` for you to fill in. The author is looked
+up once, here on your machine, and saved in the file. `mmk up` reads it from the file and never runs
+git.
+
+::: warning Custom templates
+A `--template` file is copied exactly as it is, so mmk doesn't add an author line to it. Put
+`export const author = '…';` in your template yourself.
+:::
+
+## mmk init
+
+```bash
+npx mmk init [options]
+```
+
+```text
+$ npx mmk init
+✔ Created  mmk.config.js
+```
+
+The file has every setting in it, each with a comment saying what it does, its default, and its
+environment variable or flag. Settings that are off by default are commented out, so turning one on
+means deleting two characters. A sample:
 
 ```js
   /**
-   * Collection that records which migrations have run (the history).
-   * Change it only to give a group of repos its own history on a shared database.
-   * Default: '_mmk_migrations' · Env: MMK_COLLECTION
+   * Database the migrations run against. Required.
+   * Env: MMK_DB · Flag: --db
    */
-  migrationsCollection: '_mmk_migrations',
+  dbName: 'myapp',
+
+  // ── Migration files ────────────────────────────────────────
+
+  /**
+   * Folder holding your migration files, relative to where you run mmk.
+   * Default: './migrations' · Env: MMK_MIGRATIONS_DIR · Flag: --dir
+   */
+  migrationsDir: './migrations',
 ```
 
-Options that are off by default (`namespace`, `author`, `templatePath`, `hooks`) are left as
-`// key: value` lines under their block, so one keystroke in your editor turns them on. The
-`--uri` / `--db` / `--dir` global flags pre-fill the generated file.
+### Options
 
-See [Configuration](/guide/configuration) for what each option does.
+| Option | What it does |
+| --- | --- |
+| `--js` | Make `mmk.config.js`. This is the default. |
+| `--ts` | Make `mmk.config.ts`. |
+| `--json` | Make `mmk.config.json`. (Here `--json` means the file type, not JSON output.) |
+| `--secret-provider` | Make a config that loads the connection from a secret manager at runtime. Has an AWS example you can swap for any provider. Not available with `--json`. |
+| `--namespace <name>` | Write this repo's [namespace](/guide/shared-database) into the file. |
+| `--force` | Replace an existing config file. Without it, mmk stops with `CONFIG_FILE_EXISTS`. |
+
+The global flags fill in the file for you:
+
+```bash
+npx mmk init --uri mongodb://localhost:27017 --db shop --dir ./db/migrations
+```
+
+See [Configuration](/guide/configuration) for what each setting does.
