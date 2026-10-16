@@ -4,7 +4,9 @@
 
 # mongo-migrate-kit
 
-**MongoDB migrations for Node.js that you can preview, run one at a time, and undo.**
+**Elegant MongoDB migrations for Node.js.**
+
+_Run a single file, roll back anything, and preview every change before it touches your database._
 
 [![npm version](https://img.shields.io/npm/v/mongo-migrate-kit?style=flat-square&color=1E9E57&logo=npm&logoColor=white)](https://www.npmjs.com/package/mongo-migrate-kit)
 [![Docs](https://img.shields.io/badge/docs-online-1E9E57?style=flat-square&logo=readthedocs&logoColor=white)](https://mongo-migrate-kit.vercel.app/)
@@ -12,7 +14,11 @@
 [![Known Vulnerabilities](https://snyk.io/test/npm/mongo-migrate-kit/badge.svg)](https://snyk.io/test/npm/mongo-migrate-kit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1E9E57?style=flat-square)](https://opensource.org/licenses/MIT)
 
-**[Documentation](https://mongo-migrate-kit.vercel.app/guide/)** ·
+Single-file runs · rollback by batch, step or file · dry-run previews · transactions ·
+lifecycle hooks · SHA-256 tamper detection · MongoDB-native locking · a history that's never
+deleted. All in one small `mmk` CLI with a fully typed API.
+
+**[📖 Documentation](https://mongo-migrate-kit.vercel.app/guide/)** ·
 **[Quick start](https://mongo-migrate-kit.vercel.app/guide/getting-started)** ·
 **[Why another migration tool?](https://mongo-migrate-kit.vercel.app/guide/why)**
 
@@ -33,6 +39,8 @@ name.
 
 ## Reasons to choose it
 
+Built for teams who outgrew the basics. You keep `up`, `down`, `create` and `status`, and gain:
+
 - **Run a single migration** — `mmk up <file>`, not just "all pending".
 - **Roll back anything** — a batch (`--batch 3`), the last N (`--steps 2`), one file, or `redo`.
 - **Preview before you run** — `mmk dry-run up` prints the exact plan without touching the database.
@@ -44,6 +52,21 @@ name.
 - **TypeScript, ESM & CommonJS** — all run with no `ts-node` plumbing, and the package ships its
   own types ([TypeScript guide](https://mongo-migrate-kit.vercel.app/guide/typescript)).
 - **Zero config files required** — drive everything from env vars if you prefer.
+
+> [!TIP]
+> ### 🔄 Already using `migrate-mongo`? Switch in under a minute.
+>
+> Point mmk at the same database and bring your whole history over. Nothing that already ran runs
+> again, your old `changelog` is never modified, and you don't rewrite a single migration file.
+>
+> ```bash
+> npx mmk import    # one time: copy your migrate-mongo history into mmk
+> npx mmk up        # runs only what's new
+> ```
+>
+> Your `up` / `down` / `create` / `status` habits carry over. You gain dry-runs, single-file runs
+> and rollbacks, lifecycle hooks, and a lock that's on by default.
+> **[See how it works ↓](#coming-from-migrate-mongo)**
 
 ## Quick start
 
