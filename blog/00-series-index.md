@@ -33,7 +33,8 @@ MongoDB migrations," and readers follow the links to the docs and npm.
 ### Cluster 2: shared databases (v1.5)
 
 Pillar: **10**. Every post links up to 10, sideways to 1–2 siblings, and to the docs + npm. 10 links
-down to all of them. **Publish only after 1.5.0 is on npm.** They describe 1.5 behaviour.
+down to all of them. They describe 1.5 behaviour and went live on the docs site with the 1.5.0
+release.
 
 | # | File | Target search query | Intent |
 |---|------|---------------------|--------|
@@ -52,9 +53,8 @@ down to all of them. **Publish only after 1.5.0 is on npm.** They describe 1.5 b
 ### Cluster 3: setups (any version ≥ 1.4)
 
 One post per kind of user. Each links up to the original pillar (**01**), sideways to 1–2 siblings
-or older posts, and to the docs + npm. These don't depend on 1.5 and can go out any time, except
-**23**, whose CommonJS section should be revised if `mmk init`/`mmk create` start generating
-CommonJS files.
+or older posts, and to the docs + npm. Published on the docs site with the 1.5.0 release (23 and 25
+describe 1.5's CommonJS-aware `mmk init`/`mmk create`).
 
 | # | File | Target search query | Intent |
 |---|------|---------------------|--------|
@@ -67,8 +67,8 @@ CommonJS files.
 | 27 | `27-test-mongodb-migrations-vitest-memory-server.md` | "test mongodb migrations" | How-to |
 | 28 | `28-zero-downtime-mongodb-schema-changes-expand-contract.md` | "mongodb zero downtime migration" | Evergreen / pattern |
 
-All command output in 10–28 was copied from real runs of the 1.5.0 beta (hostnames, users and dates
-tidied). Re-run anything whose behaviour changes before publishing.
+All command output in 10–28 was re-checked against the final 1.5.0 build before publishing
+(hostnames, users and dates tidied). Re-run anything whose behaviour changes in a later release.
 
 ## The interlink rules (don't skip these, they're the point)
 
@@ -125,5 +125,5 @@ not like generated copy. Keep new posts the same way:
 - Bold only what someone skimming must not miss. Not every list item needs a bold label.
 - Images: posts on the docs site use `<Cast>` and `<Diagram>`. Drafts here use the GIF/PNG URLs,
   because Medium, Dev.to and LinkedIn don't show SVG.
-- Posts 01 to 09 have a published copy under `docs/blog/`. Edit that one, then run
+- Every post except 04 has a published copy under `docs/blog/`. Edit that one, then run
   `node scripts/blog-sync.mjs` to update the drafts here.

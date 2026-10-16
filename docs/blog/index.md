@@ -1,6 +1,6 @@
 ---
 title: Blog
-description: Notes on running MongoDB migrations in real projects. Rolling back one file, locking, transactions, CI pipelines, running on app start, and habits that keep production safe.
+description: Notes on running MongoDB migrations in real projects. Rolling back one file, locking, CI pipelines, shared databases, Kubernetes, TypeScript, testing, and habits that keep production safe.
 aside: false
 ---
 
@@ -10,8 +10,10 @@ import { data as posts } from './posts.data.ts'
 
 const order = ref('newest')
 const sortedPosts = computed(() =>
-  [...posts].sort((a, b) =>
-    order.value === 'newest' ? b.date.time - a.date.time : a.date.time - b.date.time,
+  [...posts].sort(
+    (a, b) =>
+      (order.value === 'newest' ? b.date.time - a.date.time : a.date.time - b.date.time) ||
+      a.order - b.order,
   ),
 )
 </script>
@@ -20,7 +22,9 @@ const sortedPosts = computed(() =>
 
 Notes from running MongoDB migrations in real projects: rolling back the right thing, keeping two
 deploys from colliding, running migrations in CI and on app start, and the habits I picked up the
-hard way. New here? The [guide](/guide/) is the better place to start.
+hard way. There's also a series on [several repos sharing one database](./mongodb-migrations-shared-database-many-repos),
+and posts on specific setups: Kubernetes, a database per tenant, TypeScript, Mongoose, secret
+managers, big backfills and testing. New here? The [guide](/guide/) is the better place to start.
 
 <div class="blog-sort">
   <span class="blog-sort-label">Sort by date:</span>

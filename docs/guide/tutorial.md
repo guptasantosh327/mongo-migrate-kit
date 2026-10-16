@@ -35,8 +35,9 @@ npm pkg set type=module
 npm install mongo-migrate-kit mongodb
 ```
 
-`type=module` lets the migration files use `export`, which is what `mmk create` writes. (CommonJS
-also works. See [Writing migrations](/guide/writing-migrations).)
+With `type=module`, `mmk create` writes migrations with `export`. Leave it out and you get CommonJS
+(`module.exports`) instead. Both work. See
+[ES modules or CommonJS](/guide/writing-migrations#es-modules-or-commonjs).
 
 ## 2. Point mmk at the database
 

@@ -40,12 +40,10 @@ end of this page).
 You need Node.js 18 or newer and a MongoDB server, version 4.2 or newer. If you don't have one
 running, Docker is the quickest way: `docker run -d -p 27017:27017 mongo`.
 
-::: warning Is your project CommonJS?
-The files `mmk init` and `mmk create` write use `export`, which needs `"type": "module"` in your
-`package.json`. Recent versions of `npm init -y` create CommonJS projects (`"type": "commonjs"`), and
-there the next command fails with `Unexpected token 'export'`. For a new project, run
-`npm pkg set type=module` first. For an existing CommonJS app, see
-[CommonJS projects](/guide/writing-migrations#commonjs-projects).
+::: tip ES modules or CommonJS?
+Either works, with nothing to set up. `mmk init` and `mmk create` read your `package.json` and write
+`export` for `"type": "module"` projects and `module.exports` for everything else. See
+[ES modules or CommonJS](/guide/writing-migrations#es-modules-or-commonjs).
 :::
 
 ## 2. Create a config file
@@ -67,7 +65,8 @@ const config = {
 ```
 
 Change `dbName` to your database. Want TypeScript or JSON instead? Use `npx mmk init --ts` or
-`npx mmk init --json`.
+`npx mmk init --json`. (TypeScript needs Node 22.18 or newer, or `tsx`. See
+[TypeScript](/guide/typescript).)
 
 ::: tip You can skip the file
 The config file is optional. Setting `MMK_URI` and `MMK_DB` in your environment (or a `.env` file)
@@ -86,9 +85,12 @@ Loaded config from mmk.config.js
 ```
 
 The file lands in `migrations/` with a timestamp at the front, so files always sort in the order you
-made them. Open it and fill in both functions:
+made them. Open it and fill in both functions. It uses `export` if your `package.json` has
+`"type": "module"`, and `module.exports` otherwise:
 
-```js
+::: code-group
+
+```js [ES module]
 // migrations/20261015223650-add-users-email-index.js
 export const description = 'Unique index on users.email';
 export const author = 'Asha Rao';
@@ -101,6 +103,24 @@ export async function down({ db }) {
   await db.collection('users').dropIndex('email_1');
 }
 ```
+
+```js [CommonJS]
+// migrations/20261015223650-add-users-email-index.js
+module.exports = {
+  description: 'Unique index on users.email',
+  author: 'Asha Rao',
+
+  async up({ db }) {
+    await db.collection('users').createIndex({ email: 1 }, { unique: true });
+  },
+
+  async down({ db }) {
+    await db.collection('users').dropIndex('email_1');
+  },
+};
+```
+
+:::
 
 `up` makes the change. `down` undoes it. The `author` line is filled in for you from your git name.
 

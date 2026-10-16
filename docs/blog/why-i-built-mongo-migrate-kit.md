@@ -107,3 +107,8 @@ The [docs](/guide/) start with a five-minute quick start. If it saves you a Frid
 - [How to roll back a single MongoDB migration](./rollback-specific-mongodb-migration), the problem
   that started all this.
 - [Switching from migrate-mongo, step by step](./switching-from-migrate-mongo).
+- [Many repos, one MongoDB database](./mongodb-migrations-shared-database-many-repos), if several
+  repos run migrations against the same database.
+- For specific setups: [Kubernetes](./mongodb-migrations-kubernetes-job-helm),
+  [TypeScript and CommonJS](./typescript-commonjs-esm-mongodb-migrations), and
+  [testing your migrations](./test-mongodb-migrations-vitest-memory-server).

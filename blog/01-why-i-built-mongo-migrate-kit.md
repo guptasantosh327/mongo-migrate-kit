@@ -107,3 +107,8 @@ The [docs](https://mongo-migrate-kit.vercel.app/guide/) start with a five-minute
 - [How to roll back a single MongoDB migration](./05-rollback-specific-mongodb-migration.md), the problem
   that started all this.
 - [Switching from migrate-mongo, step by step](./02-switching-from-migrate-mongo-guide.md).
+- [Many repos, one MongoDB database](./10-mongodb-migrations-shared-database-many-repos.md), if several
+  repos run migrations against the same database.
+- For specific setups: [Kubernetes](./22-mongodb-migrations-kubernetes-job-helm.md),
+  [TypeScript and CommonJS](./23-typescript-commonjs-esm-mongodb-migrations.md), and
+  [testing your migrations](./27-test-mongodb-migrations-vitest-memory-server.md).

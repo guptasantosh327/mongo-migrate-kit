@@ -3,7 +3,7 @@ SEO target keyword: "mongodb connection string secrets manager"
 Meta description: Keep the MongoDB connection string for your migrations in AWS Secrets Manager, GCP
 Secret Manager, Vault or Azure Key Vault, fetched at runtime by the config file and never written to
 disk or CI variables.
-Works with mongo-migrate-kit 1.4 and newer. Can be published any time.
+Published copy: docs/blog/mongodb-connection-string-secrets-manager-migrations.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # Loading your migration connection string from a secret manager
@@ -59,6 +59,10 @@ export default async () => {
   };
 };
 ```
+
+That's the ES module version, for a `"type": "module"` project. In a CommonJS project (mongo-migrate-kit
+1.5 and newer) `mmk init` writes the same file with `require()` and `module.exports = async () => …`
+instead.
 
 Every `mmk` command calls this function first. The connection string stays in memory. It's never in
 a file, and never in the CI log. If the secret can't be read, the command fails with your provider's own
@@ -149,8 +153,8 @@ npm install mongo-migrate-kit mongodb @aws-sdk/client-secrets-manager
 npx mmk init --secret-provider
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/guide/configuration#loading-the-connection-string-from-a-secret-manager**
-· npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Loading the connection string from a secret manager](https://mongo-migrate-kit.vercel.app/guide/configuration#loading-the-connection-string-from-a-secret-manager). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

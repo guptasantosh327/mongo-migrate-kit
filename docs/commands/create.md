@@ -23,9 +23,12 @@ Loaded config from mmk.config.js
 The name gets a timestamp in front, so files sort in the order they were created. Spaces become
 dashes: `npx mmk create "add users email index"` gives the same file name as above.
 
-The new file looks like this:
+The new file matches your project's module style. It uses `export` if the nearest `package.json`
+says `"type": "module"`, and `module.exports` otherwise:
 
-```js
+::: code-group
+
+```js [ES module]
 export const description = '';
 export const author = 'Asha Rao';
 
@@ -39,6 +42,27 @@ export async function down({ db }) {
   // TODO: implement rollback
 }
 ```
+
+```js [CommonJS]
+module.exports = {
+  description: '',
+  author: 'Asha Rao',
+
+  /** @param {import('mongo-migrate-kit').MigrationContext} ctx */
+  async up({ db }) {
+    // TODO: implement migration
+  },
+
+  /** @param {import('mongo-migrate-kit').MigrationContext} ctx */
+  async down({ db }) {
+    // TODO: implement rollback
+  },
+};
+```
+
+:::
+
+See [ES modules or CommonJS](/guide/writing-migrations#es-modules-or-commonjs) for the exact rule.
 
 ### Options
 
@@ -55,7 +79,7 @@ export async function down({ db }) {
 
 The flag wins if you give one. Otherwise mmk uses `createExtension` from your config (or
 `MMK_CREATE_EXTENSION`). If neither is set, it makes `.js`, because `.js` runs on every supported Node
-version with no setup. See [Writing migrations → TypeScript](/guide/writing-migrations#typescript).
+version with no setup. See [TypeScript](/guide/typescript).
 
 ### Where the author comes from
 
@@ -66,13 +90,14 @@ mmk uses the first of these it finds:
 3. your git `user.name <user.email>`, read in the migrations folder
 4. your OS username
 
-If it finds nothing, it writes `export const author = '';` for you to fill in. The author is looked
-up once, here on your machine, and saved in the file. `mmk up` reads it from the file and never runs
-git.
+If it finds nothing, it writes an empty author (`author: ''`) for you to fill in. The author is
+looked up once, here on your machine, and saved in the file. `mmk up` reads it from the file and
+never runs git.
 
 ::: warning Custom templates
-A `--template` file is copied exactly as it is, so mmk doesn't add an author line to it. Put
-`export const author = '…';` in your template yourself.
+A `--template` file is copied exactly as it is: mmk doesn't add an author line or change its module
+style. Write it in your project's style and put the author in it yourself
+(`export const author = '…';` or `author: '…'` inside `module.exports`).
 :::
 
 ## mmk init
@@ -85,6 +110,10 @@ npx mmk init [options]
 $ npx mmk init
 ✔ Created  mmk.config.js
 ```
+
+Like `mmk create`, it matches your project: the config ends with `export default config;` when the
+`package.json` in this folder (or above it) says `"type": "module"`, and `module.exports = config;`
+otherwise. The same goes for `--ts` and `--secret-provider` configs.
 
 The file has every setting in it, each with a comment saying what it does, its default, and its
 environment variable or flag. Settings that are off by default are commented out, so turning one on

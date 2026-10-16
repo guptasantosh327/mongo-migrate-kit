@@ -176,31 +176,61 @@ The migration asked for a transaction and your MongoDB is a single standalone se
 before running anything. Run MongoDB as a replica set (a single node is enough, Atlas always is one),
 or remove `useTransaction` from that file. See [Transactions](/guide/transactions#what-it-needs).
 
-## "Unexpected token 'export'"
+## "uses ES module syntax … but Node loads it as CommonJS"
 
 ```text
-✖ CONFIG_INVALID: Config file /app/mmk.config.js could not be imported: Unexpected token 'export'
+✖ CONFIG_INVALID: Config file "mmk.config.js" uses ES module syntax (export/import), but Node loads it as CommonJS
+  Why: /app/package.json has "type": "commonjs"
+  Fix: replace `export default` with `module.exports =`, the form `mmk init` uses here
 ```
 
-**What it means:** your project is CommonJS (`"type": "commonjs"` in `package.json`), and the config
-file uses `export default`, which is ES module syntax. New projects from `npm init -y` are CommonJS
-by default.
+**What it means:** the file is written in the other module style from your project. Node reads the
+nearest `package.json`: `"type": "module"` means `export`, anything else means `module.exports`.
+Files that `mmk init` and `mmk create` write always match it; this happens to files written by hand,
+copied from another project, or created before the `package.json` changed. (Older versions of mmk
+reported only Node's `Unexpected token 'export'`.)
 
-**What to do:** in a new project, `npm pkg set type=module`. In an existing CommonJS app, switch the
-config to `module.exports` and use a CommonJS template for new migrations. See
-[CommonJS projects](/guide/writing-migrations#commonjs-projects).
+For `export` in a CommonJS project, Node also prints its own warning above this one
+(`Failed to load the ES module`, or `To load an ES module` on Node 20) suggesting
+`"type": "module"`. Changing your whole project's type is rarely what you want. Follow mmk's message
+instead.
 
-## A .ts migration won't load
+**What to do:** follow the `Fix:` line. For a migration that has already run, use the `Or:` line
+instead. It adds a `package.json` to the migrations folder, so the file and its checksum stay the
+same. See [ES modules or CommonJS](/guide/writing-migrations#es-modules-or-commonjs).
 
-**What it means:** your Node is older than 22.18, which can't load TypeScript by itself, and no
-TypeScript loader is set up. mmk uses your Node and doesn't include a compiler.
+## A .ts migration or config won't load
+
+```text
+✖ CONFIG_INVALID: Config file mmk.config.ts is TypeScript, and this Node (v20.20.0) can't run TypeScript by itself
+```
+
+A `.ts` migration fails the same way, with
+`Cannot load TypeScript migration "…" — this Node runtime cannot import .ts files`.
+
+**What it means:** the Node running mmk is older than 22.18, which can't load TypeScript by itself,
+and no TypeScript loader is set up. mmk uses your Node and doesn't include a compiler. The message
+names the Node version, which in CI is often not the one you expected.
 
 **What to do**, any one of:
 
 - Use Node 22.18 or newer. `.ts` files then just work.
 - Install `tsx` and run mmk through it:
   `node --import tsx node_modules/mongo-migrate-kit/dist/mmk.cjs up`
-- Write `.js` migrations (`mmk create <name> --js`), which work on Node 18 and up.
+- Write `.js` migrations (`mmk create <name> --js`) and a `.js` config, which work on Node 18 and up.
+
+See [TypeScript](/guide/typescript#which-node-runs-it).
+
+## "TypeScript enum is not supported in strip-only mode"
+
+**What it means:** Node 22.18+ runs `.ts` files by removing the types, without compiling. `enum`,
+`namespace` blocks with code, constructor parameter properties, `import x = require()` and
+`export =` need a compiler, so Node refuses them.
+
+**What to do:** use the plain-JavaScript alternative (an `enum` becomes an `as const` object). The
+table in [TypeScript → What TypeScript you can write](/guide/typescript#what-typescript-you-can-write)
+lists each one, and the [tsconfig there](/guide/typescript#type-check-your-migrations) catches them
+before they run.
 
 ## An imported migration won't roll back
 

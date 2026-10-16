@@ -6,7 +6,9 @@ import { z } from 'zod';
 import { ConfigInvalidError } from '../errors/index.js';
 import type { MmkConfig, MmkConfigInput } from '../types/index.js';
 import { explain, suggest } from '../utils/explain.js';
+import { isTypeScriptLoadFailure } from '../utils/loader.js';
 import { resolveLogger } from '../utils/logger.js';
+import { describeFormatMismatch } from '../utils/module-format.js';
 import { namespaceProblem } from '../utils/namespace.js';
 
 /** Default values applied when no flag, env var, or config-file value is present */
@@ -355,6 +357,31 @@ function discoverConfigFile(cwd: string): string | null {
 }
 
 /**
+ * The message for a config file that couldn't be imported. Node's own message
+ * names neither cause nor fix for the two usual causes: a `.ts` config on a
+ * Node that can't run TypeScript, and the wrong module style (`export default`
+ * in a CommonJS package, or `module.exports` in an ESM one).
+ */
+function configImportFailure(filepath: string, error: unknown): string {
+  if (isTypeScriptLoadFailure(filepath, error)) {
+    return explain(
+      `Config file ${path.basename(filepath)} is TypeScript, and this Node (${process.version}) can't run TypeScript by itself`,
+      [
+        'Use Node 22.18 or newer, which runs .ts files directly',
+        'Or run mmk under a TypeScript loader: node --import tsx node_modules/mongo-migrate-kit/dist/mmk.cjs <command>',
+        'Or use a JavaScript config: mmk init --js',
+        `File: ${filepath}`,
+      ],
+    );
+  }
+  const mismatch = describeFormatMismatch(filepath, error, 'config');
+  if (mismatch) {
+    return explain(mismatch.summary, [...mismatch.details, `File: ${filepath}`]);
+  }
+  return `Config file ${filepath} could not be imported: ${messageOf(error)}`;
+}
+
+/**
  * Load and return the config object exported by a config file.
  *
  * A `.ts`/`.js` config may export either a plain object or a (sync or async)
@@ -391,13 +418,10 @@ async function loadConfigFile(filepath: string): Promise<Partial<MmkConfig>> {
       default?: MmkConfigInput;
     } & Record<string, unknown>;
   } catch (error) {
-    throw new ConfigInvalidError(
-      `Config file ${filepath} could not be imported: ${messageOf(error)}`,
-      {
-        path: filepath,
-        cause: messageOf(error),
-      },
-    );
+    throw new ConfigInvalidError(configImportFailure(filepath, error), {
+      path: filepath,
+      cause: messageOf(error),
+    });
   }
   const exported = (mod.default ?? mod) as MmkConfigInput;
 

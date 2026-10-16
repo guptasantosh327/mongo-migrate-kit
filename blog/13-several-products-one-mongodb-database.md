@@ -3,7 +3,7 @@ SEO target keyword: "mongodb migration collection per service"
 Meta description: When several products or teams share one MongoDB database, give each product its
 own history collection and each repo its own namespace. The rule of thumb, the setup, and how to
 lock down permissions.
-Requires mongo-migrate-kit 1.5. Publish after 1.5.0 is on npm.
+Published copy: docs/blog/several-products-one-mongodb-database.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # Several products in one MongoDB database
@@ -73,6 +73,7 @@ older mongo-migrate-kit refuse to run against data it would misread.
 
 ```text
 $ npx mmk status --all-namespaces
+Loaded config from mmk.config.js
 ┌─────────────────┬──────────────────────────────────────────┬─────────┬───────┬─────────────────────┬────────────────────────┐
 │ Namespace       │ Migration                                │ Status  │ Batch │ Applied At          │ Author                 │
 ├─────────────────┼──────────────────────────────────────────┼─────────┼───────┼─────────────────────┼────────────────────────┤
@@ -128,7 +129,10 @@ db.createRole({
 Two things to know:
 
 - mmk creates its index on the changelog when it connects, so even `mmk status` needs write access to
-  the history collection. A read-only user can't run mmk.
+  the history collection. A read-only user can't run mmk. For the same reason, pointing checkout's
+  user at catalog's history fails as soon as it connects, with `CONNECTION_FAILED` and a
+  `Reason: not authorized on commerce to execute command { createIndexes: "_mmk_migrations_catalog" … }`
+  line. It's a permissions problem, not a network one.
 - Every product needs access to the **same** `_mmk_locks`. That's how they take turns.
 
 ## File names are unique per collection
@@ -156,7 +160,8 @@ npx mmk init --namespace checkout-api
 # then set migrationsCollection: '_mmk_migrations_checkout' in mmk.config.js
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/guide/shared-database** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Sharing a database](https://mongo-migrate-kit.vercel.app/guide/shared-database). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

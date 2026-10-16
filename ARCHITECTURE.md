@@ -83,7 +83,8 @@ src/
 │   ├── logger.ts            # Chalk logger (+ silent + stream-routed variants)
 │   ├── checksum.ts          # SHA-256 file hashing
 │   ├── loader.ts            # Dynamic-import a migration file (.ts/.js, ESM/CJS)
-│   ├── template.ts          # Generate migration files & config files
+│   ├── template.ts          # Generate migration files & config files (ESM or CJS)
+│   ├── module-format.ts     # detectModuleScope(): ESM or CJS, the way Node decides
 │   ├── author.ts            # detectAuthor(): who `mmk create` writes into a new file
 │   ├── namespace.ts         # namespaceProblem()/namespaceLabel(): shared namespace rules
 │   └── date.ts              # Dependency-free timestamp formatting
@@ -315,11 +316,16 @@ Each entry: **responsibility · key exports · nuances you must know.**
   is how `--json` keeps stdout clean (human lines → stderr).
 - **checksum.ts** — `computeChecksum` (SHA-256 hex of file contents), `verifyChecksum`.
 - **loader.ts** — `loadMigrationFile(filepath)`: dynamic `import()`, `mod.default ?? mod` for CJS,
-  validates `up`/`down` are functions. Translates the `.ts`-can't-load failure into a clear error —
-  see the [loader deep dive](#64-the-loader-and-the-ts-runtime-caveat).
+  validates `up`/`down` are functions. Translates the `.ts`-can't-load failure and a wrong-module-style
+  failure into clear errors — see the [loader deep dive](#64-the-loader-and-the-ts-runtime-caveat).
 - **template.ts** — generates migration files (`createMigrationFile`) and config files
   (`createConfigFile`), including the secret-provider template. Owns filename stamping (timestamp vs
-  sequential) and the inline-commented config output.
+  sequential) and the inline-commented config output. Every JS/TS template exists as an ES module and
+  as CommonJS; the `create*File` functions pick one with `detectModuleScope(dir)` unless told.
+- **module-format.ts** — `detectModuleScope(dir)`: the nearest `package.json` at or above `dir`
+  decides, exactly as in Node — `"type": "module"` → ESM, anything else (or none) → CJS. Never throws.
+  `describeFormatMismatch()` turns Node's `Unexpected token 'export'` / `module is not defined in ES
+  module scope` into an explanation naming that `package.json`; used by the loader and `config.ts`.
 - **author.ts** — `detectAuthor({ explicit, configured, cwd })`: `--author` → config `author` /
   `MMK_AUTHOR` → git `user.name <user.email>` (via `readGitConfig`, best-effort, 2s timeout, never
   throws) → OS username → undefined. Called **only by `create`**; the result is baked into the file
@@ -453,6 +459,16 @@ stripping) or under a user-provided loader. On older Node, `import('foo.ts')` th
 Node error. This is why `createExtension` defaults to `'js'`. The real-world behavior is verified by
 [tests/integration/runtime-ts.test.ts](tests/integration/runtime-ts.test.ts), which runs the built
 `dist/mmk.cjs` under plain node.
+
+**ESM vs CJS is Node's decision, not ours.** The loader never rewrites a file; Node loads it by the
+nearest `package.json` (`"type": "module"` → ESM, otherwise CJS; `.mjs`/`.cjs` fix their own).
+So the generators match that rule (`detectModuleScope`) and a mismatch — `export` in a CJS scope,
+`module.exports` in an ESM one — is explained by `formatMismatchErrorOrNull()`. "No `type`" means
+CJS even though Node ≥ 20.19/22.7 would *detect* `export`: detection is missing on Node 18 and warns
+on every load. The CJS TypeScript form keeps `import type` (erasable, so type stripping removes it)
+and `module.exports`; `import x = require()` and `export =` are not erasable and would fail. Note
+that **vitest's module loader accepts mismatched files** that plain Node rejects, so mismatch
+behavior is only testable against the built binary (runtime-ts.test.ts).
 
 ### 6.5 The programmatic API (run.ts)
 File: [run.ts](src/core/run.ts).

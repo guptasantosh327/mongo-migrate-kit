@@ -1,9 +1,9 @@
 <!--
 SEO target keyword: "mongodb migration namespace mistakes"
-Meta description: A changed namespace, a filename two repos both used, records nobody moved, a copied
-config, an older tool against newer data. Five mistakes that would silently re-run or skip
+Meta description: A changed namespace, a filename two repos both used, records nobody moved, a
+copied config, an older tool against newer data. Five mistakes that would silently re-run or skip
 migrations, and the exact messages mongo-migrate-kit stops you with instead.
-Requires mongo-migrate-kit 1.5. Publish after 1.5.0 is on npm.
+Published copy: docs/blog/mongodb-migration-namespace-mistakes.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # The namespace mistakes mongo-migrate-kit catches for you
@@ -25,6 +25,7 @@ mmk notices that the files it's about to run are already recorded under a *diffe
 
 ```text
 $ npx mmk up
+Loaded config from mmk.config.js
 Namespace: order-api
 ✖ MIGRATION_NAME_CONFLICT: These 3 files are recorded under namespace "orders-api", but this run uses "order-api"
   Did the namespace change? Changing it makes every migration look pending
@@ -43,6 +44,7 @@ skipping yours or overwriting theirs:
 
 ```text
 $ npx mmk up
+Loaded config from mmk.config.js
 Namespace: orders-api
 ✖ MIGRATION_NAME_CONFLICT: "20261003120000-create-templates.js" is already used by namespace "notifications"
   This run uses namespace "orders-api"; filenames must be unique within a changelog collection
@@ -63,6 +65,7 @@ new one they look pending. Run `up` and they'd run a second time:
 
 ```text
 $ npx mmk up
+Loaded config from mmk.config.js
 Namespace: billing
 ✖ NAMESPACE_UNADOPTED: 2 migrations in this folder were applied before this repo had a namespace
   Their records have no namespace yet, so in namespace "billing" they would look pending (and `mmk up` would run them a second time)
@@ -110,6 +113,7 @@ misreading:
 
 ```text
 $ npx mmk status
+Loaded config from mmk.config.js
 ✖ SCHEMA_TOO_NEW: This database was last used by mongo-migrate-kit 1.6.0, which stores data in a newer format
   Storage format in the database: 3; this version (1.5.0) understands up to 2
   Running an older version could misread migration history, so nothing was run
@@ -141,7 +145,8 @@ npm install mongo-migrate-kit mongodb
 npx mmk status
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/reference/error-codes** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Error codes](https://mongo-migrate-kit.vercel.app/reference/error-codes). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

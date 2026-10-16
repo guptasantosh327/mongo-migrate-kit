@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { MigrationFileNotFoundError, MigrationInvalidExportError } from '../errors/index.js';
 import type { MigrationModule } from '../types/index.js';
 import { explain, listOf, quote } from './explain.js';
+import { describeFormatMismatch } from './module-format.js';
 
 /** TypeScript source extensions that require a TS-capable runtime to import */
 const TS_EXTENSIONS = new Set(['.ts', '.mts', '.cts']);
@@ -26,6 +27,15 @@ function isUnknownExtensionError(error: unknown): boolean {
 }
 
 /**
+ * True when importing `filepath` failed only because it is TypeScript and the
+ * running Node can't load TypeScript (no type stripping, no loader). Shared by
+ * the migration loader and the config loader.
+ */
+export function isTypeScriptLoadFailure(filepath: string, error: unknown): boolean {
+  return TS_EXTENSIONS.has(path.extname(filepath).toLowerCase()) && isUnknownExtensionError(error);
+}
+
+/**
  * Translate a dynamic-import failure into a clear {@link MigrationInvalidExportError}
  * when the cause is a `.ts`/`.mts`/`.cts` file that the current Node runtime cannot
  * load, or return null to let the original error propagate.
@@ -39,8 +49,7 @@ export function tsLoadErrorOrNull(
   filepath: string,
   error: unknown,
 ): MigrationInvalidExportError | null {
-  const ext = path.extname(filepath).toLowerCase();
-  if (!TS_EXTENSIONS.has(ext) || !isUnknownExtensionError(error)) {
+  if (!isTypeScriptLoadFailure(filepath, error)) {
     return null;
   }
   const name = path.basename(filepath);
@@ -48,6 +57,27 @@ export function tsLoadErrorOrNull(
     `Cannot load TypeScript migration "${name}" — this Node runtime cannot import .ts files. Use Node >= 22.18, run mmk under a TypeScript loader (e.g. tsx), or author the migration as .js.`,
     { filepath, cause: error instanceof Error ? error.message : String(error) },
   );
+}
+
+/**
+ * Translate a dynamic-import failure into a clear {@link MigrationInvalidExportError}
+ * when the file's module syntax doesn't match its package scope — `export` in a
+ * CommonJS package, or `module.exports` in a `"type": "module"` one — or return
+ * null to let the original error propagate. Node's own message
+ * ("Unexpected token 'export'") names neither the file nor the fix.
+ */
+export function formatMismatchErrorOrNull(
+  filepath: string,
+  error: unknown,
+): MigrationInvalidExportError | null {
+  const mismatch = describeFormatMismatch(filepath, error, 'migration');
+  if (!mismatch) {
+    return null;
+  }
+  return new MigrationInvalidExportError(explain(mismatch.summary, mismatch.details), {
+    filepath,
+    cause: error instanceof Error ? error.message : String(error),
+  });
 }
 
 /**
@@ -76,9 +106,10 @@ export async function loadMigrationFile(filepath: string): Promise<MigrationModu
       default?: Record<string, unknown>;
     };
   } catch (error) {
-    const tsError = tsLoadErrorOrNull(filepath, error);
-    if (tsError) {
-      throw tsError;
+    const explained =
+      tsLoadErrorOrNull(filepath, error) ?? formatMismatchErrorOrNull(filepath, error);
+    if (explained) {
+      throw explained;
     }
     throw error;
   }

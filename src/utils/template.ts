@@ -9,6 +9,7 @@ import {
 import type { MigrationExtension } from '../types/index.js';
 import { formatStamp } from './date.js';
 import { explain, quote } from './explain.js';
+import { type ModuleFormat, detectModuleScope } from './module-format.js';
 
 /** Convert an arbitrary migration name into a kebab-case slug */
 export function slugify(name: string): string {
@@ -53,9 +54,28 @@ function authorLine(author: string | undefined): string {
 
 /**
  * The built-in TypeScript migration template. `author` is written into the
- * file (and so covered by its checksum) — see `detectAuthor()`.
+ * file (and so covered by its checksum) — see `detectAuthor()`. `cjs` exports
+ * with `module.exports` (only the type import is ESM syntax, and Node strips
+ * it), so the file loads in a CommonJS package without a TypeScript loader.
  */
-export function defaultTemplateTs(author?: string): string {
+export function defaultTemplateTs(author?: string, moduleFormat: ModuleFormat = 'esm'): string {
+  if (moduleFormat === 'cjs') {
+    return `import type { MigrationContext } from 'mongo-migrate-kit';
+
+module.exports = {
+  description: '',
+  author: ${toSingleQuoted(author ?? '')},
+
+  async up({ db }: MigrationContext): Promise<void> {
+    // TODO: implement migration
+  },
+
+  async down({ db }: MigrationContext): Promise<void> {
+    // TODO: implement rollback
+  },
+};
+`;
+  }
   return `import type { MigrationContext } from 'mongo-migrate-kit';
 
 export const description = '';
@@ -71,8 +91,25 @@ export async function down({ db }: MigrationContext): Promise<void> {
 `;
 }
 
-/** The built-in JavaScript (ESM) migration template */
-export function defaultTemplateJs(author?: string): string {
+/** The built-in JavaScript migration template, as an ES module or CommonJS */
+export function defaultTemplateJs(author?: string, moduleFormat: ModuleFormat = 'esm'): string {
+  if (moduleFormat === 'cjs') {
+    return `module.exports = {
+  description: '',
+  author: ${toSingleQuoted(author ?? '')},
+
+  /** @param {import('mongo-migrate-kit').MigrationContext} ctx */
+  async up({ db }) {
+    // TODO: implement migration
+  },
+
+  /** @param {import('mongo-migrate-kit').MigrationContext} ctx */
+  async down({ db }) {
+    // TODO: implement rollback
+  },
+};
+`;
+  }
   return `export const description = '';
 ${authorLine(author)}
 
@@ -90,12 +127,14 @@ export async function down({ db }) {
 
 /**
  * Resolve template file contents — a custom template if provided (copied
- * verbatim, so it must declare its own `author` export), else the built-in.
+ * verbatim, so it must declare its own `author` export and use the project's
+ * module syntax), else the built-in one in `moduleFormat`.
  */
 export function resolveTemplateContent(
   templatePath: string | undefined,
   js: boolean,
   author?: string,
+  moduleFormat: ModuleFormat = 'esm',
 ): string {
   if (templatePath) {
     if (!existsSync(templatePath)) {
@@ -110,7 +149,7 @@ export function resolveTemplateContent(
     }
     return readFileSync(templatePath, 'utf8');
   }
-  return js ? defaultTemplateJs(author) : defaultTemplateTs(author);
+  return js ? defaultTemplateJs(author, moduleFormat) : defaultTemplateTs(author, moduleFormat);
 }
 
 /** Options controlling how a migration file is created */
@@ -127,6 +166,11 @@ export interface CreateMigrationFileOptions {
   templatePath?: string;
   /** Value written to the built-in template's `author` export */
   author?: string;
+  /**
+   * Module syntax of the built-in template. Default: what Node will use for a
+   * file in `dir` (see {@link detectModuleScope}), so the new file always loads.
+   */
+  moduleFormat?: ModuleFormat;
 }
 
 /**
@@ -150,7 +194,12 @@ export function createMigrationFile(options: CreateMigrationFileOptions): string
   }
   const filename = `${prefix}-${slug}${ext}`;
   const filepath = path.join(options.dir, filename);
-  const content = resolveTemplateContent(options.templatePath, options.js, options.author);
+  const content = resolveTemplateContent(
+    options.templatePath,
+    options.js,
+    options.author,
+    options.moduleFormat ?? detectModuleScope(options.dir).format,
+  );
   writeFileSync(filepath, content, 'utf8');
   return filepath;
 }
@@ -430,8 +479,16 @@ function configBody(values: ConfigValues, createExtension: MigrationExtension): 
   );
 }
 
+/** How a config template exports its value: `export default` or `module.exports =` */
+function exportStatement(moduleFormat: ModuleFormat): string {
+  return moduleFormat === 'cjs' ? 'module.exports =' : 'export default';
+}
+
 /** The built-in TypeScript config template */
-export function defaultConfigTs(values: ConfigValues = {}): string {
+export function defaultConfigTs(
+  values: ConfigValues = {},
+  moduleFormat: ModuleFormat = 'esm',
+): string {
   return `import type { MmkConfig } from 'mongo-migrate-kit';
 
 /**
@@ -443,12 +500,15 @@ const config: Partial<MmkConfig> = {
 ${configBody(values, 'ts')}
 };
 
-export default config;
+${exportStatement(moduleFormat)} config;
 `;
 }
 
-/** The built-in JavaScript (ESM) config template */
-export function defaultConfigJs(values: ConfigValues = {}): string {
+/** The built-in JavaScript config template, as an ES module or CommonJS */
+export function defaultConfigJs(
+  values: ConfigValues = {},
+  moduleFormat: ModuleFormat = 'esm',
+): string {
   return `/**
  * mongo-migrate-kit configuration.
  * Precedence (highest first): CLI flags > MMK_* env vars > this file > defaults.
@@ -460,7 +520,7 @@ const config = {
 ${configBody(values, 'js')}
 };
 
-export default config;
+${exportStatement(moduleFormat)} config;
 `;
 }
 
@@ -493,9 +553,15 @@ export function defaultConfigJson(values: ConfigValues = {}): string {
 /**
  * Shared documentation block for the secret-provider templates. Explains the
  * factory-function form and — crucially — that the example uses AWS but ANY
- * provider works by editing `loadMongoSecret()`.
+ * provider works by editing `loadMongoSecret()`. The Google example's import
+ * line matches the file's module syntax.
  */
-const SECRET_PROVIDER_GUIDE = `/**
+function secretProviderGuide(moduleFormat: ModuleFormat): string {
+  const googleImport =
+    moduleFormat === 'cjs'
+      ? "const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');"
+      : "import { SecretManagerServiceClient } from '@google-cloud/secret-manager';";
+  return `/**
  * mongo-migrate-kit configuration — loads the connection from a secret manager.
  *
  * This config exports an async FUNCTION (not a plain object), so the MongoDB
@@ -510,13 +576,32 @@ const SECRET_PROVIDER_GUIDE = `/**
  * Vault, Azure Key Vault, your own HTTP API, etc. It just has to return an
  * object containing at least { uri, dbName }. For example, Google:
  *
- *   import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+ *   ${googleImport}
  *   const client = new SecretManagerServiceClient();
  *   const [version] = await client.accessSecretVersion({
  *     name: 'projects/PROJECT/secrets/mongo/versions/latest',
  *   });
  *   return JSON.parse(version.payload.data.toString());
  */`;
+}
+
+/** The AWS SDK import of the secret-provider templates, in the file's module syntax */
+function awsSdkImport(language: MigrationExtension, moduleFormat: ModuleFormat): string {
+  const names = `{
+  SecretsManagerClient,
+  GetSecretValueCommand,
+}`;
+  if (moduleFormat === 'esm') {
+    return `import ${names} from '@aws-sdk/client-secrets-manager';`;
+  }
+  if (language === 'js') {
+    return `const ${names} = require('@aws-sdk/client-secrets-manager');`;
+  }
+  // `import x = require()` is not erasable syntax, so Node's type stripping
+  // rejects it; a cast keeps the SDK's types and strips cleanly.
+  return `// The cast keeps the SDK's types in a CommonJS file
+const ${names} = require('@aws-sdk/client-secrets-manager') as typeof import('@aws-sdk/client-secrets-manager');`;
+}
 
 /**
  * The documented migration-tool options of both secret-provider templates,
@@ -531,17 +616,17 @@ function secretConfigOptions(
   return renderSections(sharedSections(createExtension, migrationsDir, namespace), '    ');
 }
 
-/** Secret-provider JavaScript (ESM) config template */
-export function secretConfigJs(values: ConfigValues = {}): string {
+/** Secret-provider JavaScript config template, as an ES module or CommonJS */
+export function secretConfigJs(
+  values: ConfigValues = {},
+  moduleFormat: ModuleFormat = 'esm',
+): string {
   const { migrationsDir } = configFields(values);
-  return `${SECRET_PROVIDER_GUIDE}
+  return `${secretProviderGuide(moduleFormat)}
 
 // Install the SDK for your provider, e.g.:
 //   npm install @aws-sdk/client-secrets-manager
-import {
-  SecretsManagerClient,
-  GetSecretValueCommand,
-} from '@aws-sdk/client-secrets-manager';
+${awsSdkImport('js', moduleFormat)}
 
 /**
  * Fetch the connection details from your secret manager. Swap the body for
@@ -564,7 +649,7 @@ async function loadMongoSecret() {
 }
 
 /** @type {() => Promise<Partial<import('mongo-migrate-kit').MmkConfig>>} */
-export default async () => {
+${exportStatement(moduleFormat)} async () => {
   const secret = await loadMongoSecret();
 
   return {
@@ -578,17 +663,17 @@ ${secretConfigOptions('js', migrationsDir, values.namespace)}
 `;
 }
 
-/** Secret-provider TypeScript config template */
-export function secretConfigTs(values: ConfigValues = {}): string {
+/** Secret-provider TypeScript config template, as an ES module or CommonJS */
+export function secretConfigTs(
+  values: ConfigValues = {},
+  moduleFormat: ModuleFormat = 'esm',
+): string {
   const { migrationsDir } = configFields(values);
-  return `${SECRET_PROVIDER_GUIDE}
+  return `${secretProviderGuide(moduleFormat)}
 import type { MmkConfig } from 'mongo-migrate-kit';
 // Install the SDK for your provider, e.g.:
 //   npm install @aws-sdk/client-secrets-manager
-import {
-  SecretsManagerClient,
-  GetSecretValueCommand,
-} from '@aws-sdk/client-secrets-manager';
+${awsSdkImport('ts', moduleFormat)}
 
 /**
  * Fetch the connection details from your secret manager. Swap the body for
@@ -610,7 +695,7 @@ async function loadMongoSecret(): Promise<{ uri: string; dbName: string }> {
   return JSON.parse(res.SecretString);
 }
 
-export default async (): Promise<Partial<MmkConfig>> => {
+${exportStatement(moduleFormat)} async (): Promise<Partial<MmkConfig>> => {
   const secret = await loadMongoSecret();
 
   return {
@@ -628,11 +713,13 @@ ${secretConfigOptions('ts', migrationsDir, values.namespace)}
  * Return the config file contents for the requested format. When
  * `secretProvider` is true a runtime secret-loading template is emitted instead
  * of the static object form — only valid for `js`/`ts` (JSON cannot hold code).
+ * `moduleFormat` picks `export default` or `module.exports` (ignored for JSON).
  */
 export function configTemplateContent(
   format: ConfigFormat,
   values: ConfigValues = {},
   secretProvider = false,
+  moduleFormat: ModuleFormat = 'esm',
 ): string {
   if (secretProvider) {
     if (format === 'json') {
@@ -640,15 +727,17 @@ export function configTemplateContent(
         format,
       });
     }
-    return format === 'ts' ? secretConfigTs(values) : secretConfigJs(values);
+    return format === 'ts'
+      ? secretConfigTs(values, moduleFormat)
+      : secretConfigJs(values, moduleFormat);
   }
   if (format === 'js') {
-    return defaultConfigJs(values);
+    return defaultConfigJs(values, moduleFormat);
   }
   if (format === 'json') {
     return defaultConfigJson(values);
   }
-  return defaultConfigTs(values);
+  return defaultConfigTs(values, moduleFormat);
 }
 
 /** Options controlling how a config file is created */
@@ -663,6 +752,11 @@ export interface CreateConfigFileOptions {
   values?: ConfigValues;
   /** Emit a runtime secret-loading template instead of a static object (js/ts only) */
   secretProvider?: boolean;
+  /**
+   * `export default` or `module.exports`. Default: what Node will use for a
+   * file in `dir` (see {@link detectModuleScope}), so the new config always loads.
+   */
+  moduleFormat?: ModuleFormat;
 }
 
 /**
@@ -678,6 +772,7 @@ export function createConfigFile(options: CreateConfigFileOptions): string {
     options.format,
     options.values ?? {},
     options.secretProvider ?? false,
+    options.moduleFormat ?? detectModuleScope(options.dir).format,
   );
   writeFileSync(filepath, content, 'utf8');
   return filepath;

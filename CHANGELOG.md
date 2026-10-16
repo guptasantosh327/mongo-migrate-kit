@@ -65,6 +65,22 @@ Several repos, one database: give each repo a `namespace`.
   spinner starts, so it and any config warnings print on their own lines — and `Loaded config` now
   comes before the warnings about that config. New `MigratorKit.resolveConfig()` resolves the config
   without connecting.
+- **`mmk init` and `mmk create` work in CommonJS projects.** They used to write `export` syntax
+  everywhere, so in a project whose `package.json` isn't `"type": "module"` — including every new
+  `npm init -y` project — the very next command failed with `Unexpected token 'export'`. Both now
+  read the nearest `package.json`, as Node does, and write an ES module only for `"type": "module"`;
+  otherwise they write CommonJS (`module.exports = { … }`, `module.exports = config;`). This covers
+  `.js` and `.ts` migrations and the `--ts` and `--secret-provider` configs (the CommonJS TypeScript
+  forms keep only `import type`, which Node strips, so they run under Node 22.18+ type stripping and
+  under `tsx`). Existing files and custom templates are untouched.
+- **A migration or config file in the wrong module style is explained** instead of failing with
+  Node's bare `Unexpected token 'export'` / `module is not defined in ES module scope` (which, for a
+  migration, didn't even name the file). The message names the file and the `package.json` that
+  decided its format, and gives both fixes: rewrite the file, or — for an applied migration, whose
+  checksum must not change — add a `package.json` with the right `"type"` to its folder.
+- **A `mmk.config.ts` on a Node that can't run TypeScript is explained** — naming the running Node
+  version and the three ways out (Node 22.18+, `tsx`, or a `.js` config) — instead of Node's
+  `Unknown file extension ".ts"`. `.ts` migrations already got this message.
 
 ### Deprecated
 
