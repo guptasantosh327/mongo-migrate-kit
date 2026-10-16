@@ -12,6 +12,7 @@ import {
   MigrationInvalidExportError,
   MigrationInvalidNameError,
   MigrationNameConflictError,
+  MmkError,
   NamespaceUnadoptedError,
   NotAppliedError,
   TransactionsUnsupportedError,
@@ -68,6 +69,26 @@ const MIGRATE_MONGO_COLLECTION = 'changelog';
  * and aggregation-pipeline updates, which the lock relies on.
  */
 const MIN_WIRE_VERSION = 8;
+
+/**
+ * Record on a failed run's error which files ran before it stopped, as `context.results` (so
+ * `--json` prints them under `details.results`). Without this, a caller only learns that the run
+ * failed, not what it applied or reverted first. Only an {@link MmkError} has a context; any other
+ * error is returned unchanged.
+ */
+function withRunResults(error: unknown, results: readonly RunResult[]): unknown {
+  if (error instanceof MmkError) {
+    // `context` is readonly to callers; this is the one place that adds to it after the throw.
+    Object.assign(error, { context: { ...error.context, results: [...results] } });
+  }
+  return error;
+}
+
+/** The results {@link withRunResults} recorded on `error`, or none */
+function runResultsOf(error: unknown): RunResult[] {
+  const results = error instanceof MmkError ? error.context?.results : undefined;
+  return Array.isArray(results) ? (results as RunResult[]) : [];
+}
 
 /** Options for {@link MigratorKit.up} */
 export interface UpOptions {
@@ -822,97 +843,102 @@ export class MigratorKit {
       await this.assertAuthors(force ? targets : targets.filter((name) => !appliedNames.has(name)));
     }
 
-    await config.hooks?.beforeAll?.(context);
+    // From here the user's code runs. If anything fails, the error says which files ran first.
+    try {
+      await config.hooks?.beforeAll?.(context);
 
-    for (const name of targets) {
-      await config.hooks?.beforeEach?.(name, context);
-      const filepath = this.filepath(name);
-      const checksum = computeChecksum(filepath);
+      for (const name of targets) {
+        await config.hooks?.beforeEach?.(name, context);
+        const filepath = this.filepath(name);
+        const checksum = computeChecksum(filepath);
 
-      if (appliedNames.has(name)) {
-        if (!force) {
-          const existing = await changelog.getByName(db, name);
-          const mismatch = existing !== null && existing.checksum !== checksum;
-          if (mismatch && config.strict) {
-            throw new ChecksumMismatchError(
-              explain(`${quote(name)} has changed since it was applied`, [
-                `Applied checksum: ${(existing?.checksum ?? '').slice(0, 12)}…`,
-                `On-disk checksum: ${checksum.slice(0, 12)}…`,
-                'strict mode refuses to continue when an applied migration is edited',
-                'Revert the file to the version that was applied, or write a new migration for the change',
-                `To re-run this file against the database on purpose: mmk up ${name} --force`,
-              ]),
-              { name, expected: existing?.checksum, actual: checksum },
-            );
+        if (appliedNames.has(name)) {
+          if (!force) {
+            const existing = await changelog.getByName(db, name);
+            const mismatch = existing !== null && existing.checksum !== checksum;
+            if (mismatch && config.strict) {
+              throw new ChecksumMismatchError(
+                explain(`${quote(name)} has changed since it was applied`, [
+                  `Applied checksum: ${(existing?.checksum ?? '').slice(0, 12)}…`,
+                  `On-disk checksum: ${checksum.slice(0, 12)}…`,
+                  'strict mode refuses to continue when an applied migration is edited',
+                  'Revert the file to the version that was applied, or write a new migration for the change',
+                  `To re-run this file against the database on purpose: mmk up ${name} --force`,
+                ]),
+                { name, expected: existing?.checksum, actual: checksum },
+              );
+            }
+            if (mismatch) {
+              logger.warn(`⚠ Warning  Checksum mismatch: ${name}`);
+            }
+            logger.dim(`⏭ Skipped  ${name}`);
+            results.push({ file: name, status: 'skipped', reason: 'Already applied' });
+            continue;
           }
-          if (mismatch) {
-            logger.warn(`⚠ Warning  Checksum mismatch: ${name}`);
-          }
-          logger.dim(`⏭ Skipped  ${name}`);
-          results.push({ file: name, status: 'skipped', reason: 'Already applied' });
-          continue;
+          // force: fall through and re-run, ignoring applied state and checksum
+          logger.warn(`⚠ Forcing   re-run of already-applied ${name}`);
         }
-        // force: fall through and re-run, ignoring applied state and checksum
-        logger.warn(`⚠ Forcing   re-run of already-applied ${name}`);
+
+        const migration = await loadMigrationFile(filepath);
+        const useTransaction = migration.useTransaction ?? config.useTransaction;
+        if (useTransaction) {
+          this.assertTransactionSupported(name);
+        }
+
+        // Batch is fixed before the run so the changelog record can be persisted
+        // inside the migration's transaction (see the persist callback below).
+        const batch = options.step ? baseBatch + appliedCount : baseBatch;
+
+        this.progress?.onStart(name, 'up');
+        try {
+          const { duration } = await runMigration({
+            name,
+            migration,
+            direction: 'up',
+            context,
+            useTransaction,
+            ...(config.hooks ? { hooks: config.hooks } : {}),
+            // Write the changelog record within the same transaction as the
+            // migration's own writes, so applying and recording are atomic.
+            persist: async (runDuration, session) => {
+              const record: MigrationRecord = {
+                name,
+                batch,
+                status: 'applied',
+                appliedAt: new Date(),
+                duration: runDuration,
+                checksum,
+                environment: process.env.NODE_ENV ?? 'development',
+                executedBy: os.userInfo().username,
+                ...(migration.description ? { description: migration.description } : {}),
+                ...(migration.author ? { author: migration.author } : {}),
+                ...(service ? { service } : {}),
+              };
+              await changelog.markApplied(db, record, session);
+            },
+          });
+          this.progress?.onStop();
+          appliedCount += 1;
+
+          logger.success(`✔ Applied  ${name}   [${duration}ms]`);
+          results.push({ file: name, status: 'applied', duration, batch });
+          await config.hooks?.afterEach?.(name, duration, context);
+        } catch (error) {
+          this.progress?.onStop();
+          logger.error(`✖ Error    ${name}`);
+          results.push({
+            file: name,
+            status: 'error',
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
       }
 
-      const migration = await loadMigrationFile(filepath);
-      const useTransaction = migration.useTransaction ?? config.useTransaction;
-      if (useTransaction) {
-        this.assertTransactionSupported(name);
-      }
-
-      // Batch is fixed before the run so the changelog record can be persisted
-      // inside the migration's transaction (see the persist callback below).
-      const batch = options.step ? baseBatch + appliedCount : baseBatch;
-
-      this.progress?.onStart(name, 'up');
-      try {
-        const { duration } = await runMigration({
-          name,
-          migration,
-          direction: 'up',
-          context,
-          useTransaction,
-          ...(config.hooks ? { hooks: config.hooks } : {}),
-          // Write the changelog record within the same transaction as the
-          // migration's own writes, so applying and recording are atomic.
-          persist: async (runDuration, session) => {
-            const record: MigrationRecord = {
-              name,
-              batch,
-              status: 'applied',
-              appliedAt: new Date(),
-              duration: runDuration,
-              checksum,
-              environment: process.env.NODE_ENV ?? 'development',
-              executedBy: os.userInfo().username,
-              ...(migration.description ? { description: migration.description } : {}),
-              ...(migration.author ? { author: migration.author } : {}),
-              ...(service ? { service } : {}),
-            };
-            await changelog.markApplied(db, record, session);
-          },
-        });
-        this.progress?.onStop();
-        appliedCount += 1;
-
-        logger.success(`✔ Applied  ${name}   [${duration}ms]`);
-        results.push({ file: name, status: 'applied', duration, batch });
-        await config.hooks?.afterEach?.(name, duration, context);
-      } catch (error) {
-        this.progress?.onStop();
-        logger.error(`✖ Error    ${name}`);
-        results.push({
-          file: name,
-          status: 'error',
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      }
+      await config.hooks?.afterAll?.(context);
+    } catch (error) {
+      throw withRunResults(error, results);
     }
-
-    await config.hooks?.afterAll?.(context);
     return results;
   }
 
@@ -1061,47 +1087,52 @@ export class MigratorKit {
     const context = buildContext(this.client as MongoClient, db, config.mongoose);
     const results: RunResult[] = [];
 
-    await config.hooks?.beforeAll?.(context);
+    // From here the user's code runs. If anything fails, the error says which files ran first.
+    try {
+      await config.hooks?.beforeAll?.(context);
 
-    for (const name of names) {
-      await config.hooks?.beforeEach?.(name, context);
-      const migration = await loadMigrationFile(this.filepath(name));
-      const useTransaction = migration.useTransaction ?? config.useTransaction;
-      if (useTransaction) {
-        this.assertTransactionSupported(name);
+      for (const name of names) {
+        await config.hooks?.beforeEach?.(name, context);
+        const migration = await loadMigrationFile(this.filepath(name));
+        const useTransaction = migration.useTransaction ?? config.useTransaction;
+        if (useTransaction) {
+          this.assertTransactionSupported(name);
+        }
+
+        this.progress?.onStart(name, 'down');
+        try {
+          const { duration } = await runMigration({
+            name,
+            migration,
+            direction: 'down',
+            context,
+            useTransaction,
+            ...(config.hooks ? { hooks: config.hooks } : {}),
+            // Record the revert within the same transaction as the down() writes.
+            persist: async (_duration, session) => {
+              await changelog.markReverted(db, name, session);
+            },
+          });
+          this.progress?.onStop();
+          logger.success(`↩ Reverted ${name}   [${duration}ms]`);
+          results.push({ file: name, status: 'reverted', duration });
+          await config.hooks?.afterEach?.(name, duration, context);
+        } catch (error) {
+          this.progress?.onStop();
+          logger.error(`✖ Error    ${name}`);
+          results.push({
+            file: name,
+            status: 'error',
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
       }
 
-      this.progress?.onStart(name, 'down');
-      try {
-        const { duration } = await runMigration({
-          name,
-          migration,
-          direction: 'down',
-          context,
-          useTransaction,
-          ...(config.hooks ? { hooks: config.hooks } : {}),
-          // Record the revert within the same transaction as the down() writes.
-          persist: async (_duration, session) => {
-            await changelog.markReverted(db, name, session);
-          },
-        });
-        this.progress?.onStop();
-        logger.success(`↩ Reverted ${name}   [${duration}ms]`);
-        results.push({ file: name, status: 'reverted', duration });
-        await config.hooks?.afterEach?.(name, duration, context);
-      } catch (error) {
-        this.progress?.onStop();
-        logger.error(`✖ Error    ${name}`);
-        results.push({
-          file: name,
-          status: 'error',
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      }
+      await config.hooks?.afterAll?.(context);
+    } catch (error) {
+      throw withRunResults(error, results);
     }
-
-    await config.hooks?.afterAll?.(context);
     return results;
   }
 
@@ -1208,7 +1239,13 @@ export class MigratorKit {
       }
 
       const downResults = await this.runDown(target, { force: true });
-      const upResults = await this.runUp(target);
+      let upResults: RunResult[];
+      try {
+        upResults = await this.runUp(target);
+      } catch (error) {
+        // The revert happened, and the file stays reverted: report it with the failed re-apply.
+        throw withRunResults(error, [...downResults, ...runResultsOf(error)]);
+      }
       return [...downResults, ...upResults];
     });
   }
