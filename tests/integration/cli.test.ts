@@ -109,6 +109,20 @@ describe('mmk CLI config diagnostics (integration)', () => {
     expect(payload.error.details.issues[0]?.problem).toBe('is required but was not set');
   });
 
+  it('should hide the password of a malformed uri in the text and --json output', async () => {
+    // A leading space is enough to fail validation, and CI keeps this output.
+    const env = { ...unset, MMK_URI: ' mongodb://alice:TopSecret1@db.example.com/', MMK_DB: DB };
+    const text = await runCli(['status'], env, project.dir);
+    expect(text.code).toBe(1);
+    expect(text.stderr).toContain('Received: " mongodb://***:***@db.example.com/"');
+    expect(text.stderr).not.toContain('TopSecret1');
+
+    const json = await runCli(['status', '--json'], env, project.dir);
+    expect(json.code).toBe(1);
+    expect(json.stdout).toContain('CONFIG_INVALID');
+    expect(json.stdout).not.toContain('TopSecret1');
+  });
+
   it('should reject an unrecognized key in a config file with a suggestion', async () => {
     writeFileSync(
       path.join(project.dir, 'mmk.config.json'),
@@ -413,6 +427,38 @@ describe('mmk CLI (integration)', () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain('secret-provider');
     expect(existsSync(path.join(project.dir, 'mmk.config.json'))).toBe(false);
+  });
+
+  it.each([
+    ['mmk.config.js', []],
+    ['mmk.config.json', ['--json']],
+  ])('should refuse to write a --uri password into %s', async (file, flags) => {
+    const uri = 'mongodb://alice:TopSecret6@db.example.com:27017/shop';
+    const result = await runCli(['init', ...flags, '--uri', uri], {}, project.dir);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('INVALID_ARGUMENT');
+    expect(result.stderr).toContain('--uri contains a password');
+    // The fix is spelled out with the user's own host, minus the credentials.
+    expect(result.stderr).toContain('mmk init --uri mongodb://db.example.com:27017/shop');
+    expect(result.stderr).toContain('MMK_URI');
+    expect(result.stderr).not.toContain('TopSecret6');
+    expect(existsSync(path.join(project.dir, file))).toBe(false);
+  });
+
+  it('should write a --uri that has a username but no password', async () => {
+    const uri = 'mongodb://alice@db.example.com/?authMechanism=MONGODB-X509';
+    const result = await runCli(['init', '--uri', uri], {}, project.dir);
+    expect(result.code).toBe(0);
+    expect(readFileSync(path.join(project.dir, 'mmk.config.js'), 'utf8')).toContain(uri);
+  });
+
+  it('should allow a --uri password with --secret-provider, which never writes it', async () => {
+    const uri = 'mongodb://alice:TopSecret7@db.example.com/';
+    const result = await runCli(['init', '--secret-provider', '--uri', uri], {}, project.dir);
+    expect(result.code).toBe(0);
+    const contents = readFileSync(path.join(project.dir, 'mmk.config.js'), 'utf8');
+    expect(contents).toContain('async function loadMongoSecret');
+    expect(contents).not.toContain('TopSecret7');
   });
 
   it('should exit 1 when init finds an existing config without --force', async () => {

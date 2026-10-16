@@ -152,4 +152,9 @@ The global flags fill in the file for you:
 npx mmk init --uri mongodb://localhost:27017 --db shop --dir ./db/migrations
 ```
 
+`--uri` can't contain a password, because config files usually get committed. mmk stops with
+`INVALID_ARGUMENT` and writes nothing. Leave the password out of `--uri` and put the full URI in the
+`MMK_URI` environment variable (or a `.env` file that git ignores), which overrides the file. Or use
+`--secret-provider`, which reads the URI from a secret manager when mmk runs.
+
 See [Configuration](/guide/configuration) for what each setting does.

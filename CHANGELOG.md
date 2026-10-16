@@ -55,11 +55,26 @@ Several repos, one database: give each repo a `namespace`.
   the same wording and now also list `templatePath`, `author` and `hooks`.
 - **The `status` / `list` / `dry-run` table no longer has a Duration column.** `duration` is still
   recorded and still in `--json` output and `StatusRow`.
+- **`mmk init --uri` refuses a URI with a password in it** (`INVALID_ARGUMENT`, nothing written).
+  The config file usually gets committed, so the password would end up in the repository. The
+  message shows the command without the credentials and points to `MMK_URI` (which overrides the
+  file) or `--secret-provider`. A username alone (x.509, AWS IAM) is still written, and
+  `--secret-provider` never writes the URI, so it accepts any.
 - **MongoDB server 4.2 or newer is required** (the lock uses the server clock and pipeline updates).
   Connecting to an older server fails with `CONNECTION_FAILED` and a message naming its version.
 
 ### Fixed
 
+- **Config errors no longer print the password in a malformed `uri`.** A URI that fails validation
+  (a leading space in `MMK_URI`, a `mongodb:/` typo) was echoed in full on the `Received:` line, and
+  twice in `--json` output. The credentials are now hidden whatever the scheme looks like; the rest
+  of the value, including a leading space, stays visible.
+- **`CONNECTION_FAILED` no longer leaks a password with unescaped characters.** The redaction stopped
+  at the first `/` or `@`, so `alice:pa/ss@host` was printed in full and `alice:pa@ss@host` showed
+  `ss`. It now hides everything up to the last `@`. When the username or password has characters
+  that must be percent-encoded (`: / ? # [ ] @`), the driver's own message is withheld too, because
+  it can quote part of the password as a host name (`ENOTFOUND ss`). The message explains the
+  encoding instead.
 - **`Loaded config from …` no longer lands on the spinner's line** (`⠋ Connecting to MongoDB…Loaded
   config from mmk.config.ts`) in every command that connects. The config is now loaded before the
   spinner starts, so it and any config warnings print on their own lines — and `Loaded config` now

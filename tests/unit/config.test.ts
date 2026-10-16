@@ -471,6 +471,34 @@ describe('loadConfig diagnostics', () => {
       expect(issues[0]?.received).toBe('"localhost:27017"');
     });
 
+    it('should hide the password of a malformed uri in the message and the issues', async () => {
+      process.env.MMK_URI = ' mongodb://alice:s3cret-pw@db.example.com/app';
+      const { message, issues } = await expectConfigError({
+        cwd: tmp,
+        flags: { dbName: 'shop', logger: null },
+      });
+      // The leading space, which is the actual mistake, stays visible.
+      expect(issues[0]?.received).toBe('" mongodb://***:***@db.example.com/app"');
+      expect(message).not.toContain('s3cret-pw');
+      expect(JSON.stringify(issues)).not.toContain('s3cret-pw');
+    });
+
+    it('should hide the password behind a mistyped scheme', async () => {
+      const { issues } = await expectConfigError({
+        cwd: tmp,
+        flags: { ...VALID, uri: 'mongodb:/alice:s3cret-pw@db.example.com' },
+      });
+      expect(issues[0]?.received).toBe('"mongodb:/***:***@db.example.com"');
+    });
+
+    it('should describe a non-string uri by its type rather than print it', async () => {
+      const { issues } = await expectConfigError({
+        cwd: tmp,
+        flags: { ...VALID, uri: ['mongodb://alice:s3cret-pw@h'] as unknown as string },
+      });
+      expect(issues[0]?.received).toBe('a array');
+    });
+
     it('should accept a mongodb+srv uri', async () => {
       const config = await loadConfig({
         cwd: tmp,

@@ -88,6 +88,9 @@ the message on purpose.
 - `Authentication failed` means the user or password is wrong, or the user belongs to a different
   `authSource`.
 - A timeout usually means a firewall or an IP allow-list (on Atlas, check Network Access).
+- If the password has any of `: / ? # [ ] @` in it, they must be percent-encoded: `p@ss/word`
+  becomes `p%40ss%2Fword` (`encodeURIComponent` does this). mmk tells you so instead of showing the
+  driver's message, because that message can contain part of the password.
 - Test the same URI with `mongosh "<your uri>"`. If that fails too, it's not an mmk problem.
 
 mmk also refuses servers older than MongoDB 4.2 with this code. The message says which version it

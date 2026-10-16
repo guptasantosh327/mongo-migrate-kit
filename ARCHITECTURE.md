@@ -332,8 +332,13 @@ Each entry: **responsibility · key exports · nuances you must know.**
   via the template's `export const author = '…'`. `up` reads it back through the loader and copies it
   onto the record — it never runs git.
 - **date.ts** — `formatStamp`/`formatDateTime`, dependency-free (replaced `date-fns`).
-- **redact.ts** — `redactMongoUri(text)`: scrubs `user:pass@` from any connection string embedded in a
-  string. Used on driver error messages before they reach `ConnectionFailedError` / logs / `--json`.
+- **redact.ts** — `redactMongoUri(text)`: scrubs the credentials (everything up to the last `@`) from
+  any connection string embedded in a string; used on driver error messages before they reach
+  `ConnectionFailedError` / logs / `--json`. `redactConnectionString(value)` does the same for one
+  value that is meant to be a URI even when its scheme is malformed (config `Received:` lines, the
+  `CONNECTION_FAILED` summary). `hasUnescapedCredentials(uri)` makes `CONNECTION_FAILED` withhold the
+  driver message, which can quote a mis-split piece of the password. `hasPassword` /
+  `withoutCredentials` back `mmk init`'s refusal to write a password into a config file.
 
 ### `src/cli/`
 - **index.ts** — builds the commander program, registers global flags (`--uri/--db/--dir/--config`)
