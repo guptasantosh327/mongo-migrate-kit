@@ -124,7 +124,7 @@ try {
 
 | Method | Returns | Same as |
 | --- | --- | --- |
-| `connect()` / `disconnect()` | `Promise<void>` | |
+| `connect(options?)` / `disconnect()` | `Promise<void>` | |
 | `up(file?, options?)` | `RunResult[]` | `mmk up` |
 | `down(file?, options?)` | `RunResult[]` | `mmk down` |
 | `redo(file?)` | `RunResult[]` | `mmk redo` |
@@ -142,6 +142,12 @@ Options use the same names as the command-line flags: `up(undefined, { step: tru
 `down(undefined, { batch: 3 })`, `down(undefined, { steps: 2 })`, `up(file, { force: true })`.
 
 Most methods connect for you if you forget, but always pair that with `disconnect()`.
+
+`connect()` creates the changelog collection's index, which needs write access. To only read, use
+`connect({ readOnly: true })`: it writes nothing, so it works with a user that has only the `read`
+role. `status()`, `list()`, `dryRun()`, `statusAllNamespaces()`, `lockInfo()` and
+`pendingMigrations()` connect this way on their own. A later write method on the same migrator
+creates the index then.
 
 ## The result types
 

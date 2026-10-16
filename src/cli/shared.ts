@@ -97,6 +97,12 @@ export interface WithMigratorOptions {
    * withMigrator emits `{ error: { code?, message } }` to stdout and exits 1.
    */
   json?: boolean;
+  /**
+   * The command only reads, so connect without preparing the database for
+   * writes (see `ConnectOptions.readOnly`): it then works with a user that has
+   * only the `read` role.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -142,7 +148,7 @@ export async function withMigrator(
       await migrator.resolveConfig();
       spinner.start('Connecting to MongoDB…');
       try {
-        await migrator.connect();
+        await migrator.connect(options.readOnly ? { readOnly: true } : {});
         spinner.stop();
       } catch (error) {
         spinner.stop();

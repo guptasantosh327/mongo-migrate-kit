@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- **`connect({ readOnly: true })`** (`ConnectOptions`, exported): connects without writing anything.
+
+### Changed
+
+- **Read commands never write, so a read-only database user can run them.** `status`, `list`,
+  `dry-run` and `status --all-namespaces` (and `pendingMigrations()`, `lockInfo()`) used to create
+  the changelog index on connect, and with a `namespace` they also recorded the storage marker, so a
+  user with only the `read` role got `CONNECTION_FAILED`. They now connect read-only. The check that
+  refuses a newer storage format still runs, because it only reads. `connect()` and every command
+  that changes something create the index as before, so the first write command on a new database
+  creates the collection instead of the first `status`.
+
 ## v1.5.0
 
 Several repos, one database: give each repo a `namespace`.

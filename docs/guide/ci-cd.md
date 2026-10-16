@@ -45,6 +45,9 @@ to go ahead until they've run, use `status --check`. It exits `1` when anything 
 npx mmk status --check || { echo "Run the migrations first"; exit 1; }
 ```
 
+This check doesn't need write access: `status`, `list` and `dry-run` work with a MongoDB user that
+has only the `read` role. See [With a read-only database user](/commands/status#with-a-read-only-database-user).
+
 ## GitHub Actions
 
 A deploy job that runs migrations on every push to `main`:

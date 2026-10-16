@@ -69,6 +69,26 @@ this repo's migrations. You may also see:
 npx mmk status --check || { echo "Run the migrations first"; exit 1; }
 ```
 
+### With a read-only database user
+
+`status`, `list`, `dry-run` and `status --all-namespaces` never write, not even when they connect.
+So they work with a MongoDB user that has only the `read` role on the database, which is a good
+fit for checking staging or production from a laptop or a CI job:
+
+```js
+// In the mongo shell, as an admin
+use orders_prod
+db.createUser({ user: 'mmk-reader', pwd: passwordPrompt(), roles: [{ role: 'read', db: 'orders_prod' }] })
+```
+
+```bash
+MMK_URI='mongodb://mmk-reader:<password>@db.example.com' MMK_DB=orders_prod npx mmk status --check
+```
+
+The commands that change something (`up`, `down`, `redo`, `import`, `namespace adopt`, `unlock`)
+still need a user that can write. They create the changelog collection's index when they connect,
+so a read-only user gets `CONNECTION_FAILED` with `not authorized` in the reason.
+
 ## mmk list
 
 ```bash

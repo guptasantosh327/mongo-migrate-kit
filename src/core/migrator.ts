@@ -58,7 +58,7 @@ import { buildContext } from './context.js';
 import { isMigrateMongoDoc, mapMigrateMongoDocs } from './import.js';
 import { type LockDocument, MigrationLock, runWithLock } from './lock.js';
 import { runMigration } from './runner.js';
-import { checkStorageFormat } from './storage-format.js';
+import { checkStorageFormat, recordStorageFormat } from './storage-format.js';
 
 /** Default source collection name used by migrate-mongo */
 const MIGRATE_MONGO_COLLECTION = 'changelog';
@@ -165,6 +165,18 @@ export interface ImportOptions {
   noLock?: boolean;
 }
 
+/** Options for {@link MigratorKit.connect} */
+export interface ConnectOptions {
+  /**
+   * Connect without writing anything: skip creating the changelog index and
+   * recording the storage format. The read commands (`status`, `list`,
+   * `dry-run`, `status --all-namespaces`) connect this way, so they work with a
+   * user that has only the `read` role. The check that refuses a newer storage
+   * format still runs: it only reads.
+   */
+  readOnly?: boolean;
+}
+
 /**
  * The main orchestration class. Every CLI command delegates here. Holds a
  * partial config that is resolved (merged with env/file/defaults) on first use.
@@ -197,6 +209,8 @@ export class MigratorKit {
   private supportsTransactions = false;
   /** The server's wire version from the connect-time probe; undefined if the probe failed */
   private maxWireVersion: number | undefined;
+  /** Whether connect() has created the changelog index (and recorded the storage format) */
+  private preparedForWrites = false;
 
   constructor(config: Partial<MmkConfig> = {}, options: MigratorKitOptions = {}) {
     this.partialConfig = config;
@@ -220,12 +234,46 @@ export class MigratorKit {
     return resolveLogger(this.config?.logger);
   }
 
-  /** Connect to MongoDB and ensure changelog indexes exist */
-  async connect(): Promise<void> {
+  /**
+   * Connect to MongoDB. Unless `readOnly` is set, also prepare the database for
+   * writes: create the changelog index and, when a namespace is set, record the
+   * storage format. Those are the only writes connecting makes, so a read-only
+   * connect works with a user that has only the `read` role. Connecting again
+   * without `readOnly` after a read-only connect prepares for writes then.
+   */
+  async connect(options: ConnectOptions = {}): Promise<void> {
     const config = await this.ensureConfig();
-    if (this.client && this.db) {
+    if (!this.client || !this.db) {
+      await this.open(config);
+    }
+    if (options.readOnly || this.preparedForWrites) {
       return;
     }
+    // The changelog index is the first write. On failure the client is closed
+    // so a later connect() starts clean.
+    try {
+      // Only a namespaced run writes data older versions would misread, so only
+      // it records the marker; every run still refuses a newer format (in open()).
+      if (config.namespace !== undefined) {
+        await recordStorageFormat(this.requireDb());
+      }
+      try {
+        await this.requireChangelog().ensureIndexes(this.requireDb());
+      } catch (error) {
+        throw this.connectionFailedError(config, error);
+      }
+      this.preparedForWrites = true;
+    } catch (error) {
+      await this.disconnect();
+      throw error;
+    }
+  }
+
+  /**
+   * Open the client and run the read-only checks every command needs: the
+   * server version and the storage format. Writes nothing.
+   */
+  private async open(config: MmkConfig): Promise<void> {
     try {
       // Safe defaults so a wrong URI / unreachable host fails fast instead of
       // hanging. We deliberately do NOT set a client-wide write concern: that
@@ -250,19 +298,12 @@ export class MigratorKit {
       throw this.connectionFailedError(config, error);
     }
     // Connected — refuse an unsupported server or a newer storage format
-    // BEFORE writing anything (the changelog index below is the first write).
-    // On any failure the client is closed so a later connect() starts clean.
+    // BEFORE writing anything. On any failure the client is closed so a later
+    // connect() starts clean.
     try {
       this.assertServerSupported();
-      // Only a namespaced run writes data older versions would misread, so only
-      // it records the marker; every run still refuses a newer format.
-      await checkStorageFormat(this.requireDb(), { record: config.namespace !== undefined });
+      await checkStorageFormat(this.requireDb());
       this.changelog = new Changelog(config.migrationsCollection, config.namespace);
-      try {
-        await this.changelog.ensureIndexes(this.requireDb());
-      } catch (error) {
-        throw this.connectionFailedError(config, error);
-      }
     } catch (error) {
       await this.disconnect();
       throw error;
@@ -363,6 +404,7 @@ export class MigratorKit {
       await this.client.close();
       this.client = undefined;
       this.db = undefined;
+      this.preparedForWrites = false;
     }
   }
 
@@ -553,7 +595,7 @@ export class MigratorKit {
    */
   async lockInfo(): Promise<LockInfo | null> {
     await this.ensureConfig();
-    await this.connect();
+    await this.connect({ readOnly: true });
     return this.toLockInfo(await this.buildLock().inspect());
   }
 
@@ -1221,7 +1263,7 @@ export class MigratorKit {
   ): Promise<StatusRow[]> {
     this.assertStepsValid(options.steps, filename);
     await this.ensureConfig();
-    await this.connect();
+    await this.connect({ readOnly: true });
     this.announceNamespace();
     const db = this.requireDb();
     const changelog = this.requireChangelog();
@@ -1268,7 +1310,7 @@ export class MigratorKit {
   /** Full migration status for all known files and records */
   async status(): Promise<StatusRow[]> {
     await this.ensureConfig();
-    await this.connect();
+    await this.connect({ readOnly: true });
     this.announceNamespace();
     const unadopted = await this.checkAdopted(this.requireChangelog(), 'warn');
     return this.statusRows(unadopted);
@@ -1294,7 +1336,7 @@ export class MigratorKit {
    */
   async statusAllNamespaces(): Promise<NamespaceStatusRow[]> {
     await this.ensureConfig();
-    await this.connect();
+    await this.connect({ readOnly: true });
     const records = await this.requireChangelog().getAllNamespaces(this.requireDb());
     return records.map((record) => ({
       ...(record.namespace !== undefined ? { namespace: record.namespace } : {}),
@@ -1318,7 +1360,7 @@ export class MigratorKit {
       return this.status();
     }
     await this.ensureConfig();
-    await this.connect();
+    await this.connect({ readOnly: true });
     this.announceNamespace();
     await this.checkAdopted(this.requireChangelog(), 'refuse');
     const rows = await this.statusRows(new Set());

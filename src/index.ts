@@ -2,6 +2,7 @@
 export { MigratorKit } from './core/migrator.js';
 export type {
   AdoptOptions,
+  ConnectOptions,
   CreateOptions,
   DownOptions,
   ImportOptions,
