@@ -31,4 +31,35 @@ describe('connection failures (integration)', () => {
     expect(message).not.toContain('admin');
     expect(JSON.stringify((error as ConnectionFailedError).context)).not.toContain('sup3rs3cret');
   }, 30_000);
+
+  it.each([
+    // The driver rejects this one outright…
+    ['an unescaped "/"', 'mongodb://admin:Top/Secret9@db.invalid.test:27017'],
+    // …and mis-splits this one, reporting "ENOTFOUND secret9" — part of the password.
+    ['an unescaped "@"', 'mongodb://admin:Top@Secret9@db.invalid.test:27017'],
+  ])(
+    'should never show a password containing %s',
+    async (_label, uri) => {
+      const migrator = new MigratorKit({
+        uri,
+        dbName: 'shop',
+        migrationsDir: './migrations',
+        logger: null,
+        mongoClientOptions: { serverSelectionTimeoutMS: 500, connectTimeoutMS: 500 },
+      });
+      const error = await migrator.connect().catch((e: unknown) => e);
+      await migrator.disconnect();
+
+      expect(error).toBeInstanceOf(ConnectionFailedError);
+      const message = (error as Error).message;
+      const context = JSON.stringify((error as ConnectionFailedError).context);
+      expect(message).toContain('mongodb://***:***@db.invalid.test:27017');
+      expect(message).toContain('must be percent-encoded');
+      expect(message).toContain('encodeURIComponent');
+      for (const text of [message, context]) {
+        expect(text.toLowerCase()).not.toContain('secret9');
+      }
+    },
+    30_000,
+  );
 });

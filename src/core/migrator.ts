@@ -38,7 +38,13 @@ import { didYouMean, explain, listOf, quote } from '../utils/explain.js';
 import { loadMigrationFile } from '../utils/loader.js';
 import { resolveLogger } from '../utils/logger.js';
 import { namespaceLabel, namespaceProblem } from '../utils/namespace.js';
-import { redactMongoUri } from '../utils/redact.js';
+import {
+  hasPassword,
+  hasUnescapedCredentials,
+  redactConnectionString,
+  redactMongoUri,
+  withoutCredentials,
+} from '../utils/redact.js';
 import { detectService } from '../utils/service.js';
 import {
   type ConfigFormat,
@@ -271,18 +277,29 @@ export class MigratorKit {
    * clue to WHY it failed (bad host, auth, TLS, timeout, permissions), so it
    * belongs in the message — not only in the context, where the terminal never
    * shows it.
+   *
+   * The one exception: when the username or password has characters it should
+   * have percent-encoded, the driver mis-splits the URI and its message can
+   * quote part of the password as a host name. That message is withheld and the
+   * encoding problem, which is the real cause, is explained instead.
    */
   private connectionFailedError(config: MmkConfig, error: unknown): ConnectionFailedError {
     const raw = error instanceof Error ? error.message : String(error);
-    const cause = redactMongoUri(raw);
+    const unescaped = hasUnescapedCredentials(config.uri);
+    const cause = unescaped
+      ? 'The username or password contains a character that must be percent-encoded (: / ? # [ ] @). The driver message is not shown because it can include part of the password'
+      : redactMongoUri(raw);
+    const uri = redactConnectionString(config.uri);
     return new ConnectionFailedError(
-      explain(`Failed to connect to MongoDB at ${redactMongoUri(config.uri)}`, [
+      explain(`Failed to connect to MongoDB at ${uri}`, [
         `Reason: ${cause}`,
         `Database: ${quote(config.dbName)}`,
-        'Check the host/port is reachable, the credentials are right, and any TLS or IP allow-list requirement is met',
+        unescaped
+          ? 'Encode the username and password, e.g. with encodeURIComponent(password): "p@ss/word" becomes "p%40ss%2Fword"'
+          : 'Check the host/port is reachable, the credentials are right, and any TLS or IP allow-list requirement is met',
         'Set the connection with --uri, the MMK_URI environment variable, or "uri" in your config file',
       ]),
-      { cause, uri: redactMongoUri(config.uri), dbName: config.dbName },
+      { cause, uri, dbName: config.dbName },
     );
   }
 
@@ -1359,10 +1376,27 @@ export class MigratorKit {
     return filepath;
   }
 
-  /** Create an mmk config file in the working directory and return its path */
+  /**
+   * Create an mmk config file in the working directory and return its path.
+   * @throws {@link InvalidArgumentError} when the `uri` to write contains a
+   * password (except with `secretProvider`, whose template never writes it)
+   */
   async init(options: InitOptions = {}): Promise<string> {
     const values: ConfigValues = {};
     if (this.partialConfig.uri) values.uri = this.partialConfig.uri;
+    // A static config would hold the password in plain text, in a file that
+    // usually gets committed. The secret-provider template never writes the URI.
+    if (values.uri !== undefined && !options.secretProvider && hasPassword(values.uri)) {
+      throw new InvalidArgumentError(
+        explain('--uri contains a password, and mmk init would write it into the config file', [
+          `Received: ${quote(redactConnectionString(values.uri))}`,
+          'Config files are usually committed, which would put the password in your repository',
+          `Try: mmk init --uri ${withoutCredentials(values.uri)}   and put the full URI in MMK_URI (environment or a git-ignored .env); MMK_URI overrides the file`,
+          'Or: mmk init --secret-provider   (loads the URI from a secret manager when mmk runs)',
+        ]),
+        { uri: redactConnectionString(values.uri) },
+      );
+    }
     if (this.partialConfig.dbName) values.dbName = this.partialConfig.dbName;
     if (this.partialConfig.migrationsDir) values.migrationsDir = this.partialConfig.migrationsDir;
     if (options.namespace !== undefined) {

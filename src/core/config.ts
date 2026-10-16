@@ -10,6 +10,7 @@ import { isTypeScriptLoadFailure } from '../utils/loader.js';
 import { resolveLogger } from '../utils/logger.js';
 import { describeFormatMismatch } from '../utils/module-format.js';
 import { namespaceProblem } from '../utils/namespace.js';
+import { redactConnectionString } from '../utils/redact.js';
 
 /** Default values applied when no flag, env var, or config-file value is present */
 export const DEFAULT_CONFIG: Pick<
@@ -171,6 +172,19 @@ function display(value: unknown): string {
   }
 }
 
+/**
+ * {@link display} for the value an issue reports as received. A `uri` is shown
+ * with its credentials hidden: it is only shown when it is malformed, which is
+ * exactly when the usual redaction can't recognize it (a leading space, a
+ * `mongodb:/` typo), and CI keeps these messages in its logs.
+ */
+function displayReceived(key: string, value: unknown): string {
+  if (key !== 'uri') return display(value);
+  return typeof value === 'string'
+    ? display(redactConnectionString(value))
+    : `a ${describeType(value)}`;
+}
+
 /** Human name for a value's runtime type, used in "must be X, received Y" text */
 function describeType(value: unknown): string {
   if (value === null) return 'null';
@@ -320,7 +334,7 @@ function readEnvConfig(configFileLabel: string): {
     issues.push({
       key: entry.key,
       problem: `must be ${parsed.expected}`,
-      received: display(raw),
+      received: displayReceived(entry.key, raw),
       source: `the ${entry.env} environment variable`,
       ...(set === undefined ? {} : { howToSet: set }),
     });
@@ -712,7 +726,7 @@ function toConfigIssue(
   return {
     key,
     problem,
-    ...(missing || raw === undefined ? {} : { received: display(raw) }),
+    ...(missing || raw === undefined ? {} : { received: displayReceived(key, raw) }),
     ...(missing || source === undefined ? {} : { source }),
     ...(set === undefined ? {} : { howToSet: set }),
   };

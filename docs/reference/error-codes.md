@@ -54,9 +54,9 @@ examples of the common ones.
 | Code | Class | Cause | What to do |
 | --- | --- | --- | --- |
 | `CONFIG_INVALID` | `ConfigInvalidError` | A setting is missing, has a bad value, or isn't a real setting. Also raised when the config file itself can't be loaded: bad JSON, the wrong module style, a `.ts` config on a Node that can't run TypeScript, or a config function that throws. | Read the numbered list. Each item has the setting, the value read, where it came from, and how to set it. Also on `error.context.issues`. A file that won't load gets one message naming the file, the cause and the fix. |
-| `INVALID_ARGUMENT` | `InvalidArgumentError` | Something you typed is wrong: a bad `--batch`, flags that can't go together, an empty name. | Read the `Received:` and `Try:` lines. This is about the command, not the config. |
+| `INVALID_ARGUMENT` | `InvalidArgumentError` | Something you typed is wrong: a bad `--batch`, flags that can't go together, an empty name, a password in `mmk init --uri`. | Read the `Received:` and `Try:` lines. This is about the command, not the config. |
 | `CONFIG_FILE_EXISTS` | `ConfigFileExistsError` | `mmk init` found a config file already. | Add `--force` to replace it. |
-| `CONNECTION_FAILED` | `ConnectionFailedError` | mmk couldn't connect, or the server is older than MongoDB 4.2. | The message has the driver's reason (DNS, auth, timeout), with the password hidden. |
+| `CONNECTION_FAILED` | `ConnectionFailedError` | mmk couldn't connect, or the server is older than MongoDB 4.2. | The message has the driver's reason (DNS, auth, timeout), with the password hidden. If the password has characters that must be percent-encoded, it says that instead. |
 | `IMPORT_TARGET_NOT_EMPTY` | `ImportTargetNotEmptyError` | `mmk import` found records in mmk's history already. | Add `--force` to import anyway. |
 
 ## Shared databases
