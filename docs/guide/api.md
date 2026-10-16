@@ -162,6 +162,7 @@ interface StatusRow {
   appliedAt: Date | null;
   duration: number | null;
   checksumOk: boolean | null; // null = pending, true = unchanged, false = edited since it ran
+  checksum?: string; // applied rows: SHA-256 of the file as it ran (what checksumOk compares)
   description?: string;
   author?: string;
 }
