@@ -19,6 +19,8 @@ import {
 import type {
   AdoptResult,
   AdoptRow,
+  ConfigSource,
+  ConfigSummary,
   ImportChecksumSource,
   ImportResult,
   ImportRow,
@@ -53,7 +55,7 @@ import {
   createMigrationFile,
 } from '../utils/template.js';
 import { Changelog } from './changelog.js';
-import { loadConfig } from './config.js';
+import { type LoadConfigOptions, loadConfigWithSources } from './config.js';
 import { buildContext } from './context.js';
 import { isMigrateMongoDoc, mapMigrateMongoDocs } from './import.js';
 import { type LockDocument, MigrationLock, runWithLock } from './lock.js';
@@ -186,6 +188,10 @@ export class MigratorKit {
   private readonly configPath: string | undefined;
   private readonly progress: ProgressReporter | undefined;
   private config: MmkConfig | undefined;
+  /** The config file the config came from (null: none), set with {@link config} */
+  private configFile: string | null = null;
+  /** The kind of layer each config value came from, set with {@link config} */
+  private configSources = new Map<keyof MmkConfig, ConfigSource>();
   private client: MongoClient | undefined;
   private db: Db | undefined;
   private changelog: Changelog | undefined;
@@ -207,13 +213,21 @@ export class MigratorKit {
   /** Resolve and cache the full configuration */
   private async ensureConfig(requireDb = true): Promise<MmkConfig> {
     if (!this.config) {
-      this.config = await loadConfig({
-        flags: this.partialConfig,
-        requireDb,
-        ...(this.configPath ? { configPath: this.configPath } : {}),
-      });
+      const loaded = await loadConfigWithSources(this.loadOptions(requireDb));
+      this.config = loaded.config;
+      this.configFile = loaded.configFile;
+      this.configSources = loaded.sources;
     }
     return this.config;
+  }
+
+  /** Options for loading this migrator's config */
+  private loadOptions(requireDb: boolean): LoadConfigOptions {
+    return {
+      flags: this.partialConfig,
+      requireDb,
+      ...(this.configPath ? { configPath: this.configPath } : {}),
+    };
   }
 
   private get logger(): MmkLogger {
@@ -406,6 +420,42 @@ export class MigratorKit {
    */
   async resolveConfig(): Promise<MmkConfig> {
     return this.ensureConfig();
+  }
+
+  /**
+   * The effective configuration as plain data, for `mmk config`: resolved the
+   * way every other command resolves it, but never connecting, and not
+   * requiring a connection string or database name. Paths are absolute and the
+   * connection string's credentials are hidden.
+   * @throws {@link ConfigInvalidError} when the configuration is invalid
+   */
+  async describeConfig(): Promise<ConfigSummary> {
+    // Not cached when loaded here: without `requireDb`, a later connect() would
+    // run with an empty uri instead of reporting it missing.
+    const loaded = this.config
+      ? { config: this.config, configFile: this.configFile, sources: this.configSources }
+      : await loadConfigWithSources(this.loadOptions(false));
+    const { config } = loaded;
+    return {
+      configFile: loaded.configFile,
+      migrationsDir: path.resolve(config.migrationsDir),
+      fileExtensions: [...config.fileExtensions],
+      createExtension: config.createExtension,
+      sequential: config.sequential,
+      migrationsCollection: config.migrationsCollection,
+      lockCollection: config.lockCollection,
+      lockTTLSeconds: config.lockTTLSeconds,
+      strict: config.strict,
+      useTransaction: config.useTransaction,
+      requireAuthor: config.requireAuthor ?? false,
+      ...(config.namespace !== undefined ? { namespace: config.namespace } : {}),
+      ...(config.author ? { author: config.author } : {}),
+      ...(config.templatePath ? { templatePath: path.resolve(config.templatePath) } : {}),
+      dbName: config.dbName === '' ? null : config.dbName,
+      uri: config.uri === '' ? null : redactConnectionString(config.uri),
+      // `logger` is how output is shown, not a setting (the CLI sets its own in --json mode).
+      sources: Object.fromEntries([...loaded.sources].filter(([key]) => key !== 'logger')),
+    };
   }
 
   /**

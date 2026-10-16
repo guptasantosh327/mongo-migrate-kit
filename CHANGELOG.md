@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- **`mmk config [--json]`** — shows the settings mmk resolved and where each one came from (a CLI
+  flag, an `MMK_*` environment variable, the config file, or the default). It never connects, works
+  without a connection string, and always hides the connection string's credentials. Paths are
+  absolute. In code: `migrator.describeConfig()`, returning the new `ConfigSummary` type.
+- `loadConfigWithSources()` — `loadConfig()` plus the config file it loaded and the layer of each
+  value. `loadConfig()` is unchanged.
+
 ## v1.5.0
 
 Several repos, one database: give each repo a `namespace`.
