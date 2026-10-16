@@ -3,7 +3,7 @@ SEO target keyword: "mongodb migration lock multiple services"
 Meta description: When twenty repos share one MongoDB database, whose migration runs first? How
 mongo-migrate-kit's single database-wide lock works: busy messages, long migrations, crashed
 holders, and why finer-grained locks were left out.
-Requires mongo-migrate-kit 1.5. Publish after 1.5.0 is on npm.
+Published copy: docs/blog/mongodb-migration-lock-multiple-services.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # How locking works when 20 repos share one database
@@ -105,6 +105,7 @@ the lock belongs to another repo:
 
 ```text
 $ npx mmk unlock
+Loaded config from mmk.config.js
 ⚠ Lock held by namespace "orders-worker": pid 41 on worker-7c9f (deploy) since 2026-10-15T13:39:17.867Z
 ⚠ This lock belongs to "orders-worker", not this repo ("orders-api") — releasing it may let two migrations run at once
 Force-release this lock? [y/N]
@@ -140,7 +141,8 @@ npm install mongo-migrate-kit mongodb
 npx mmk up          # takes the database's lock, renews it while running, releases it after
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/guide/shared-database** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Sharing a database](https://mongo-migrate-kit.vercel.app/guide/shared-database). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

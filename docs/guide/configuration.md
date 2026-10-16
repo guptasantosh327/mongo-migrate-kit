@@ -62,6 +62,10 @@ export default config;
 
 :::
 
+These examples use `export default`. In a CommonJS project (no `"type": "module"` in
+`package.json`) write `module.exports =` instead. `mmk init` picks the right one for you. A `.ts`
+config needs Node 22.18 or newer, or `tsx` (see [TypeScript](/guide/typescript)).
+
 A JSON config can't hold functions, so `hooks`, `logger` and `mongoose` only work in a `.js` or
 `.ts` file.
 

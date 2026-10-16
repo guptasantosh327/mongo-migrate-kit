@@ -36,6 +36,7 @@ fine too. The pages below are written so you can read them in order.
     <p>Where mmk keeps its history, what a batch is, how the lock and checksums work, and what a good migration file looks like.</p>
     <a class="step-link" href="/guide/concepts">How it works →</a><br>
     <a class="step-link" href="/guide/writing-migrations">Writing migrations →</a><br>
+    <a class="step-link" href="/guide/typescript">TypeScript →</a><br>
     <a class="step-link" href="/guide/workflow">A normal day with mmk →</a>
   </li>
   <li>

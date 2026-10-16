@@ -15,7 +15,9 @@ how to write the body well.
 
 ## The file
 
-Pick whichever style your project uses. They all behave the same way.
+A migration is JavaScript or TypeScript, written as an ES module or as CommonJS. All four behave the
+same way. You don't have to choose the module style: `mmk create` matches your project (see
+[ES modules or CommonJS](#es-modules-or-commonjs)).
 
 ::: code-group
 
@@ -32,7 +34,22 @@ export async function down({ db }) {
 }
 ```
 
-```ts [TypeScript]
+```js [JavaScript (CommonJS)]
+module.exports = {
+  description: 'Unique index on users.email',
+  author: 'Asha Rao',
+
+  async up({ db }) {
+    await db.collection('users').createIndex({ email: 1 }, { unique: true });
+  },
+
+  async down({ db }) {
+    await db.collection('users').dropIndex('email_1');
+  },
+};
+```
+
+```ts [TypeScript (ESM)]
 import type { MigrationContext } from 'mongo-migrate-kit';
 
 export const description = 'Unique index on users.email';
@@ -47,14 +64,18 @@ export async function down({ db }: MigrationContext): Promise<void> {
 }
 ```
 
-```js [JavaScript (CommonJS)]
+```ts [TypeScript (CommonJS)]
+import type { MigrationContext } from 'mongo-migrate-kit';
+
 module.exports = {
   description: 'Unique index on users.email',
   author: 'Asha Rao',
-  async up({ db }) {
+
+  async up({ db }: MigrationContext): Promise<void> {
     await db.collection('users').createIndex({ email: 1 }, { unique: true });
   },
-  async down({ db }) {
+
+  async down({ db }: MigrationContext): Promise<void> {
     await db.collection('users').dropIndex('email_1');
   },
 };
@@ -65,52 +86,47 @@ module.exports = {
 `mmk create` writes `.js` files by default. Use `mmk create <name> --ts` for TypeScript, or set
 `createExtension: 'ts'` in your config to make it the default.
 
-::: warning ESM or CommonJS?
-Node decides how to read a `.js` file from the `"type"` field in your `package.json`. With
-`"type": "module"`, a `.js` file is ESM and `module.exports` fails with *"module is not defined in
-ES module scope"*. Use `export` in that case, or name the file `.cjs` and add `'.cjs'` to
-`fileExtensions` in your config.
-:::
+## ES modules or CommonJS
 
-## CommonJS projects
+Node decides how to load a `.js` or `.ts` file from the **nearest `package.json`** above it.
+`mmk create` and `mmk init` read the same file before they write anything, so what they generate
+always loads:
 
-If your `package.json` has `"type": "commonjs"` (or no `"type"` and you use `require`), the files
-mmk generates won't load, because they use `export`. You'll see:
+| Nearest `package.json` | What mmk writes | Example |
+|---|---|---|
+| `"type": "module"` | ES module | `export async function up(…)`, `export default config` |
+| `"type": "commonjs"` | CommonJS | `module.exports = { async up(…) {…} }` |
+| No `"type"` field, or no `package.json` | CommonJS | same as above |
+
+CommonJS is what Node uses when `"type"` is missing. (Newer Node versions can also run `export` in
+such a file by guessing from the syntax. Older ones can't, Node 18 included, and the guess prints a
+warning on every run. So mmk doesn't rely on it.)
+
+**TypeScript follows the same rule.** In a CommonJS project, a TypeScript migration keeps
+`import type` (Node removes it before running the file) and exports with `module.exports`. That
+runs under Node 22.18+ on its own and under `tsx`, and type-checks with `@types/node` installed.
+
+A folder can have its own `package.json`. A `migrations/package.json` containing
+`{ "type": "module" }` makes just that folder ES modules, and `mmk create` follows it.
+
+A custom template (`--template` or `templatePath`) is copied exactly as it is, so write it in your
+project's style.
+
+### If a file is in the wrong style
+
+A migration can end up in the other style, for example when it's copied from another project or
+was created before a `package.json` changed. mmk then stops with an explanation instead of Node's
+bare `Unexpected token 'export'`:
 
 ```text
-✖ CONFIG_INVALID: Config file /app/mmk.config.js could not be imported: Unexpected token 'export'
+✖ MIGRATION_INVALID_EXPORT: Migration "20261002090000-create-carts.js" uses CommonJS (module.exports/require), but Node loads it as an ES module
+  Why: /app/package.json has "type": "module"
+  Fix: write it as export async function up(ctx) {…} and export async function down(ctx) {…}, the form `mmk create` uses here
+  Or, to keep the file unchanged (rewriting an applied migration changes its checksum): add a package.json containing { "type": "commonjs" } to /app/migrations
 ```
 
-Two small changes fix it. Write the config with `module.exports`:
-
-```js
-// mmk.config.js
-module.exports = {
-  dbName: 'shop',
-  templatePath: './mmk-template.js',
-};
-```
-
-And give `mmk create` a CommonJS template. Keep it **outside** `migrations/`, or mmk will treat the
-template as a migration:
-
-```js
-// mmk-template.js
-/** @param {import('mongo-migrate-kit').MigrationContext} ctx */
-async function up({ db }) {
-  // TODO: implement migration
-}
-
-/** @param {import('mongo-migrate-kit').MigrationContext} ctx */
-async function down({ db }) {
-  // TODO: implement rollback
-}
-
-module.exports = { description: '', author: '', up, down };
-```
-
-Every new `mmk create` now writes a CommonJS file. Templates are copied as they are, so fill in the
-`author` yourself if you use `requireAuthor`.
+Prefer the second option for migrations that have already run. Rewriting one changes its checksum,
+so `mmk status` shows it as changed and `mmk down` refuses it without `--force`.
 
 ## What you get in the context
 
@@ -222,32 +238,15 @@ that several repos share: two repos will both have a `0001-` file. See
 
 ## TypeScript
 
-mmk runs your migrations with the Node you have installed. It doesn't bundle a TypeScript compiler.
-So whether `.ts` files work depends on your Node version:
+Migrations and the config file can be TypeScript. mmk runs `.ts` files with the Node you have:
+Node 22.18 or newer runs them as they are, and older Node needs `tsx`. Node only removes types, so
+a few TypeScript features (`enum`, for one) aren't available.
 
-| Node version | `.ts` migrations |
-| --- | --- |
-| 22.18 or newer | Work out of the box. Node strips the types itself. |
-| older | Need a loader such as `tsx`, or write `.js` instead. |
-
-With an older Node, install `tsx` and run mmk through it:
-
-```bash
-npm install -D tsx
-```
-
-```json
-{
-  "scripts": {
-    "migrate": "node --import tsx node_modules/mongo-migrate-kit/dist/mmk.cjs up"
-  }
-}
-```
-
-If a `.ts` file can't be loaded, mmk says so and lists these options. See
-[When something goes wrong](/guide/troubleshooting#a-ts-migration-won-t-load).
+[TypeScript](/guide/typescript) covers it in full: setup, the types the package exports, a
+tsconfig that checks your migrations, and running TypeScript in production.
 
 ## Next
 
+Writing migrations in TypeScript? Read [TypeScript](/guide/typescript) next. Otherwise,
 [A normal day with mmk](/guide/workflow) shows how these pieces fit into everyday work: writing a
 migration, testing it, getting it reviewed and shipping it.

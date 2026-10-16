@@ -3,7 +3,7 @@ SEO target keyword: "mongodb backfill large collection migration"
 Meta description: How to write a MongoDB migration that backfills millions of documents without
 timing out, locking up production or leaving a mess when it crashes halfway: batches, bulkWrite,
 filters that let it resume, no transactions, and a lock that renews itself.
-Works with mongo-migrate-kit 1.4 and newer. Can be published any time.
+Published copy: docs/blog/mongodb-backfill-migration-large-collection.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # Backfilling millions of documents in a MongoDB migration
@@ -146,7 +146,8 @@ npx mmk create backfill-order-totals
 npx mmk up --step
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/guide/writing-migrations** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Writing migrations](https://mongo-migrate-kit.vercel.app/guide/writing-migrations). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

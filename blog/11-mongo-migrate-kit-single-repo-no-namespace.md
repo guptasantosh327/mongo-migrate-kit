@@ -2,7 +2,7 @@
 SEO target keyword: "mongo-migrate-kit namespace do I need it"
 Meta description: mongo-migrate-kit 1.5 adds namespaces for repos that share a MongoDB database. If
 your repo has its database to itself, here's exactly what changes for you: nothing.
-Requires mongo-migrate-kit 1.5. Publish after 1.5.0 is on npm.
+Published copy: docs/blog/mongo-migrate-kit-single-repo-no-namespace.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # One repo, one database? You can ignore namespaces
@@ -105,7 +105,7 @@ npm install mongo-migrate-kit@latest
 npx mmk status
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app** · npm and GitHub: **mongo-migrate-kit**.
+The [docs](https://mongo-migrate-kit.vercel.app/) have the rest. The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and [GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

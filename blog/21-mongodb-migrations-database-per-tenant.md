@@ -1,9 +1,9 @@
 <!--
 SEO target keyword: "mongodb migrations multi tenant"
 Meta description: Running the same MongoDB migrations across hundreds of tenant databases: a loop
-with runMigrations(), limited parallelism, readable logs, one tenant's failure not blocking the rest,
-and new tenants migrated on creation.
-Works with mongo-migrate-kit 1.4 and newer. Can be published any time.
+with runMigrations(), limited parallelism, readable logs, one tenant's failure not blocking the
+rest, and new tenants migrated on creation.
+Published copy: docs/blog/mongodb-migrations-database-per-tenant.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # MongoDB migrations with a database per tenant
@@ -95,13 +95,19 @@ async function migrateTenants(tenants, concurrency = 4) {
 }
 ```
 
-Output stays readable even with four tenants running at once:
+Output stays readable even with four tenants running at once. Here two tenants were already up to
+date:
 
 ```text
+[acme] Loaded config from mmk.config.js
+[globex] Loaded config from mmk.config.js
+[initech] Loaded config from mmk.config.js
+[umbrella] Loaded config from mmk.config.js
 [acme] Nothing to migrate
 [globex] Nothing to migrate
-[initech] ✔ Applied  20261012090000-backfill-order-totals.js   [0ms]
+[hooli] Loaded config from mmk.config.js
 [umbrella] ✔ Applied  20261012090000-backfill-order-totals.js   [0ms]
+[initech] ✔ Applied  20261012090000-backfill-order-totals.js   [0ms]
 [hooli] ✔ Applied  20261012090000-backfill-order-totals.js   [0ms]
 ```
 
@@ -167,7 +173,8 @@ npm install mongo-migrate-kit mongodb
 MMK_DB=tenant_acme npx mmk status
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/guide/api** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Running from your code](https://mongo-migrate-kit.vercel.app/guide/api). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

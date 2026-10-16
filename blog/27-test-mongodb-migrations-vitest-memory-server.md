@@ -3,7 +3,7 @@ SEO target keyword: "test mongodb migrations"
 Meta description: Most teams never test their MongoDB migrations, until a down() that never worked
 is needed in production. A tiny round-trip test with Vitest (or Jest) and mongodb-memory-server that
 catches it in CI.
-Works with mongo-migrate-kit 1.4 and newer. Can be published any time.
+Published copy: docs/blog/test-mongodb-migrations-vitest-memory-server.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # Testing MongoDB migrations with Vitest and mongodb-memory-server
@@ -151,7 +151,8 @@ npm install mongo-migrate-kit mongodb
 npx vitest run
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/guide/api** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Running from your code](https://mongo-migrate-kit.vercel.app/guide/api). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

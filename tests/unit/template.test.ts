@@ -1,6 +1,7 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { Script } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ConfigFileExistsError,
@@ -111,8 +112,15 @@ describe('migration template author', () => {
       sequential: true,
       js: true,
       author: 'Jane',
+      moduleFormat: 'esm',
     });
     expect(readFileSync(file, 'utf8')).toContain("export const author = 'Jane';");
+  });
+
+  it('should write the author as an object property in CommonJS templates', () => {
+    expect(defaultTemplateJs('Jane', 'cjs')).toContain("  author: 'Jane',");
+    expect(defaultTemplateTs('Jane', 'cjs')).toContain("  author: 'Jane',");
+    expect(defaultTemplateTs(undefined, 'cjs')).toContain("  author: '',");
   });
 
   it('should copy a custom template verbatim, without injecting an author', () => {
@@ -138,6 +146,7 @@ describe('resolveTemplateContent', () => {
 
 describe('createMigrationFile', () => {
   it('should create a timestamped .ts file by default', () => {
+    writeFileSync(path.join(tmp, 'package.json'), '{ "type": "module" }');
     const file = createMigrationFile({ dir: tmp, name: 'Add Index', sequential: false, js: false });
     expect(existsSync(file)).toBe(true);
     expect(file).toMatch(/\d{14}-add-index\.ts$/);
@@ -147,6 +156,102 @@ describe('createMigrationFile', () => {
   it('should create a sequential .js file when requested', () => {
     const file = createMigrationFile({ dir: tmp, name: 'First', sequential: true, js: true });
     expect(file).toMatch(/0001-first\.js$/);
+  });
+
+  it('should write CommonJS when the nearest package.json is not "type": "module"', () => {
+    writeFileSync(path.join(tmp, 'package.json'), '{ "type": "commonjs" }');
+    const js = readFileSync(
+      createMigrationFile({ dir: tmp, name: 'a', sequential: true, js: true }),
+      'utf8',
+    );
+    const ts = readFileSync(
+      createMigrationFile({ dir: tmp, name: 'b', sequential: true, js: false }),
+      'utf8',
+    );
+    expect(js).toContain('module.exports = {');
+    expect(js).not.toContain('export ');
+    expect(ts).toContain('module.exports = {');
+    expect(ts).not.toMatch(/^export /m);
+  });
+
+  it('should write an ES module when a closer package.json says "type": "module"', () => {
+    writeFileSync(path.join(tmp, 'package.json'), '{ "type": "commonjs" }');
+    const dir = path.join(tmp, 'migrations');
+    mkdirSync(dir);
+    writeFileSync(path.join(dir, 'package.json'), '{ "type": "module" }');
+    const file = createMigrationFile({ dir, name: 'a', sequential: true, js: true });
+    expect(readFileSync(file, 'utf8')).toContain('export async function up');
+  });
+
+  it('should let an explicit moduleFormat override detection', () => {
+    writeFileSync(path.join(tmp, 'package.json'), '{ "type": "module" }');
+    const file = createMigrationFile({
+      dir: tmp,
+      name: 'a',
+      sequential: true,
+      js: true,
+      moduleFormat: 'cjs',
+    });
+    expect(readFileSync(file, 'utf8')).toContain('module.exports = {');
+  });
+});
+
+describe('CommonJS templates', () => {
+  it('should export up, down and metadata through module.exports (JS)', () => {
+    const tpl = defaultTemplateJs('Jane', 'cjs');
+    expect(tpl).toContain('module.exports = {');
+    expect(tpl).toContain("  description: '',");
+    expect(tpl).toContain('  async up({ db }) {');
+    expect(tpl).toContain('  async down({ db }) {');
+    expect(tpl).not.toContain('export ');
+    // Parses as a CommonJS script — no ESM syntax slipped in
+    expect(() => new Script(tpl)).not.toThrow();
+  });
+
+  it('should keep only an erasable type import as ESM syntax (TS)', () => {
+    const tpl = defaultTemplateTs('Jane', 'cjs');
+    expect(tpl).toContain("import type { MigrationContext } from 'mongo-migrate-kit';");
+    expect(tpl).toContain('  async up({ db }: MigrationContext): Promise<void> {');
+    expect(tpl).not.toMatch(/^export /m);
+  });
+
+  it('should pass the module format through resolveTemplateContent', () => {
+    expect(resolveTemplateContent(undefined, true, 'Jane', 'cjs')).toContain('module.exports');
+    expect(resolveTemplateContent(undefined, false, 'Jane', 'cjs')).toContain('module.exports');
+  });
+
+  it('should export configs with module.exports', () => {
+    expect(defaultConfigJs({}, 'cjs')).toContain('module.exports = config;');
+    expect(defaultConfigJs({}, 'cjs')).not.toContain('export default');
+    expect(() => new Script(defaultConfigJs({}, 'cjs'))).not.toThrow();
+    expect(defaultConfigTs({}, 'cjs')).toContain('module.exports = config;');
+    expect(defaultConfigTs({}, 'cjs')).not.toContain('export default');
+  });
+
+  it('should require the SDK in CommonJS secret-provider configs', () => {
+    const js = secretConfigJs({}, 'cjs');
+    expect(js).toContain("} = require('@aws-sdk/client-secrets-manager');");
+    expect(js).toContain('module.exports = async () =>');
+    expect(js).toContain(
+      "const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');",
+    );
+    expect(js).not.toMatch(/^(import|export) /m);
+    expect(() => new Script(js)).not.toThrow();
+
+    const ts = secretConfigTs({}, 'cjs');
+    expect(ts).toContain(
+      "= require('@aws-sdk/client-secrets-manager') as typeof import('@aws-sdk/client-secrets-manager');",
+    );
+    expect(ts).toContain('module.exports = async (): Promise<Partial<MmkConfig>> =>');
+    expect(ts).not.toMatch(/^export /m);
+  });
+
+  it('should pass the module format through configTemplateContent, except for JSON', () => {
+    expect(configTemplateContent('js', {}, false, 'cjs')).toContain('module.exports');
+    expect(configTemplateContent('ts', {}, false, 'cjs')).toContain('module.exports');
+    expect(configTemplateContent('js', {}, true, 'cjs')).toContain('module.exports');
+    expect(configTemplateContent('ts', {}, true, 'cjs')).toContain('module.exports');
+    expect(configTemplateContent('json', {}, false, 'cjs')).toBe(defaultConfigJson());
   });
 });
 
@@ -253,6 +358,19 @@ describe('secret-provider config templates', () => {
 });
 
 describe('createConfigFile', () => {
+  it('should match the export syntax to the package it is written into', () => {
+    writeFileSync(path.join(tmp, 'package.json'), '{ "type": "module" }');
+    const esm = createConfigFile({ dir: tmp, format: 'js', force: false });
+    expect(readFileSync(esm, 'utf8')).toContain('export default config;');
+
+    writeFileSync(path.join(tmp, 'package.json'), '{ "name": "app" }');
+    const cjs = createConfigFile({ dir: tmp, format: 'js', force: true });
+    expect(readFileSync(cjs, 'utf8')).toContain('module.exports = config;');
+
+    const forced = createConfigFile({ dir: tmp, format: 'js', force: true, moduleFormat: 'esm' });
+    expect(readFileSync(forced, 'utf8')).toContain('export default config;');
+  });
+
   it('should write mmk.config.ts by default and return its path', () => {
     const file = createConfigFile({ dir: tmp, format: 'ts', force: false });
     expect(file).toBe(path.join(tmp, 'mmk.config.ts'));

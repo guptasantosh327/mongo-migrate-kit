@@ -3,7 +3,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MigrationFileNotFoundError, MigrationInvalidExportError } from '../../src/errors/index.js';
-import { loadMigrationFile, tsLoadErrorOrNull } from '../../src/utils/loader.js';
+import {
+  formatMismatchErrorOrNull,
+  isTypeScriptLoadFailure,
+  loadMigrationFile,
+  tsLoadErrorOrNull,
+} from '../../src/utils/loader.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = path.join(here, '..', 'fixtures', 'migrations');
@@ -151,4 +156,40 @@ describe('tsLoadErrorOrNull', () => {
     expect(result).toBeInstanceOf(MigrationInvalidExportError);
     expect(result?.context?.cause).toBe(err.message);
   });
+});
+
+describe('isTypeScriptLoadFailure', () => {
+  const unknownExt = {
+    code: 'ERR_UNKNOWN_FILE_EXTENSION',
+    message: 'Unknown file extension ".ts"',
+  };
+
+  it('should be true only for a TypeScript file that Node could not load', () => {
+    expect(isTypeScriptLoadFailure('/app/mmk.config.ts', unknownExt)).toBe(true);
+    expect(isTypeScriptLoadFailure('/app/mmk.config.mts', unknownExt)).toBe(true);
+    expect(isTypeScriptLoadFailure('/app/mmk.config.js', unknownExt)).toBe(false);
+    expect(isTypeScriptLoadFailure('/app/mmk.config.ts', new Error('boom'))).toBe(false);
+  });
+});
+
+describe('formatMismatchErrorOrNull', () => {
+  // The fixtures live in this repo, whose package.json says "type": "module"
+  const cjsInEsm = new ReferenceError('module is not defined in ES module scope');
+
+  it('should explain module.exports in a "type": "module" package', () => {
+    const result = formatMismatchErrorOrNull(path.join(fixtures, '0001-old.js'), cjsInEsm);
+    expect(result).toBeInstanceOf(MigrationInvalidExportError);
+    expect(result?.message).toContain(
+      'Migration "0001-old.js" uses CommonJS (module.exports/require), but Node loads it as an ES module',
+    );
+    expect(result?.message).toContain('"type": "module"');
+    expect(result?.context?.cause).toBe(cjsInEsm.message);
+  });
+
+  it('should return null for any other failure', () => {
+    expect(formatMismatchErrorOrNull(path.join(fixtures, 'a.js'), new Error('boom'))).toBeNull();
+  });
+
+  // loadMigrationFile's use of it is covered in tests/integration/runtime-ts.test.ts:
+  // vitest's own module loader accepts mismatched files that plain Node rejects.
 });

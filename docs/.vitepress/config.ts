@@ -45,6 +45,8 @@ interface FeedItem {
   description: string;
   slug: string;
   date: Date;
+  /** Position among posts published on the same day (series reading order) */
+  order: number;
 }
 
 /** Pull one front-matter value (unquoted, unescaped) from a raw markdown source. */
@@ -70,9 +72,10 @@ function collectBlogPosts(): FeedItem[] {
         description: frontmatterValue(src, 'description') ?? '',
         slug: file.replace(/\.md$/, ''),
         date: rawDate ? new Date(rawDate) : new Date(0),
+        order: Number(frontmatterValue(src, 'order') ?? 0),
       };
     })
-    .sort((a, b) => +b.date - +a.date);
+    .sort((a, b) => +b.date - +a.date || a.order - b.order);
 }
 
 /** Write an RSS 2.0 feed of the blog to <outDir>/blog/feed.xml at build time. */
@@ -299,6 +302,7 @@ export default defineConfig({
           items: [
             { text: 'How it works', link: '/guide/concepts' },
             { text: 'Writing migrations', link: '/guide/writing-migrations' },
+            { text: 'TypeScript', link: '/guide/typescript' },
             { text: 'A normal day with mmk', link: '/guide/workflow' },
           ],
         },
@@ -346,6 +350,83 @@ export default defineConfig({
             { text: 'Habits for safe migrations', link: '/blog/mongodb-migration-best-practices' },
           ],
         },
+        {
+          text: 'Shared databases',
+          items: [
+            {
+              text: 'Many repos, one database',
+              link: '/blog/mongodb-migrations-shared-database-many-repos',
+            },
+            {
+              text: 'One repo? Ignore namespaces',
+              link: '/blog/mongo-migrate-kit-single-repo-no-namespace',
+            },
+            {
+              text: 'Several repos, one team',
+              link: '/blog/multiple-repos-same-mongodb-database-migrations',
+            },
+            {
+              text: 'Several products, one database',
+              link: '/blog/several-products-one-mongodb-database',
+            },
+            {
+              text: 'Rolling out to 50 repos',
+              link: '/blog/rolling-out-mongodb-migrations-50-microservices',
+            },
+            {
+              text: 'Adding a namespace later',
+              link: '/blog/add-namespace-existing-repo-migrations',
+            },
+            {
+              text: 'Locking with 20 repos',
+              link: '/blog/mongodb-migration-lock-multiple-services',
+            },
+            {
+              text: 'Namespace mistakes mmk catches',
+              link: '/blog/mongodb-migration-namespace-mistakes',
+            },
+            { text: 'Monorepos', link: '/blog/mongodb-migrations-monorepo-nodejs' },
+            {
+              text: 'Leaving a shared migrate-mongo changelog',
+              link: '/blog/migrate-mongo-shared-changelog-multiple-services',
+            },
+            {
+              text: 'service vs namespace',
+              link: '/blog/mongo-migrate-kit-service-vs-namespace',
+            },
+          ],
+        },
+        {
+          text: 'Setups',
+          items: [
+            {
+              text: 'A database per tenant',
+              link: '/blog/mongodb-migrations-database-per-tenant',
+            },
+            { text: 'Kubernetes and Helm', link: '/blog/mongodb-migrations-kubernetes-job-helm' },
+            {
+              text: 'JS, TS, ESM or CommonJS',
+              link: '/blog/typescript-commonjs-esm-mongodb-migrations',
+            },
+            { text: 'Mongoose in migrations', link: '/blog/mongoose-migrations-mongodb' },
+            {
+              text: 'Secrets managers',
+              link: '/blog/mongodb-connection-string-secrets-manager-migrations',
+            },
+            {
+              text: 'Backfilling millions of documents',
+              link: '/blog/mongodb-backfill-migration-large-collection',
+            },
+            {
+              text: 'Testing migrations',
+              link: '/blog/test-mongodb-migrations-vitest-memory-server',
+            },
+            {
+              text: 'Zero-downtime schema changes',
+              link: '/blog/zero-downtime-mongodb-schema-changes-expand-contract',
+            },
+          ],
+        },
       ],
       '/reference/': [
         {
@@ -388,7 +469,14 @@ export default defineConfig({
     },
 
     // ─── Local, zero-config full-text search ─────────────────────────
-    search: { provider: 'local' },
+    search: {
+      provider: 'local',
+      options: {
+        translations: {
+          button: { buttonText: 'Search docs', buttonAriaLabel: 'Search docs' },
+        },
+      },
+    },
 
     socialLinks: [{ icon: 'github', link: repo }],
 

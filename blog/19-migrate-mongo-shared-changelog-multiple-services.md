@@ -1,9 +1,9 @@
 <!--
 SEO target keyword: "migrate-mongo shared changelog multiple services"
-Meta description: Several repos shared one migrate-mongo changelog collection. Here's how to move each
-of them to mongo-migrate-kit with its own namespace: only its own history, no mix-ups between repos,
-and nothing in the old changelog touched.
-Requires mongo-migrate-kit 1.5. Publish after 1.5.0 is on npm.
+Meta description: Several repos shared one migrate-mongo changelog collection. Here's how to move
+each of them to mongo-migrate-kit with its own namespace: only its own history, no mix-ups between
+repos, and nothing in the old changelog touched.
+Published copy: docs/blog/migrate-mongo-shared-changelog-multiple-services.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # Leaving migrate-mongo when several repos shared its changelog
@@ -41,6 +41,7 @@ Preview first. mmk matches the changelog against the files in **this repo's** mi
 
 ```text
 $ npx mmk import --dry-run
+Loaded config from mmk.config.js
 Namespace: users-api
 ⚠ Skipping 1 record(s) whose files are not in this repo — namespace "users-api" imports only its own migrations: 20250205090000-create-search-index.js
 ◎ Dry-run  Would import 2 record(s) from "changelog" → "_mmk_migrations"
@@ -59,15 +60,22 @@ Then `search-api` does the same from its own repo, and gets only its own record:
 
 ```text
 $ npx mmk import
+Loaded config from mmk.config.js
 Namespace: search-api
 ⚠ Skipping 2 record(s) whose files are not in this repo — namespace "search-api" imports only its own migrations: 20250110090000-create-users.js, 20250301090000-add-email-index.js
 ✔ Imported 1 record(s) from "changelog" → "_mmk_migrations"
+┌───────────────────────────────────────┬───────┬─────────────────────┬────────────┐
+│ Migration                             │ Batch │ Applied At          │ Checksum   │
+├───────────────────────────────────────┼───────┼─────────────────────┼────────────┤
+│ 20250205090000-create-search-index.js │ 1     │ 2025-02-05 09:01:00 │ recomputed │
+└───────────────────────────────────────┴───────┴─────────────────────┴────────────┘
 ```
 
 Each repo now has exactly its own history:
 
 ```text
 $ npx mmk status            # in users-api
+Loaded config from mmk.config.js
 Namespace: users-api
 ┌───────────────────────────────────┬─────────┬───────┬─────────────────────┬──────────┬────────┐
 │ Migration                         │ Status  │ Batch │ Applied At          │ Checksum │ Author │
@@ -99,6 +107,7 @@ mongo-migrate-kit calls `up({ db, client })`. So mmk won't try to run the old fi
 
 ```text
 $ npx mmk down
+Loaded config from mmk.config.js
 Namespace: users-api
 ✖ Cannot roll back 1 migrate-mongo-imported migration(s): 20250301090000-add-email-index.js
 These were adopted via `mmk import` (forward-only). Their files use the positional migrate-mongo signature, which mmk cannot run. Revert them manually or re-author them in mmk format.
@@ -107,10 +116,9 @@ These were adopted via `mmk import` (forward-only). Their files use the position
 
 New migrations are written in mmk's format and can be rolled back normally.
 
-**These repos are probably CommonJS.** migrate-mongo projects usually are. New migrations you create
-with `mmk create` use `export` syntax, so read
-[JS, TS, ESM or CommonJS](./23-typescript-commonjs-esm-mongodb-migrations.md) before you write the
-first one.
+**These repos are probably CommonJS.** migrate-mongo projects usually are. That's fine: `mmk create`
+reads your `package.json` and writes `module.exports` files in a CommonJS project. More in
+[JS, TS, ESM or CommonJS](./23-typescript-commonjs-esm-mongodb-migrations.md).
 
 ## The checklist
 
@@ -127,7 +135,8 @@ npm install mongo-migrate-kit mongodb
 npx mmk import --dry-run
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/guide/migrate-mongo** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Moving from migrate-mongo](https://mongo-migrate-kit.vercel.app/guide/migrate-mongo). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

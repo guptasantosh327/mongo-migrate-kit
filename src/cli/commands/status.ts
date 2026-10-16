@@ -17,11 +17,13 @@ function filesMissingNote(rows: StatusRow[]): string | undefined {
   if (missing.length === 0) {
     return undefined;
   }
-  const count = `${missing.length} applied migration${missing.length === 1 ? '' : 's'}`;
+  const one = missing.length === 1;
+  const count = `${missing.length} applied migration${one ? '' : 's'}`;
+  const have = one ? 'has' : 'have';
   const namespace = missing[0]?.namespace;
   return namespace === undefined
-    ? `ℹ ${count} have no file here (deleted files, or a changelog shared with another repo — see "namespace")`
-    : `ℹ ${count} in namespace ${quote(namespace)} have no file here (deleted files, or another repo using the same namespace, e.g. a copied config)`;
+    ? `ℹ ${count} ${have} no file here (deleted files, or a changelog shared with another repo — see "namespace")`
+    : `ℹ ${count} in namespace ${quote(namespace)} ${have} no file here (deleted files, or another repo using the same namespace, e.g. a copied config)`;
 }
 
 /** Register the `status` command */

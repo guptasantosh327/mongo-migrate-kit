@@ -665,7 +665,7 @@ describe('mmk CLI namespaces (integration)', () => {
     const status = await runCli(baseArgs(['status']));
     expect(status.code).toBe(0);
     expect(status.stdout).toContain('(no file)');
-    expect(status.stdout).toContain('1 applied migration have no file here');
+    expect(status.stdout).toContain('1 applied migration has no file here');
 
     const up = await runCli(baseArgs(['up']));
     expect(output(up)).not.toContain('no file here');

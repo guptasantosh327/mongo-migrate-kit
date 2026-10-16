@@ -2,7 +2,7 @@
 SEO target keyword: "multiple repos same mongodb database migrations"
 Meta description: Three repos, one MongoDB database, and a migration history that stays separate per
 repo. A walkthrough of mongo-migrate-kit namespaces: configs, records, batches, status and locking.
-Requires mongo-migrate-kit 1.5. Publish after 1.5.0 is on npm.
+Published copy: docs/blog/multiple-repos-same-mongodb-database-migrations.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # Several repos, one MongoDB database, one team
@@ -35,7 +35,8 @@ Use lowercase letters, digits, `.`, `_` or `-`. The repo name is the obvious cho
 
 ## Running migrations
 
-Each repo runs `mmk up` as it always did. The only visible change is one extra line at the top:
+Each repo runs `mmk up` as it always did. The only visible change is one extra line, `Namespace:`,
+near the top:
 
 ```text
 $ npx mmk up
@@ -90,6 +91,7 @@ to 4 across all three repos, and "the last batch" would belong to whoever deploy
 
 ```text
 $ npx mmk status
+Loaded config from mmk.config.js
 Namespace: orders-api
 ┌──────────────────────────────────────────┬─────────┬───────┬─────────────────────┬──────────┬────────────────────────┐
 │ Migration                                │ Status  │ Batch │ Applied At          │ Checksum │ Author                 │
@@ -106,6 +108,7 @@ When you want the whole picture, say during an incident, add `--all-namespaces`.
 
 ```text
 $ npx mmk status --all-namespaces
+Loaded config from mmk.config.js
 ┌───────────────┬──────────────────────────────────────────┬─────────┬───────┬─────────────────────┬────────────────────────┐
 │ Namespace     │ Migration                                │ Status  │ Batch │ Applied At          │ Author                 │
 ├───────────────┼──────────────────────────────────────────┼─────────┼───────┼─────────────────────┼────────────────────────┤
@@ -163,8 +166,8 @@ npm install mongo-migrate-kit mongodb
 npx mmk init --namespace orders-api
 ```
 
-The full guide is at **https://mongo-migrate-kit.vercel.app/guide/shared-database**. The package is
-**mongo-migrate-kit** on npm and GitHub.
+More in the docs: [Sharing a database](https://mongo-migrate-kit.vercel.app/guide/shared-database). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

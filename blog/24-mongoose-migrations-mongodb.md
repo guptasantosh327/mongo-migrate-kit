@@ -3,7 +3,7 @@ SEO target keyword: "mongoose migrations"
 Meta description: Your app uses Mongoose. Should your migrations? Why importing app models into
 migrations goes wrong, what to use instead, and how to pass Mongoose in safely when you really need
 it.
-Works with mongo-migrate-kit 1.4 and newer. Can be published any time.
+Published copy: docs/blog/mongoose-migrations-mongodb.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # Using Mongoose in migrations (and why you mostly shouldn't)
@@ -141,7 +141,8 @@ npm install mongo-migrate-kit mongodb
 npx mmk create backfill-user-roles
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/guide/writing-migrations** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Writing migrations](https://mongo-migrate-kit.vercel.app/guide/writing-migrations). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

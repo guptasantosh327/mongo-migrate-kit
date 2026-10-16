@@ -46,9 +46,9 @@ full history in `_mmk_migrations`.
 
 ## Does it work with TypeScript?
 
-Yes. Write `.ts` migrations and import the `MigrationContext` type for full typing. On Node 22.18 or
-newer they run as they are. On older Node, run mmk with a loader such as `tsx`, or write `.js` files.
-See [Writing migrations → TypeScript](/guide/writing-migrations#typescript).
+Yes, for both migrations and the config file, and the package ships its own types. On Node 22.18 or
+newer `.ts` files run as they are. On older Node, run mmk with a loader such as `tsx`, or write `.js`
+files. See [TypeScript](/guide/typescript).
 
 ## Does it work with Mongoose?
 

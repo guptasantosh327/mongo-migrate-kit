@@ -1,9 +1,9 @@
 <!--
 SEO target keyword: "mongodb migrations monorepo nodejs"
 Meta description: Running MongoDB migrations in a monorepo where several services each have their
-own migrations folder: one config and one namespace per service, where to run mmk from, and the
-path mistake that makes it quietly find nothing.
-Requires mongo-migrate-kit 1.5. Publish after 1.5.0 is on npm.
+own migrations folder: one config and one namespace per service, where to run mmk from, and the path
+mistake that makes it quietly find nothing.
+Published copy: docs/blog/mongodb-migrations-monorepo-nodejs.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # MongoDB migrations in a monorepo: one namespace per service
@@ -122,7 +122,8 @@ npx mmk init --namespace shop-orders
 npx mmk up
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/guide/shared-database** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Sharing a database](https://mongo-migrate-kit.vercel.app/guide/shared-database). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

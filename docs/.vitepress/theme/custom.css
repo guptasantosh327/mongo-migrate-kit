@@ -77,6 +77,51 @@
   letter-spacing: -0.02em;
 }
 
+/* ─── Search: a wide box with a border, not a small chip ──────────────── */
+@media (min-width: 768px) {
+  #local-search {
+    width: 100%;
+    max-width: 360px;
+  }
+
+  #local-search .DocSearch-Button {
+    justify-content: space-between;
+    border-color: var(--vp-c-divider);
+    height: 42px;
+    padding: 0 10px 0 14px;
+  }
+
+  #local-search .DocSearch-Search-Icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 10px;
+  }
+
+  #local-search .DocSearch-Button-Placeholder {
+    font-size: 14px;
+  }
+}
+
+/* Tablets: the top menu needs the room, so the box shrinks to its icon */
+@media (min-width: 768px) and (max-width: 959px) {
+  #local-search {
+    width: auto;
+  }
+
+  #local-search .DocSearch-Button {
+    padding: 0 12px;
+  }
+
+  #local-search .DocSearch-Search-Icon {
+    margin-right: 0;
+  }
+
+  #local-search .DocSearch-Button-Placeholder,
+  #local-search .DocSearch-Button-Keys {
+    display: none;
+  }
+}
+
 /* ─── Home feature cards: glow on hover (clickable, no layout shift) ───── */
 .VPFeatures .VPFeature {
   transition:
@@ -133,10 +178,11 @@
 }
 
 /* ─── Home page sections below the feature cards ───────────────────────── */
+/* VitePress already pads the home content, so no padding here: the sections line up with the
+   feature cards above them. */
 .home-section {
   max-width: 1152px;
   margin: 0 auto;
-  padding: 0 24px;
 }
 
 .home-section h2 {
@@ -145,22 +191,15 @@
   padding-top: 0;
 }
 
+/* VitePress puts the # 24px down to match its own h2 padding, which we removed above */
+.home-section h2 .header-anchor {
+  top: 0;
+}
+
 .home-section .lead {
   font-size: 1.05rem;
   color: var(--vp-c-text-2);
   max-width: 46rem;
-}
-
-@media (min-width: 640px) {
-  .home-section {
-    padding: 0 48px;
-  }
-}
-
-@media (min-width: 960px) {
-  .home-section {
-    padding: 0 64px;
-  }
 }
 
 /* The four-step learning path on the home page and on /guide/ */
@@ -194,6 +233,35 @@ ol.path,
   border-radius: 12px;
   background: var(--vp-c-bg-soft);
   counter-increment: step;
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+/* Same hover as the feature cards */
+.path > li:hover,
+.path > li:focus-within {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: 0 8px 24px rgba(0, 104, 74, 0.14);
+}
+
+.dark .path > li:hover,
+.dark .path > li:focus-within {
+  box-shadow: 0 8px 24px rgba(0, 237, 100, 0.12);
+}
+
+/* A click anywhere on a card opens its first link. Cards with more links (on /guide/) keep the
+   others clickable on top of it. */
+.path a.step-link:first-of-type::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+}
+
+.path a.step-link ~ a.step-link {
+  position: relative;
+  z-index: 1;
 }
 
 .path > li::before {

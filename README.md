@@ -41,7 +41,8 @@ name.
 - **Audit trail kept** — a rollback updates the record, it never deletes it.
 - **Lifecycle hooks** — `beforeAll`, `afterAll`, `beforeEach`, `afterEach`, `onError`.
 - **Opt-in transactions** — wrap a migration so it fully commits or fully aborts.
-- **TypeScript, ESM & CommonJS** — all run with no `ts-node` plumbing.
+- **TypeScript, ESM & CommonJS** — all run with no `ts-node` plumbing, and the package ships its
+  own types ([TypeScript guide](https://mongo-migrate-kit.vercel.app/guide/typescript)).
 - **Zero config files required** — drive everything from env vars if you prefer.
 
 ## Quick start
@@ -55,7 +56,8 @@ npx mmk init                                  # writes mmk.config.js, set your u
 npx mmk create add-users-email-index          # makes migrations/<timestamp>-add-users-email-index.js
 ```
 
-Fill in the file:
+Fill in the file (shown here as an ES module; in a CommonJS project mmk writes the same thing as
+`module.exports = { … }`):
 
 ```js
 export const description = 'Unique index on users.email';
@@ -88,8 +90,9 @@ $ npx mmk down
 
 No config file? `MMK_URI` and `MMK_DB` in your environment (or a `.env` file) are enough.
 
-The generated files use `export`, so your `package.json` needs `"type": "module"`. For a CommonJS
-project, see [CommonJS projects](https://mongo-migrate-kit.vercel.app/guide/writing-migrations#commonjs-projects).
+ES modules or CommonJS: the generated files match your `package.json` (`export` for
+`"type": "module"`, `module.exports` otherwise), so they run without changes. See
+[ES modules or CommonJS](https://mongo-migrate-kit.vercel.app/guide/writing-migrations#es-modules-or-commonjs).
 
 **Next:** the [tutorial](https://mongo-migrate-kit.vercel.app/guide/tutorial) walks through a
 realistic example in about 15 minutes.
@@ -200,7 +203,8 @@ at runtime. All settings and environment variables are on the
 
 ## Requirements
 
-- Node.js 18 or newer. For `.ts` migrations without a loader, Node 22.18 or newer.
+- Node.js 18 or newer. For `.ts` migrations or `mmk.config.ts` without a loader, Node 22.18 or
+  newer (see the [TypeScript guide](https://mongo-migrate-kit.vercel.app/guide/typescript)).
 - The `mongodb` driver, version 5 or newer (a peer dependency).
 - MongoDB server 4.2 or newer. Transactions need a replica set or a sharded cluster.
 - `mongoose` 7 or newer, only if your migrations use it.

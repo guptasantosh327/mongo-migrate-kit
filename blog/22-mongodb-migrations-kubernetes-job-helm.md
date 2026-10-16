@@ -3,7 +3,7 @@ SEO target keyword: "mongodb migrations kubernetes"
 Meta description: Where should MongoDB migrations run on Kubernetes: a Job, a Helm hook, an init
 container, or the app itself? The trade-offs, working manifests, and the production-image problem
 that breaks most first attempts.
-Works with mongo-migrate-kit 1.4 and newer. Can be published any time.
+Published copy: docs/blog/mongodb-migrations-kubernetes-job-helm.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # MongoDB migrations on Kubernetes: Job, Helm hook or init container?
@@ -144,7 +144,8 @@ npm install mongo-migrate-kit mongodb
 npm pkg set scripts.migrate="mmk up"
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/guide/ci-cd** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Deploying and CI](https://mongo-migrate-kit.vercel.app/guide/ci-cd). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

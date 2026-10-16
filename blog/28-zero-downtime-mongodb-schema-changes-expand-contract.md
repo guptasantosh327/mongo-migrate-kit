@@ -3,7 +3,7 @@ SEO target keyword: "mongodb zero downtime migration"
 Meta description: Migrations run before the new code is live, so for a few minutes old code runs
 against the new data. The expand-and-contract pattern for MongoDB (renaming a field, adding a
 required field, adding a unique index) without downtime or broken rollbacks.
-Works with mongo-migrate-kit 1.4 and newer. Can be published any time.
+Published copy: docs/blog/zero-downtime-mongodb-schema-changes-expand-contract.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # Zero-downtime MongoDB schema changes: expand, migrate, contract
@@ -147,7 +147,8 @@ npx mmk create add-full-name
 npx mmk dry-run up
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/guide/writing-migrations** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Writing migrations](https://mongo-migrate-kit.vercel.app/guide/writing-migrations). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

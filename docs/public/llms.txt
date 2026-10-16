@@ -22,7 +22,8 @@ Key facts:
 - [Quick start](https://mongo-migrate-kit.vercel.app/guide/getting-started): Install, create, run, check and roll back a first migration in five minutes
 - [Tutorial: your first migration](https://mongo-migrate-kit.vercel.app/guide/tutorial): A slower walkthrough with a collection, a backfill, a dry run and a rollback
 - [How it works](https://mongo-migrate-kit.vercel.app/guide/concepts): The history collection, batches, the lock, checksums and failures, with diagrams
-- [Writing migrations](https://mongo-migrate-kit.vercel.app/guide/writing-migrations): The file format, the migration context, CommonJS projects, TypeScript and good habits
+- [Writing migrations](https://mongo-migrate-kit.vercel.app/guide/writing-migrations): The file format, ES modules or CommonJS, the migration context and good habits
+- [TypeScript](https://mongo-migrate-kit.vercel.app/guide/typescript): Which Node runs .ts files, the syntax that works, the exported types, a tsconfig for migrations, and production setups
 - [A normal day with mmk](https://mongo-migrate-kit.vercel.app/guide/workflow): The everyday workflow from writing a migration to rolling back a bad release
 - [Configuration](https://mongo-migrate-kit.vercel.app/guide/configuration): Config files, environment variables, flags, secret managers and config errors
 - [Deploying and CI](https://mongo-migrate-kit.vercel.app/guide/ci-cd): GitHub Actions, testing migrations on pull requests, Docker, Kubernetes and JSON output
@@ -62,3 +63,28 @@ Key facts:
 - [Running MongoDB migrations on app start and in serverless](https://mongo-migrate-kit.vercel.app/blog/run-migrations-on-startup-serverless): runMigrations() with waiting for the lock
 - [MongoDB migrations in GitHub Actions](https://mongo-migrate-kit.vercel.app/blog/mongodb-migrations-ci-cd-github-actions): Testing, gating and running migrations in a pipeline
 - [Habits that make MongoDB migrations safe](https://mongo-migrate-kit.vercel.app/blog/mongodb-migration-best-practices): Reversible migrations, batches, expand and contract, and more
+
+Shared databases (1.5):
+
+- [Many repos, one MongoDB database](https://mongo-migrate-kit.vercel.app/blog/mongodb-migrations-shared-database-many-repos): What breaks when repos share one migration history, and the namespace setting that fixes it
+- [One repo, one database? You can ignore namespaces](https://mongo-migrate-kit.vercel.app/blog/mongo-migrate-kit-single-repo-no-namespace): What 1.5 changes for a single repo (nothing)
+- [Several repos, one MongoDB database, one team](https://mongo-migrate-kit.vercel.app/blog/multiple-repos-same-mongodb-database-migrations): Namespaces end to end: configs, records, batches, status and locking
+- [Several products in one MongoDB database](https://mongo-migrate-kit.vercel.app/blog/several-products-one-mongodb-database): A history collection per product, a namespace per repo, and MongoDB roles
+- [Rolling out mongo-migrate-kit to 50 repos](https://mongo-migrate-kit.vercel.app/blog/rolling-out-mongodb-migrations-50-microservices): Naming rules, configs, CI and the rollout order
+- [Adding a namespace to a repo that already ran migrations](https://mongo-migrate-kit.vercel.app/blog/add-namespace-existing-repo-migrations): NAMESPACE_UNADOPTED and mmk namespace adopt
+- [How locking works when 20 repos share one database](https://mongo-migrate-kit.vercel.app/blog/mongodb-migration-lock-multiple-services): One lock per database, holder TTLs, renewal and unlock
+- [The namespace mistakes mongo-migrate-kit catches for you](https://mongo-migrate-kit.vercel.app/blog/mongodb-migration-namespace-mistakes): Five mistakes and the exact messages
+- [MongoDB migrations in a monorepo](https://mongo-migrate-kit.vercel.app/blog/mongodb-migrations-monorepo-nodejs): One config and one namespace per service, and where to run mmk from
+- [Leaving migrate-mongo when several repos shared its changelog](https://mongo-migrate-kit.vercel.app/blog/migrate-mongo-shared-changelog-multiple-services): mmk import per repo, with namespaces
+- [service is deprecated, use namespace](https://mongo-migrate-kit.vercel.app/blog/mongo-migrate-kit-service-vs-namespace): The difference, and how to switch safely
+
+Setups:
+
+- [MongoDB migrations with a database per tenant](https://mongo-migrate-kit.vercel.app/blog/mongodb-migrations-database-per-tenant): runMigrations() in a loop, with a small pool and per-tenant logs
+- [MongoDB migrations on Kubernetes](https://mongo-migrate-kit.vercel.app/blog/mongodb-migrations-kubernetes-job-helm): Job, Helm hook, init container or app start, and the production-image trap
+- [JS, TS, ESM or CommonJS](https://mongo-migrate-kit.vercel.app/blog/typescript-commonjs-esm-mongodb-migrations): Which migration files run in production, on which Node versions
+- [Using Mongoose in migrations](https://mongo-migrate-kit.vercel.app/blog/mongoose-migrations-mongodb): Why app models don't belong in migrations, and how to pass Mongoose in safely
+- [Loading your migration connection string from a secret manager](https://mongo-migrate-kit.vercel.app/blog/mongodb-connection-string-secrets-manager-migrations): AWS, Google, Vault and Azure
+- [Backfilling millions of documents in a MongoDB migration](https://mongo-migrate-kit.vercel.app/blog/mongodb-backfill-migration-large-collection): Cursors, bulkWrite, resumable filters and no transactions
+- [Testing MongoDB migrations with Vitest and mongodb-memory-server](https://mongo-migrate-kit.vercel.app/blog/test-mongodb-migrations-vitest-memory-server): An up, down, up round-trip test for CI
+- [Zero-downtime MongoDB schema changes](https://mongo-migrate-kit.vercel.app/blog/zero-downtime-mongodb-schema-changes-expand-contract): Expand, migrate, contract

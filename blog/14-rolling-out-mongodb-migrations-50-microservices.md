@@ -3,7 +3,7 @@ SEO target keyword: "mongodb migrations many microservices"
 Meta description: A practical plan for rolling out one MongoDB migration tool across fifty repos and
 three shared databases: the inventory, naming rules, configs, CI, and the order that saves you
 cleanup work.
-Requires mongo-migrate-kit 1.5. Publish after 1.5.0 is on npm.
+Published copy: docs/blog/rolling-out-mongodb-migrations-50-microservices.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # Rolling out mongo-migrate-kit to 50 repos
@@ -156,7 +156,8 @@ npm install mongo-migrate-kit mongodb
 npx mmk init --namespace <repo-name>
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/guide/shared-database** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [Sharing a database](https://mongo-migrate-kit.vercel.app/guide/shared-database). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

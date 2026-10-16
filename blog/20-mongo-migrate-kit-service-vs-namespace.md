@@ -1,9 +1,9 @@
 <!--
 SEO target keyword: "mongo-migrate-kit service namespace"
-Meta description: mongo-migrate-kit 1.5 deprecates the `service` setting in favour of `namespace`.
-They sound alike but do different things. Here's the difference, why `service` couldn't be fixed,
-and how to switch safely.
-Requires mongo-migrate-kit 1.5. Publish after 1.5.0 is on npm.
+Meta description: mongo-migrate-kit 1.5 deprecates the service setting in favour of namespace. They
+sound alike but do different things. Here's the difference, why service couldn't be fixed, and how
+to switch safely.
+Published copy: docs/blog/mongo-migrate-kit-service-vs-namespace.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # `service` is deprecated, use `namespace` (they're not the same)
@@ -107,7 +107,8 @@ npm install mongo-migrate-kit@latest
 npx mmk namespace adopt --dry-run
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/commands/namespace** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [mmk namespace adopt](https://mongo-migrate-kit.vercel.app/commands/namespace). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

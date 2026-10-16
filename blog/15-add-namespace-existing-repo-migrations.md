@@ -1,9 +1,9 @@
 <!--
 SEO target keyword: "split shared migrations collection"
-Meta description: Your repo ran migrations before it had a namespace, and now its database is shared.
-Here's how mongo-migrate-kit protects you from re-running them, and how to move the old records over
-with one command.
-Requires mongo-migrate-kit 1.5. Publish after 1.5.0 is on npm.
+Meta description: Your repo ran migrations before it had a namespace, and now its database is
+shared. Here's how mongo-migrate-kit protects you from re-running them, and how to move the old
+records over with one command.
+Published copy: docs/blog/add-namespace-existing-repo-migrations.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # Adding a namespace to a repo that already ran migrations
@@ -49,6 +49,7 @@ In the `billing` namespace, those two old records don't exist yet. A simpler too
 
 ```text
 $ npx mmk up
+Loaded config from mmk.config.js
 Namespace: billing
 ✖ NAMESPACE_UNADOPTED: 2 migrations in this folder were applied before this repo had a namespace
   Their records have no namespace yet, so in namespace "billing" they would look pending (and `mmk up` would run them a second time)
@@ -66,6 +67,7 @@ fooled into thinking those migrations are pending either.
 
 ```text
 $ npx mmk status
+Loaded config from mmk.config.js
 Namespace: billing
 ⚠ 2 file(s) here have records from before this repo had a namespace — they are applied, not pending. Run `mmk namespace adopt` to move them into "billing"
 ┌───────────────────────────────────────────┬───────────┬───────┬────────────┬──────────┬────────┐
@@ -83,6 +85,7 @@ Namespace: billing
 
 ```text
 $ npx mmk namespace adopt --dry-run
+Loaded config from mmk.config.js
 Namespace: billing
 ◎ Dry-run  Would adopt 2 record(s) into namespace "billing"
 ┌───────────────────────────────────────────┬─────────┬───────┬─────────────────────┬─────────────┬─────────┐
@@ -102,9 +105,17 @@ old records. Read them and make sure these really are this repo's migrations.
 
 ```text
 $ npx mmk namespace adopt
+Loaded config from mmk.config.js
 Namespace: billing
 ✔ Adopted 2 record(s) into namespace "billing"
 1 record(s) without a namespace were left as they are — no file with that name is in this repo (deleted long ago, or another repo's)
+┌───────────────────────────────────────────┬─────────┬───────┬─────────────────────┬─────────────┬─────────┐
+│ Migration                                 │ Status  │ Batch │ Applied At          │ Executed By │ Service │
+├───────────────────────────────────────────┼─────────┼───────┼─────────────────────┼─────────────┼─────────┤
+│ 20260601090000-create-payments-indexes.js │ applied │ 1     │ 2026-06-01 09:00:03 │ deploy      │ billing │
+├───────────────────────────────────────────┼─────────┼───────┼─────────────────────┼─────────────┼─────────┤
+│ 20260715090000-add-refund-status.js       │ applied │ 1     │ 2026-07-15 09:00:02 │ deploy      │ billing │
+└───────────────────────────────────────────┴─────────┴───────┴─────────────────────┴─────────────┴─────────┘
 ```
 
 The records keep their batch numbers, dates and checksums. Only the `namespace` field is added. Now
@@ -112,6 +123,7 @@ the repo runs normally:
 
 ```text
 $ npx mmk up
+Loaded config from mmk.config.js
 Namespace: billing
 ✔ Applied  20261012090000-add-payout-schedule.js   [1ms]
 ```
@@ -141,7 +153,8 @@ npx mmk namespace adopt --dry-run
 npx mmk namespace adopt
 ```
 
-Docs: **https://mongo-migrate-kit.vercel.app/commands/namespace** · npm and GitHub: **mongo-migrate-kit**.
+More in the docs: [mmk namespace adopt](https://mongo-migrate-kit.vercel.app/commands/namespace). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

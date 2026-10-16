@@ -3,7 +3,7 @@ SEO target keyword: "mongodb migrations shared database multiple services"
 Meta description: When several repos run migrations against one MongoDB database, they share one
 history and start stepping on each other. What breaks, how other tools handle it, and the one
 setting that fixes it in mongo-migrate-kit.
-Requires mongo-migrate-kit 1.5. Publish after 1.5.0 is on npm.
+Published copy: docs/blog/mongodb-migrations-shared-database-many-repos.md (edit that one first, then run node scripts/blog-sync.mjs).
 -->
 
 # Many repos, one MongoDB database: migrations that don't step on each other
@@ -120,8 +120,8 @@ npm install mongo-migrate-kit mongodb
 npx mmk init --namespace orders-api
 ```
 
-The full guide is at **https://mongo-migrate-kit.vercel.app/guide/shared-database**. The package is
-**mongo-migrate-kit** on npm and GitHub.
+More in the docs: [Sharing a database](https://mongo-migrate-kit.vercel.app/guide/shared-database). The package is on [npm](https://www.npmjs.com/package/mongo-migrate-kit) and
+[GitHub](https://github.com/guptasantosh327/mongo-migrate-kit).
 
 ---
 

@@ -161,5 +161,5 @@ the record. See [Transactions](/guide/transactions).
 
 ## Next
 
-[Writing migrations](/guide/writing-migrations) covers the file format in full, TypeScript, and the
-habits that make migrations easy to roll back.
+[Writing migrations](/guide/writing-migrations) covers the file format in full and the habits that
+make migrations easy to roll back. Using TypeScript? See [TypeScript](/guide/typescript) too.

@@ -1,4 +1,5 @@
 import { execSync, spawn } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -29,9 +30,12 @@ interface CliResult {
 }
 
 /** Run the built binary under the current (plain) Node — never tsx */
-function runBuilt(args: string[], cwd: string): Promise<CliResult> {
+function runBuilt(args: string[], cwd: string, nodeFlags: string[] = []): Promise<CliResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [builtBin, ...args], { cwd, env: { ...process.env } });
+    const child = spawn(process.execPath, [...nodeFlags, builtBin, ...args], {
+      cwd,
+      env: { ...process.env },
+    });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (chunk) => {
@@ -105,5 +109,89 @@ describe('shipped binary under plain node (no tsx)', () => {
       expect(`${result.stdout}${result.stderr}`).toContain('TypeScript');
       expect(await mongo.db.collection('rt_ts').countDocuments()).toBe(0);
     }
+  });
+
+  // On a type-stripping Node, switch it off to see what an older Node user sees.
+  const noTypeStripping = nodeStripsTypes ? ['--no-experimental-strip-types'] : [];
+
+  it('should explain a .ts config on a Node that cannot run TypeScript', async () => {
+    project.write('mmk.config.ts', "export default { dbName: 'x' };\n");
+
+    const result = await runBuilt(['--uri', mongo.uri, 'status'], project.dir, noTypeStripping);
+
+    expect(result.code).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      `Config file mmk.config.ts is TypeScript, and this Node (${process.version}) can't run TypeScript by itself`,
+    );
+    expect(result.stdout + result.stderr).toContain('Or use a JavaScript config: mmk init --js');
+  });
+
+  it('should explain a .ts migration on a Node that cannot run TypeScript', async () => {
+    project.write('0003-ts.ts', tsMigration);
+
+    const result = await runBuilt(args(['up', '0003-ts.ts']), project.dir, noTypeStripping);
+
+    expect(result.code).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      'Cannot load TypeScript migration "0003-ts.ts" — this Node runtime cannot import .ts files',
+    );
+    expect(await mongo.db.collection('rt_ts').countDocuments()).toBe(0);
+  });
+});
+
+// The test project sits inside this repo, whose package.json is "type": "module";
+// each case below gets its own package.json so the scope is the one under test.
+describe('generated files in a CommonJS project (plain node)', () => {
+  function commonjsApp(): string {
+    const root = path.join(project.dir, 'app');
+    mkdirSync(root);
+    writeFileSync(path.join(root, 'package.json'), '{ "type": "commonjs" }');
+    return root;
+  }
+
+  it('should init, create and apply without any manual edits', async () => {
+    const root = commonjsApp();
+    const db = ['--uri', mongo.uri, '--db', DB];
+    expect((await runBuilt(['init', ...db], root)).code).toBe(0);
+    expect(readFileSync(path.join(root, 'mmk.config.js'), 'utf8')).toContain(
+      'module.exports = config;',
+    );
+    expect((await runBuilt(['create', 'add-js', '--js'], root)).code).toBe(0);
+    if (nodeStripsTypes) {
+      expect((await runBuilt(['create', 'add-ts', '--ts'], root)).code).toBe(0);
+    }
+
+    const result = await runBuilt(['up'], root);
+
+    expect(result.code).toBe(0);
+    expect(await mongo.db.collection('_mmk_migrations').countDocuments()).toBe(
+      nodeStripsTypes ? 2 : 1,
+    );
+  });
+
+  it('should explain an ES module migration that Node loads as CommonJS', async () => {
+    const root = commonjsApp();
+    mkdirSync(path.join(root, 'migrations'));
+    writeFileSync(path.join(root, 'migrations', '0001-old.js'), insertMigration('rt_old', 'x'));
+
+    const result = await runBuilt(['--uri', mongo.uri, '--db', DB, 'up'], root);
+
+    expect(result.code).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      'Migration "0001-old.js" uses ES module syntax (export/import), but Node loads it as CommonJS',
+    );
+    expect(await mongo.db.collection('rt_old').countDocuments()).toBe(0);
+  });
+
+  it('should explain an `export default` config that Node loads as CommonJS', async () => {
+    const root = commonjsApp();
+    writeFileSync(path.join(root, 'mmk.config.js'), "export default { dbName: 'x' };\n");
+
+    const result = await runBuilt(['--uri', mongo.uri, 'status'], root);
+
+    expect(result.code).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      'CONFIG_INVALID: Config file "mmk.config.js" uses ES module syntax (export/import)',
+    );
   });
 });

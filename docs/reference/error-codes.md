@@ -47,13 +47,13 @@ examples of the common ones.
 | --- | --- | --- | --- |
 | `MIGRATION_FILE_NOT_FOUND` | `MigrationFileNotFoundError` | A named file (or `--template`) doesn't exist. | The message shows where mmk looked, the closest match, and the files that are there. |
 | `MIGRATION_INVALID_NAME` | `MigrationInvalidNameError` | The name is a path (it has `/` or `..`), not a plain file name. | Pass just the file name. |
-| `MIGRATION_INVALID_EXPORT` | `MigrationInvalidExportError` | `up` or `down` is missing or isn't a function. Also raised by `requireAuthor` when files have no author. | The message says which export is wrong and lists what it found. For `requireAuthor`, it lists every file without an author. Nothing ran. |
+| `MIGRATION_INVALID_EXPORT` | `MigrationInvalidExportError` | `up` or `down` is missing or isn't a function. Also raised when the file can't be loaded: it's `.ts` on a Node that can't run TypeScript, or it uses `export` where Node expects `module.exports` (or the other way round). And by `requireAuthor` when files have no author. | The message says which export is wrong and lists what it found. For a file that won't load, it names the cause and the fix (see [ES modules or CommonJS](/guide/writing-migrations#es-modules-or-commonjs) and [TypeScript](/guide/typescript)). For `requireAuthor`, it lists every file without an author. Nothing ran. |
 
 ## Settings and commands
 
 | Code | Class | Cause | What to do |
 | --- | --- | --- | --- |
-| `CONFIG_INVALID` | `ConfigInvalidError` | A setting is missing, has a bad value, or isn't a real setting. | Read the numbered list. Each item has the setting, the value read, where it came from, and how to set it. Also on `error.context.issues`. |
+| `CONFIG_INVALID` | `ConfigInvalidError` | A setting is missing, has a bad value, or isn't a real setting. Also raised when the config file itself can't be loaded: bad JSON, the wrong module style, a `.ts` config on a Node that can't run TypeScript, or a config function that throws. | Read the numbered list. Each item has the setting, the value read, where it came from, and how to set it. Also on `error.context.issues`. A file that won't load gets one message naming the file, the cause and the fix. |
 | `INVALID_ARGUMENT` | `InvalidArgumentError` | Something you typed is wrong: a bad `--batch`, flags that can't go together, an empty name. | Read the `Received:` and `Try:` lines. This is about the command, not the config. |
 | `CONFIG_FILE_EXISTS` | `ConfigFileExistsError` | `mmk init` found a config file already. | Add `--force` to replace it. |
 | `CONNECTION_FAILED` | `ConnectionFailedError` | mmk couldn't connect, or the server is older than MongoDB 4.2. | The message has the driver's reason (DNS, auth, timeout), with the password hidden. |
