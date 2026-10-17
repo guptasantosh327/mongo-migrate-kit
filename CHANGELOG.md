@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Docs
+
+- **mmk for VS Code** (`/guide/vscode`): installing the extension, environments and read-only
+  database users, editing applied migrations, rollback tests and lint, and which mongo-migrate-kit
+  version each feature needs.
+
 ## v1.5.0
 
 Several repos, one database: give each repo a `namespace`.
