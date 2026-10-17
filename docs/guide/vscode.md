@@ -1,13 +1,13 @@
 ---
 title: mmk for VS Code
-description: Create, run, roll back and test mongo-migrate-kit migrations from VS Code, compare your branch with staging and prod, and get a warning while you edit a migration that already ran.
+description: Create, run and roll back mongo-migrate-kit migrations from VS Code, compare your branch with staging and prod, and get a warning while you edit a migration that already ran.
 ---
 
 # mmk for VS Code
 
 **mmk for VS Code** puts your migrations in the editor: a sidebar of what's pending and applied,
-run links above `up()` and `down()`, a comparison of your branch with staging and prod, a warning
-while you edit a migration that already ran, and rollback tests in Test Explorer.
+run links above `up()` and `down()`, a comparison of your branch with staging and prod, and a
+warning while you edit a migration that already ran.
 
 It's a window onto the `mmk` command, not a second implementation. It runs **your project's own**
 mongo-migrate-kit from `node_modules`, with your config file, your `.env` and your Node.js, and
@@ -100,25 +100,13 @@ the change as a new migration.
 
 This needs mongo-migrate-kit 1.6.0 or later, whose `mmk status` reports the recorded checksum.
 
-## Rollback tests and lint
-
-**Test Explorer** lists every migration with its `up`, `down` and `up again` steps. Running them runs
-`mmk test-rollback`, which does all of it on a temporary database on the same server and drops it
-afterwards; your database isn't touched. A failure shows mmk's message at the line that threw.
-
-**Lint findings** from `mmk lint` show in the editor and the Problems panel: an empty `down()`, an
-`updateMany` or `deleteMany` without a filter, a transaction the writes don't take part in, an index
-without a name.
-
-Both need mongo-migrate-kit 1.6.0 or later. With an older version, Test Explorer says so.
-
 ## Which mongo-migrate-kit version
 
 | mongo-migrate-kit | What works |
 | --- | --- |
 | older than 1.5.0 | Nothing: the extension asks you to update. |
 | 1.5.x | Local workflow, environments and the comparison (with a database user that can write). |
-| 1.6.0 or later | Everything: also read-only database users, warnings while editing applied migrations, rollback tests and lint. |
+| 1.6.0 or later | Everything: also read-only database users and warnings while editing applied migrations. |
 
 Update with `npm install --save-dev mongo-migrate-kit@latest`.
 
