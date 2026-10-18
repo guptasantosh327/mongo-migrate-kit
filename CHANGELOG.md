@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`StatusRow.checksum`**: the SHA-256 recorded when the migration was applied, on every applied
+  row of `status`, `list` and `dry-run` (and their `--json` output). `checksumOk` already said
+  whether the file still matches; now tools can see the value itself, e.g. to compare it with
+  unsaved editor text or to find the commit whose version of the file ran. Absent on pending rows,
+  and on an `mmk import` record that has no checksum.
 - **`connect({ readOnly: true })`** (`ConnectOptions`, exported): connects without writing anything.
 
 ### Changed

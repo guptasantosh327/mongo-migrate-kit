@@ -525,6 +525,34 @@ describe('mmk CLI (integration)', () => {
     expect(parsed[0]).toMatchObject({ file: '0001-a.ts', status: 'applied' });
   });
 
+  it('should emit every StatusRow field, with the recorded checksum, in status and list --json', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    await runCli(baseArgs(['up', '0001-a.ts']));
+    const applied = {
+      file: '0001-a.ts',
+      status: 'applied',
+      batch: 1,
+      appliedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      duration: expect.any(Number),
+      checksumOk: true,
+      checksum: expect.stringMatching(/^[0-9a-f]{64}$/),
+    };
+    const pending = {
+      file: '0002-b.ts',
+      status: 'pending',
+      batch: null,
+      appliedAt: null,
+      duration: null,
+      checksumOk: null,
+    };
+
+    const status = await runCli(baseArgs(['status', '--json']));
+    expect(JSON.parse(status.stdout)).toEqual([applied, pending]);
+    const list = await runCli(baseArgs(['list', '--applied', '--json']));
+    expect(JSON.parse(list.stdout)).toEqual([applied]);
+  });
+
   it('should emit a JSON error object and exit 1 on failure with --json', async () => {
     project.write('0001-x.ts', failingMigration());
     const result = await runCli(baseArgs(['up', '--json']));

@@ -1469,6 +1469,7 @@ export class MigratorKit {
       appliedAt: isApplied && record ? record.appliedAt : null,
       duration: isApplied && record ? record.duration : null,
       checksumOk,
+      ...(isApplied && record?.checksum ? { checksum: record.checksum } : {}),
       ...(record?.description ? { description: record.description } : {}),
       ...(isApplied && record?.author ? { author: record.author } : {}),
       ...(this.config?.namespace !== undefined ? { namespace: this.config.namespace } : {}),

@@ -287,6 +287,12 @@ export interface StatusRow {
   duration: number | null;
   /** null = never applied, true = match, false = mismatch */
   checksumOk: boolean | null;
+  /**
+   * SHA-256 (hex) of the file as it was applied, from its changelog record — the
+   * value `checksumOk` compares the file on disk with. Only on applied rows, and
+   * absent when the record has none (an `mmk import` record whose file was gone)
+   */
+  checksum?: string;
   description?: string;
   /** Who wrote the migration, as recorded when it was applied */
   author?: string;

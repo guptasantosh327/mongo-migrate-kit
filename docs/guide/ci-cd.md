@@ -185,7 +185,13 @@ npx mmk list --pending --json | jq length
 
 # names of the files this run applied
 npx mmk up --json | jq -r '.[] | select(.status == "applied") | .file'
+
+# files edited after they ran, with the checksum each one ran with
+npx mmk status --json | jq -r '.[] | select(.checksumOk == false) | "\(.file) \(.checksum)"'
 ```
+
+The checksum is the SHA-256 of the file's text, so `sha256sum <file>` (or `git show <commit>:<file> |
+sha256sum`) gives a value you can compare with it.
 
 When a command fails in JSON mode, it prints `{ "error": { "code": "...", "message": "..." } }` and
 exits `1`. The `code` values are listed in [Error codes](/reference/error-codes).
