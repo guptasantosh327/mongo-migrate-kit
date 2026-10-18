@@ -317,4 +317,53 @@ describe('MigratorKit.up (integration)', () => {
       MigrationInvalidExportError,
     );
   });
+
+  it('should list the files that ran before a failure in the error context', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    project.write('0003-x.ts', failingMigration());
+    const error = await migrator.up().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(MigrationExecutionFailedError);
+    expect((error as MigrationExecutionFailedError).context).toMatchObject({
+      name: '0003-x.ts',
+      direction: 'up',
+      results: [
+        { file: '0001-a.ts', status: 'applied', duration: expect.any(Number), batch: 1 },
+        { file: '0002-b.ts', status: 'applied', duration: expect.any(Number), batch: 1 },
+        {
+          file: '0003-x.ts',
+          status: 'error',
+          error: expect.stringContaining('intentional failure'),
+        },
+      ],
+    });
+  });
+
+  it('should list the files that ran when a file fails to load mid-run', async () => {
+    setup();
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-no-down.ts', 'export async function up() {}\n');
+    const error = await migrator.up().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(MigrationInvalidExportError);
+    // It failed before its up() started, so there is no error row for it.
+    expect((error as MigrationInvalidExportError).context?.results).toEqual([
+      { file: '0001-a.ts', status: 'applied', duration: expect.any(Number), batch: 1 },
+    ]);
+  });
+
+  it('should leave an error that is not an MmkError as it was', async () => {
+    project = makeProject();
+    const hookError = new Error('hook failed');
+    migrator = makeMigrator(mongo.uri, DB, project.dir, {
+      hooks: {
+        beforeEach: async () => {
+          throw hookError;
+        },
+      },
+    });
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    await expect(migrator.up()).rejects.toBe(hookError);
+    expect(Object.keys(hookError)).not.toContain('context');
+  });
 });

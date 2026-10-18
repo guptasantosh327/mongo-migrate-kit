@@ -12,6 +12,7 @@ import {
   MigrationInvalidExportError,
   MigrationInvalidNameError,
   MigrationNameConflictError,
+  MmkError,
   NamespaceUnadoptedError,
   NotAppliedError,
   TransactionsUnsupportedError,
@@ -19,6 +20,8 @@ import {
 import type {
   AdoptResult,
   AdoptRow,
+  ConfigSource,
+  ConfigSummary,
   ImportChecksumSource,
   ImportResult,
   ImportRow,
@@ -53,12 +56,12 @@ import {
   createMigrationFile,
 } from '../utils/template.js';
 import { Changelog } from './changelog.js';
-import { loadConfig } from './config.js';
+import { type LoadConfigOptions, loadConfigWithSources } from './config.js';
 import { buildContext } from './context.js';
 import { isMigrateMongoDoc, mapMigrateMongoDocs } from './import.js';
 import { type LockDocument, MigrationLock, runWithLock } from './lock.js';
 import { runMigration } from './runner.js';
-import { checkStorageFormat } from './storage-format.js';
+import { checkStorageFormat, recordStorageFormat } from './storage-format.js';
 
 /** Default source collection name used by migrate-mongo */
 const MIGRATE_MONGO_COLLECTION = 'changelog';
@@ -68,6 +71,26 @@ const MIGRATE_MONGO_COLLECTION = 'changelog';
  * and aggregation-pipeline updates, which the lock relies on.
  */
 const MIN_WIRE_VERSION = 8;
+
+/**
+ * Record on a failed run's error which files ran before it stopped, as `context.results` (so
+ * `--json` prints them under `details.results`). Without this, a caller only learns that the run
+ * failed, not what it applied or reverted first. Only an {@link MmkError} has a context; any other
+ * error is returned unchanged.
+ */
+function withRunResults(error: unknown, results: readonly RunResult[]): unknown {
+  if (error instanceof MmkError) {
+    // `context` is readonly to callers; this is the one place that adds to it after the throw.
+    Object.assign(error, { context: { ...error.context, results: [...results] } });
+  }
+  return error;
+}
+
+/** The results {@link withRunResults} recorded on `error`, or none */
+function runResultsOf(error: unknown): RunResult[] {
+  const results = error instanceof MmkError ? error.context?.results : undefined;
+  return Array.isArray(results) ? (results as RunResult[]) : [];
+}
 
 /** Options for {@link MigratorKit.up} */
 export interface UpOptions {
@@ -165,6 +188,18 @@ export interface ImportOptions {
   noLock?: boolean;
 }
 
+/** Options for {@link MigratorKit.connect} */
+export interface ConnectOptions {
+  /**
+   * Connect without writing anything: skip creating the changelog index and
+   * recording the storage format. The read commands (`status`, `list`,
+   * `dry-run`, `status --all-namespaces`) connect this way, so they work with a
+   * user that has only the `read` role. The check that refuses a newer storage
+   * format still runs: it only reads.
+   */
+  readOnly?: boolean;
+}
+
 /**
  * The main orchestration class. Every CLI command delegates here. Holds a
  * partial config that is resolved (merged with env/file/defaults) on first use.
@@ -186,6 +221,10 @@ export class MigratorKit {
   private readonly configPath: string | undefined;
   private readonly progress: ProgressReporter | undefined;
   private config: MmkConfig | undefined;
+  /** The config file the config came from (null: none), set with {@link config} */
+  private configFile: string | null = null;
+  /** The kind of layer each config value came from, set with {@link config} */
+  private configSources = new Map<keyof MmkConfig, ConfigSource>();
   private client: MongoClient | undefined;
   private db: Db | undefined;
   private changelog: Changelog | undefined;
@@ -197,6 +236,8 @@ export class MigratorKit {
   private supportsTransactions = false;
   /** The server's wire version from the connect-time probe; undefined if the probe failed */
   private maxWireVersion: number | undefined;
+  /** Whether connect() has created the changelog index (and recorded the storage format) */
+  private preparedForWrites = false;
 
   constructor(config: Partial<MmkConfig> = {}, options: MigratorKitOptions = {}) {
     this.partialConfig = config;
@@ -207,25 +248,64 @@ export class MigratorKit {
   /** Resolve and cache the full configuration */
   private async ensureConfig(requireDb = true): Promise<MmkConfig> {
     if (!this.config) {
-      this.config = await loadConfig({
-        flags: this.partialConfig,
-        requireDb,
-        ...(this.configPath ? { configPath: this.configPath } : {}),
-      });
+      const loaded = await loadConfigWithSources(this.loadOptions(requireDb));
+      this.config = loaded.config;
+      this.configFile = loaded.configFile;
+      this.configSources = loaded.sources;
     }
     return this.config;
+  }
+
+  /** Options for loading this migrator's config */
+  private loadOptions(requireDb: boolean): LoadConfigOptions {
+    return {
+      flags: this.partialConfig,
+      requireDb,
+      ...(this.configPath ? { configPath: this.configPath } : {}),
+    };
   }
 
   private get logger(): MmkLogger {
     return resolveLogger(this.config?.logger);
   }
 
-  /** Connect to MongoDB and ensure changelog indexes exist */
-  async connect(): Promise<void> {
+  /**
+   * Connect to MongoDB. Unless `readOnly` is set, also prepare the database for
+   * writes: create the changelog index and, when a namespace is set, record the
+   * storage format. Those are the only writes connecting makes, so a read-only
+   * connect works with a user that has only the `read` role. Connecting again
+   * without `readOnly` after a read-only connect prepares for writes then.
+   */
+  async connect(options: ConnectOptions = {}): Promise<void> {
     const config = await this.ensureConfig();
-    if (this.client && this.db) {
+    if (!this.client || !this.db) {
+      await this.open(config);
+    }
+    if (options.readOnly || this.preparedForWrites) {
       return;
     }
+    // The first writes. Either one fails the same way (a user without write
+    // access gets `not authorized` in the reason), and the client is closed so a
+    // later connect() starts clean.
+    try {
+      // Only a namespaced run writes data older versions would misread, so only
+      // it records the marker; every run still refuses a newer format (in open()).
+      if (config.namespace !== undefined) {
+        await recordStorageFormat(this.requireDb());
+      }
+      await this.requireChangelog().ensureIndexes(this.requireDb());
+    } catch (error) {
+      await this.disconnect();
+      throw this.connectionFailedError(config, error);
+    }
+    this.preparedForWrites = true;
+  }
+
+  /**
+   * Open the client and run the read-only checks every command needs: the
+   * server version and the storage format. Writes nothing.
+   */
+  private async open(config: MmkConfig): Promise<void> {
     try {
       // Safe defaults so a wrong URI / unreachable host fails fast instead of
       // hanging. We deliberately do NOT set a client-wide write concern: that
@@ -250,19 +330,12 @@ export class MigratorKit {
       throw this.connectionFailedError(config, error);
     }
     // Connected — refuse an unsupported server or a newer storage format
-    // BEFORE writing anything (the changelog index below is the first write).
-    // On any failure the client is closed so a later connect() starts clean.
+    // BEFORE writing anything. On any failure the client is closed so a later
+    // connect() starts clean.
     try {
       this.assertServerSupported();
-      // Only a namespaced run writes data older versions would misread, so only
-      // it records the marker; every run still refuses a newer format.
-      await checkStorageFormat(this.requireDb(), { record: config.namespace !== undefined });
+      await checkStorageFormat(this.requireDb());
       this.changelog = new Changelog(config.migrationsCollection, config.namespace);
-      try {
-        await this.changelog.ensureIndexes(this.requireDb());
-      } catch (error) {
-        throw this.connectionFailedError(config, error);
-      }
     } catch (error) {
       await this.disconnect();
       throw error;
@@ -271,7 +344,7 @@ export class MigratorKit {
 
   /**
    * The `CONNECTION_FAILED` error for a driver failure while connecting (or
-   * creating the changelog index). Driver errors frequently embed the
+   * preparing the database for writes). Driver errors frequently embed the
    * connection string verbatim, so credentials are redacted before they reach a
    * log, JSON output, or error context. The redacted driver message is the only
    * clue to WHY it failed (bad host, auth, TLS, timeout, permissions), so it
@@ -363,6 +436,7 @@ export class MigratorKit {
       await this.client.close();
       this.client = undefined;
       this.db = undefined;
+      this.preparedForWrites = false;
     }
   }
 
@@ -406,6 +480,42 @@ export class MigratorKit {
    */
   async resolveConfig(): Promise<MmkConfig> {
     return this.ensureConfig();
+  }
+
+  /**
+   * The effective configuration as plain data, for `mmk config`: resolved the
+   * way every other command resolves it, but never connecting, and not
+   * requiring a connection string or database name. Paths are absolute and the
+   * connection string's credentials are hidden.
+   * @throws {@link ConfigInvalidError} when the configuration is invalid
+   */
+  async describeConfig(): Promise<ConfigSummary> {
+    // Not cached when loaded here: without `requireDb`, a later connect() would
+    // run with an empty uri instead of reporting it missing.
+    const loaded = this.config
+      ? { config: this.config, configFile: this.configFile, sources: this.configSources }
+      : await loadConfigWithSources(this.loadOptions(false));
+    const { config } = loaded;
+    return {
+      configFile: loaded.configFile,
+      migrationsDir: path.resolve(config.migrationsDir),
+      fileExtensions: [...config.fileExtensions],
+      createExtension: config.createExtension,
+      sequential: config.sequential,
+      migrationsCollection: config.migrationsCollection,
+      lockCollection: config.lockCollection,
+      lockTTLSeconds: config.lockTTLSeconds,
+      strict: config.strict,
+      useTransaction: config.useTransaction,
+      requireAuthor: config.requireAuthor ?? false,
+      ...(config.namespace !== undefined ? { namespace: config.namespace } : {}),
+      ...(config.author ? { author: config.author } : {}),
+      ...(config.templatePath ? { templatePath: path.resolve(config.templatePath) } : {}),
+      dbName: config.dbName === '' ? null : config.dbName,
+      uri: config.uri === '' ? null : redactConnectionString(config.uri),
+      // `logger` is how output is shown, not a setting (the CLI sets its own in --json mode).
+      sources: Object.fromEntries([...loaded.sources].filter(([key]) => key !== 'logger')),
+    };
   }
 
   /**
@@ -553,7 +663,7 @@ export class MigratorKit {
    */
   async lockInfo(): Promise<LockInfo | null> {
     await this.ensureConfig();
-    await this.connect();
+    await this.connect({ readOnly: true });
     return this.toLockInfo(await this.buildLock().inspect());
   }
 
@@ -822,97 +932,102 @@ export class MigratorKit {
       await this.assertAuthors(force ? targets : targets.filter((name) => !appliedNames.has(name)));
     }
 
-    await config.hooks?.beforeAll?.(context);
+    // From here the user's code runs. If anything fails, the error says which files ran first.
+    try {
+      await config.hooks?.beforeAll?.(context);
 
-    for (const name of targets) {
-      await config.hooks?.beforeEach?.(name, context);
-      const filepath = this.filepath(name);
-      const checksum = computeChecksum(filepath);
+      for (const name of targets) {
+        await config.hooks?.beforeEach?.(name, context);
+        const filepath = this.filepath(name);
+        const checksum = computeChecksum(filepath);
 
-      if (appliedNames.has(name)) {
-        if (!force) {
-          const existing = await changelog.getByName(db, name);
-          const mismatch = existing !== null && existing.checksum !== checksum;
-          if (mismatch && config.strict) {
-            throw new ChecksumMismatchError(
-              explain(`${quote(name)} has changed since it was applied`, [
-                `Applied checksum: ${(existing?.checksum ?? '').slice(0, 12)}…`,
-                `On-disk checksum: ${checksum.slice(0, 12)}…`,
-                'strict mode refuses to continue when an applied migration is edited',
-                'Revert the file to the version that was applied, or write a new migration for the change',
-                `To re-run this file against the database on purpose: mmk up ${name} --force`,
-              ]),
-              { name, expected: existing?.checksum, actual: checksum },
-            );
+        if (appliedNames.has(name)) {
+          if (!force) {
+            const existing = await changelog.getByName(db, name);
+            const mismatch = existing !== null && existing.checksum !== checksum;
+            if (mismatch && config.strict) {
+              throw new ChecksumMismatchError(
+                explain(`${quote(name)} has changed since it was applied`, [
+                  `Applied checksum: ${(existing?.checksum ?? '').slice(0, 12)}…`,
+                  `On-disk checksum: ${checksum.slice(0, 12)}…`,
+                  'strict mode refuses to continue when an applied migration is edited',
+                  'Revert the file to the version that was applied, or write a new migration for the change',
+                  `To re-run this file against the database on purpose: mmk up ${name} --force`,
+                ]),
+                { name, expected: existing?.checksum, actual: checksum },
+              );
+            }
+            if (mismatch) {
+              logger.warn(`⚠ Warning  Checksum mismatch: ${name}`);
+            }
+            logger.dim(`⏭ Skipped  ${name}`);
+            results.push({ file: name, status: 'skipped', reason: 'Already applied' });
+            continue;
           }
-          if (mismatch) {
-            logger.warn(`⚠ Warning  Checksum mismatch: ${name}`);
-          }
-          logger.dim(`⏭ Skipped  ${name}`);
-          results.push({ file: name, status: 'skipped', reason: 'Already applied' });
-          continue;
+          // force: fall through and re-run, ignoring applied state and checksum
+          logger.warn(`⚠ Forcing   re-run of already-applied ${name}`);
         }
-        // force: fall through and re-run, ignoring applied state and checksum
-        logger.warn(`⚠ Forcing   re-run of already-applied ${name}`);
+
+        const migration = await loadMigrationFile(filepath);
+        const useTransaction = migration.useTransaction ?? config.useTransaction;
+        if (useTransaction) {
+          this.assertTransactionSupported(name);
+        }
+
+        // Batch is fixed before the run so the changelog record can be persisted
+        // inside the migration's transaction (see the persist callback below).
+        const batch = options.step ? baseBatch + appliedCount : baseBatch;
+
+        this.progress?.onStart(name, 'up');
+        try {
+          const { duration } = await runMigration({
+            name,
+            migration,
+            direction: 'up',
+            context,
+            useTransaction,
+            ...(config.hooks ? { hooks: config.hooks } : {}),
+            // Write the changelog record within the same transaction as the
+            // migration's own writes, so applying and recording are atomic.
+            persist: async (runDuration, session) => {
+              const record: MigrationRecord = {
+                name,
+                batch,
+                status: 'applied',
+                appliedAt: new Date(),
+                duration: runDuration,
+                checksum,
+                environment: process.env.NODE_ENV ?? 'development',
+                executedBy: os.userInfo().username,
+                ...(migration.description ? { description: migration.description } : {}),
+                ...(migration.author ? { author: migration.author } : {}),
+                ...(service ? { service } : {}),
+              };
+              await changelog.markApplied(db, record, session);
+            },
+          });
+          this.progress?.onStop();
+          appliedCount += 1;
+
+          logger.success(`✔ Applied  ${name}   [${duration}ms]`);
+          results.push({ file: name, status: 'applied', duration, batch });
+          await config.hooks?.afterEach?.(name, duration, context);
+        } catch (error) {
+          this.progress?.onStop();
+          logger.error(`✖ Error    ${name}`);
+          results.push({
+            file: name,
+            status: 'error',
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
       }
 
-      const migration = await loadMigrationFile(filepath);
-      const useTransaction = migration.useTransaction ?? config.useTransaction;
-      if (useTransaction) {
-        this.assertTransactionSupported(name);
-      }
-
-      // Batch is fixed before the run so the changelog record can be persisted
-      // inside the migration's transaction (see the persist callback below).
-      const batch = options.step ? baseBatch + appliedCount : baseBatch;
-
-      this.progress?.onStart(name, 'up');
-      try {
-        const { duration } = await runMigration({
-          name,
-          migration,
-          direction: 'up',
-          context,
-          useTransaction,
-          ...(config.hooks ? { hooks: config.hooks } : {}),
-          // Write the changelog record within the same transaction as the
-          // migration's own writes, so applying and recording are atomic.
-          persist: async (runDuration, session) => {
-            const record: MigrationRecord = {
-              name,
-              batch,
-              status: 'applied',
-              appliedAt: new Date(),
-              duration: runDuration,
-              checksum,
-              environment: process.env.NODE_ENV ?? 'development',
-              executedBy: os.userInfo().username,
-              ...(migration.description ? { description: migration.description } : {}),
-              ...(migration.author ? { author: migration.author } : {}),
-              ...(service ? { service } : {}),
-            };
-            await changelog.markApplied(db, record, session);
-          },
-        });
-        this.progress?.onStop();
-        appliedCount += 1;
-
-        logger.success(`✔ Applied  ${name}   [${duration}ms]`);
-        results.push({ file: name, status: 'applied', duration, batch });
-        await config.hooks?.afterEach?.(name, duration, context);
-      } catch (error) {
-        this.progress?.onStop();
-        logger.error(`✖ Error    ${name}`);
-        results.push({
-          file: name,
-          status: 'error',
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      }
+      await config.hooks?.afterAll?.(context);
+    } catch (error) {
+      throw withRunResults(error, results);
     }
-
-    await config.hooks?.afterAll?.(context);
     return results;
   }
 
@@ -1061,47 +1176,52 @@ export class MigratorKit {
     const context = buildContext(this.client as MongoClient, db, config.mongoose);
     const results: RunResult[] = [];
 
-    await config.hooks?.beforeAll?.(context);
+    // From here the user's code runs. If anything fails, the error says which files ran first.
+    try {
+      await config.hooks?.beforeAll?.(context);
 
-    for (const name of names) {
-      await config.hooks?.beforeEach?.(name, context);
-      const migration = await loadMigrationFile(this.filepath(name));
-      const useTransaction = migration.useTransaction ?? config.useTransaction;
-      if (useTransaction) {
-        this.assertTransactionSupported(name);
+      for (const name of names) {
+        await config.hooks?.beforeEach?.(name, context);
+        const migration = await loadMigrationFile(this.filepath(name));
+        const useTransaction = migration.useTransaction ?? config.useTransaction;
+        if (useTransaction) {
+          this.assertTransactionSupported(name);
+        }
+
+        this.progress?.onStart(name, 'down');
+        try {
+          const { duration } = await runMigration({
+            name,
+            migration,
+            direction: 'down',
+            context,
+            useTransaction,
+            ...(config.hooks ? { hooks: config.hooks } : {}),
+            // Record the revert within the same transaction as the down() writes.
+            persist: async (_duration, session) => {
+              await changelog.markReverted(db, name, session);
+            },
+          });
+          this.progress?.onStop();
+          logger.success(`↩ Reverted ${name}   [${duration}ms]`);
+          results.push({ file: name, status: 'reverted', duration });
+          await config.hooks?.afterEach?.(name, duration, context);
+        } catch (error) {
+          this.progress?.onStop();
+          logger.error(`✖ Error    ${name}`);
+          results.push({
+            file: name,
+            status: 'error',
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
       }
 
-      this.progress?.onStart(name, 'down');
-      try {
-        const { duration } = await runMigration({
-          name,
-          migration,
-          direction: 'down',
-          context,
-          useTransaction,
-          ...(config.hooks ? { hooks: config.hooks } : {}),
-          // Record the revert within the same transaction as the down() writes.
-          persist: async (_duration, session) => {
-            await changelog.markReverted(db, name, session);
-          },
-        });
-        this.progress?.onStop();
-        logger.success(`↩ Reverted ${name}   [${duration}ms]`);
-        results.push({ file: name, status: 'reverted', duration });
-        await config.hooks?.afterEach?.(name, duration, context);
-      } catch (error) {
-        this.progress?.onStop();
-        logger.error(`✖ Error    ${name}`);
-        results.push({
-          file: name,
-          status: 'error',
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      }
+      await config.hooks?.afterAll?.(context);
+    } catch (error) {
+      throw withRunResults(error, results);
     }
-
-    await config.hooks?.afterAll?.(context);
     return results;
   }
 
@@ -1208,7 +1328,13 @@ export class MigratorKit {
       }
 
       const downResults = await this.runDown(target, { force: true });
-      const upResults = await this.runUp(target);
+      let upResults: RunResult[];
+      try {
+        upResults = await this.runUp(target);
+      } catch (error) {
+        // The revert happened, and the file stays reverted: report it with the failed re-apply.
+        throw withRunResults(error, [...downResults, ...runResultsOf(error)]);
+      }
       return [...downResults, ...upResults];
     });
   }
@@ -1221,7 +1347,7 @@ export class MigratorKit {
   ): Promise<StatusRow[]> {
     this.assertStepsValid(options.steps, filename);
     await this.ensureConfig();
-    await this.connect();
+    await this.connect({ readOnly: true });
     this.announceNamespace();
     const db = this.requireDb();
     const changelog = this.requireChangelog();
@@ -1268,7 +1394,7 @@ export class MigratorKit {
   /** Full migration status for all known files and records */
   async status(): Promise<StatusRow[]> {
     await this.ensureConfig();
-    await this.connect();
+    await this.connect({ readOnly: true });
     this.announceNamespace();
     const unadopted = await this.checkAdopted(this.requireChangelog(), 'warn');
     return this.statusRows(unadopted);
@@ -1294,7 +1420,7 @@ export class MigratorKit {
    */
   async statusAllNamespaces(): Promise<NamespaceStatusRow[]> {
     await this.ensureConfig();
-    await this.connect();
+    await this.connect({ readOnly: true });
     const records = await this.requireChangelog().getAllNamespaces(this.requireDb());
     return records.map((record) => ({
       ...(record.namespace !== undefined ? { namespace: record.namespace } : {}),
@@ -1318,7 +1444,7 @@ export class MigratorKit {
       return this.status();
     }
     await this.ensureConfig();
-    await this.connect();
+    await this.connect({ readOnly: true });
     this.announceNamespace();
     await this.checkAdopted(this.requireChangelog(), 'refuse');
     const rows = await this.statusRows(new Set());
@@ -1343,6 +1469,7 @@ export class MigratorKit {
       appliedAt: isApplied && record ? record.appliedAt : null,
       duration: isApplied && record ? record.duration : null,
       checksumOk,
+      ...(isApplied && record?.checksum ? { checksum: record.checksum } : {}),
       ...(record?.description ? { description: record.description } : {}),
       ...(isApplied && record?.author ? { author: record.author } : {}),
       ...(this.config?.namespace !== undefined ? { namespace: this.config.namespace } : {}),

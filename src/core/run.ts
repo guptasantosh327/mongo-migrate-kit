@@ -133,7 +133,7 @@ export async function pendingMigrations(
 ): Promise<StatusRow[]> {
   const kit = new MigratorKit(config, options);
   try {
-    await kit.connect();
+    await kit.connect({ readOnly: true });
     return await kit.list('pending');
   } finally {
     await kit.disconnect();

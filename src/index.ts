@@ -2,6 +2,7 @@
 export { MigratorKit } from './core/migrator.js';
 export type {
   AdoptOptions,
+  ConnectOptions,
   CreateOptions,
   DownOptions,
   ImportOptions,
@@ -26,6 +27,8 @@ export type { ConfigIssue } from './core/config.js';
 export type {
   AdoptResult,
   AdoptRow,
+  ConfigSource,
+  ConfigSummary,
   ImportChecksumSource,
   ImportResult,
   ImportRow,

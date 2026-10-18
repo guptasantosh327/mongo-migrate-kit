@@ -124,7 +124,7 @@ try {
 
 | Method | Returns | Same as |
 | --- | --- | --- |
-| `connect()` / `disconnect()` | `Promise<void>` | |
+| `connect(options?)` / `disconnect()` | `Promise<void>` | |
 | `up(file?, options?)` | `RunResult[]` | `mmk up` |
 | `down(file?, options?)` | `RunResult[]` | `mmk down` |
 | `redo(file?)` | `RunResult[]` | `mmk redo` |
@@ -142,6 +142,12 @@ Options use the same names as the command-line flags: `up(undefined, { step: tru
 `down(undefined, { batch: 3 })`, `down(undefined, { steps: 2 })`, `up(file, { force: true })`.
 
 Most methods connect for you if you forget, but always pair that with `disconnect()`.
+
+`connect()` creates the changelog collection's index, which needs write access. To only read, use
+`connect({ readOnly: true })`: it writes nothing, so it works with a user that has only the `read`
+role. `status()`, `list()`, `dryRun()`, `statusAllNamespaces()`, `lockInfo()` and
+`pendingMigrations()` connect this way on their own. A later write method on the same migrator
+creates the index then.
 
 ## The result types
 
@@ -162,6 +168,7 @@ interface StatusRow {
   appliedAt: Date | null;
   duration: number | null;
   checksumOk: boolean | null; // null = pending, true = unchanged, false = edited since it ran
+  checksum?: string; // applied rows: SHA-256 of the file as it ran (what checksumOk compares)
   description?: string;
   author?: string;
 }
@@ -191,6 +198,11 @@ try {
 
 The message is written for people and says what to do next. `err.context` has the same details as
 data. The full list is in [Error codes](/reference/error-codes).
+
+When `up()`, `down()`, `redo()` or `runMigrations()` stops partway, `err.context.results` is the
+`RunResult[]` of the files that ran before it stopped. If a migration's own `up()` or `down()`
+threw, it comes last with `status: 'error'`. An error that isn't an `MmkError` (one your hook threw
+itself, for example) reaches you unchanged.
 
 ## Quiet output in tests
 

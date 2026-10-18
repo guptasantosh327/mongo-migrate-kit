@@ -101,7 +101,7 @@ export function registerStatus(program: Command): void {
             }
           }
         },
-        { spinner: true, ...(opts.json ? { json: true } : {}) },
+        { spinner: true, readOnly: true, ...(opts.json ? { json: true } : {}) },
       );
     });
 }

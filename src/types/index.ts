@@ -197,6 +197,49 @@ export type MmkConfigInput =
   | Partial<MmkConfig>
   | (() => Partial<MmkConfig> | Promise<Partial<MmkConfig>>);
 
+/**
+ * The kind of layer a resolved config value came from. `flag` is a CLI flag, or
+ * the config object passed to `MigratorKit`; `file` is the config file.
+ */
+export type ConfigSource = 'flag' | 'env' | 'file' | 'default';
+
+/**
+ * The resolved configuration as `mmk config` reports it: plain values only,
+ * resolved exactly as every other command resolves them, without connecting.
+ * Paths are absolute, and the connection string's credentials are hidden.
+ */
+export interface ConfigSummary {
+  /** Absolute path of the config file that was loaded; null when there is none */
+  configFile: string | null;
+  /** Absolute path of the migrations directory */
+  migrationsDir: string;
+  fileExtensions: string[];
+  createExtension: MigrationExtension;
+  sequential: boolean;
+  migrationsCollection: string;
+  lockCollection: string;
+  lockTTLSeconds: number;
+  strict: boolean;
+  useTransaction: boolean;
+  requireAuthor: boolean;
+  /** Absent for the default namespace */
+  namespace?: string;
+  /** The author `mmk create` writes, when one is configured */
+  author?: string;
+  /** Absolute path of the custom migration template, when one is configured */
+  templatePath?: string;
+  /** The database name; null when none is set (commands that connect will refuse) */
+  dbName: string | null;
+  /** The connection string with its credentials hidden; null when none is set */
+  uri: string | null;
+  /**
+   * The kind of layer each setting came from, keyed by its `MmkConfig` name.
+   * Also lists code-only settings (`hooks`, `mongoClientOptions`, …) when they
+   * are set, though their values aren't shown. `logger` is never listed.
+   */
+  sources: Partial<Record<keyof MmkConfig, ConfigSource>>;
+}
+
 // ─── Logger ───────────────────────────────────────────────────────────────────
 
 export interface MmkLogger {
@@ -244,6 +287,12 @@ export interface StatusRow {
   duration: number | null;
   /** null = never applied, true = match, false = mismatch */
   checksumOk: boolean | null;
+  /**
+   * SHA-256 (hex) of the file as it was applied, from its changelog record — the
+   * value `checksumOk` compares the file on disk with. Only on applied rows, and
+   * absent when the record has none (an `mmk import` record whose file was gone)
+   */
+  checksum?: string;
   description?: string;
   /** Who wrote the migration, as recorded when it was applied */
   author?: string;

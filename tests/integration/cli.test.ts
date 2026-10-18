@@ -525,12 +525,119 @@ describe('mmk CLI (integration)', () => {
     expect(parsed[0]).toMatchObject({ file: '0001-a.ts', status: 'applied' });
   });
 
+  it('should emit every StatusRow field, with the recorded checksum, in status and list --json', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    await runCli(baseArgs(['up', '0001-a.ts']));
+    const applied = {
+      file: '0001-a.ts',
+      status: 'applied',
+      batch: 1,
+      appliedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      duration: expect.any(Number),
+      checksumOk: true,
+      checksum: expect.stringMatching(/^[0-9a-f]{64}$/),
+    };
+    const pending = {
+      file: '0002-b.ts',
+      status: 'pending',
+      batch: null,
+      appliedAt: null,
+      duration: null,
+      checksumOk: null,
+    };
+
+    const status = await runCli(baseArgs(['status', '--json']));
+    expect(JSON.parse(status.stdout)).toEqual([applied, pending]);
+    const list = await runCli(baseArgs(['list', '--applied', '--json']));
+    expect(JSON.parse(list.stdout)).toEqual([applied]);
+  });
+
   it('should emit a JSON error object and exit 1 on failure with --json', async () => {
     project.write('0001-x.ts', failingMigration());
     const result = await runCli(baseArgs(['up', '--json']));
     expect(result.code).toBe(1);
     const parsed = JSON.parse(result.stdout) as { error: { code?: string; message: string } };
     expect(parsed.error.code).toBe('MIGRATION_EXECUTION_FAILED');
+  });
+
+  it('should list the files that ran before a failure under details.results with --json', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    project.write('0003-x.ts', failingMigration());
+    const result = await runCli(baseArgs(['up', '--json']));
+    expect(result.code).toBe(1);
+    const parsed = JSON.parse(result.stdout) as {
+      error: { code: string; details: Record<string, unknown> };
+    };
+    expect(parsed.error.code).toBe('MIGRATION_EXECUTION_FAILED');
+    expect(parsed.error.details).toMatchObject({ name: '0003-x.ts', direction: 'up' });
+    expect(parsed.error.details.results).toEqual([
+      { file: '0001-a.ts', status: 'applied', duration: expect.any(Number), batch: 1 },
+      { file: '0002-b.ts', status: 'applied', duration: expect.any(Number), batch: 1 },
+      { file: '0003-x.ts', status: 'error', error: expect.stringContaining('intentional failure') },
+    ]);
+  });
+
+  it('should keep stdout to the JSON document when the config, a hook and a migration print', async () => {
+    // Each of these is user code that runs inside the command. In --json mode what it prints
+    // must go to stderr, or JSON.parse(stdout) and jq break.
+    project.write(
+      '0001-a.ts',
+      [
+        'export async function up() {',
+        "  console.log('from up');",
+        "  process.stdout.write('raw write from up\\n');",
+        '}',
+        'export async function down() {}',
+        '',
+      ].join('\n'),
+    );
+    const cwdDir = path.join(project.dir, 'app');
+    mkdirSync(cwdDir);
+    const factory = [
+      'export default async () => {',
+      "  console.log('from config');",
+      '  return {',
+      `    uri: ${JSON.stringify(mongo.uri)},`,
+      `    dbName: ${JSON.stringify(DB)},`,
+      `    migrationsDir: ${JSON.stringify(project.dir)},`,
+      "    hooks: { beforeAll: async () => console.info('from beforeAll') },",
+      '  };',
+      '};',
+      '',
+    ].join('\n');
+    writeFileSync(path.join(cwdDir, 'mmk.config.js'), factory);
+    const result = await runCli(['up', '--json'], {}, cwdDir);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([
+      { file: '0001-a.ts', status: 'applied', duration: expect.any(Number), batch: 1 },
+    ]);
+    for (const line of ['from config', 'from beforeAll', 'from up', 'raw write from up']) {
+      expect(result.stderr).toContain(line);
+    }
+  });
+
+  it('should keep stdout to the error document when a migration that prints fails', async () => {
+    project.write(
+      '0001-x.ts',
+      "export async function up() {\n  console.log('about to fail');\n  throw new Error('intentional failure');\n}\nexport async function down() {}\n",
+    );
+    const result = await runCli(baseArgs(['up', '--json']));
+    expect(result.code).toBe(1);
+    const parsed = JSON.parse(result.stdout) as { error: { code?: string } };
+    expect(parsed.error.code).toBe('MIGRATION_EXECUTION_FAILED');
+    expect(result.stderr).toContain('about to fail');
+  });
+
+  it("should leave a migration's console output on stdout without --json", async () => {
+    project.write(
+      '0001-a.ts',
+      "export async function up() {\n  console.log('from up');\n}\nexport async function down() {}\n",
+    );
+    const result = await runCli(baseArgs(['up']));
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('from up');
   });
 
   // ── status --check (feature 2) ───────────────────────────────────────────
@@ -790,5 +897,113 @@ describe('mmk CLI output ordering (integration)', () => {
     const connecting = merged.indexOf('Connecting to MongoDB');
     expect(loaded).toBeGreaterThanOrEqual(0);
     expect(connecting).toBeGreaterThan(loaded);
+  });
+});
+
+describe('mmk config (integration)', () => {
+  // Empty values are treated as unset, which hides MMK_* variables the parent may carry.
+  const unset = { MMK_URI: '', MMK_DB: '' };
+
+  function writeConfig(contents: Record<string, unknown>): string {
+    const file = path.join(project.dir, 'mmk.config.json');
+    writeFileSync(file, JSON.stringify(contents));
+    return file;
+  }
+
+  it('should print the resolved config as JSON without a database', async () => {
+    const file = writeConfig({ migrationsDir: './db', namespace: 'billing-api' });
+    const result = await runCli(['config', '--json'], unset, project.dir);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      configFile: file,
+      migrationsDir: path.join(project.dir, 'db'),
+      fileExtensions: ['.ts', '.js'],
+      createExtension: 'js',
+      sequential: false,
+      migrationsCollection: '_mmk_migrations',
+      lockCollection: '_mmk_locks',
+      lockTTLSeconds: 60,
+      strict: false,
+      useTransaction: false,
+      requireAuthor: false,
+      namespace: 'billing-api',
+      dbName: null,
+      uri: null,
+      sources: {
+        migrationsDir: 'file',
+        migrationsCollection: 'default',
+        lockCollection: 'default',
+        lockTTLSeconds: 'default',
+        strict: 'default',
+        useTransaction: 'default',
+        fileExtensions: 'default',
+        createExtension: 'default',
+        sequential: 'default',
+        requireAuthor: 'default',
+        namespace: 'file',
+      },
+    });
+    expect(result.stderr).toContain('Loaded config from mmk.config.json');
+  });
+
+  it('should hide the password and name the layer of each connection setting', async () => {
+    const result = await runCli(
+      ['config', '--json', '--db', 'orders_dev'],
+      { MMK_URI: 'mongodb://alice:s3cret@db.example.com:27017', MMK_DB: '' },
+      project.dir,
+    );
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(parsed).toMatchObject({
+      configFile: null,
+      uri: 'mongodb://***:***@db.example.com:27017',
+      dbName: 'orders_dev',
+      sources: { uri: 'env', dbName: 'flag' },
+    });
+    expect(result.stdout + result.stderr).not.toContain('s3cret');
+  });
+
+  it('should report the migrations directory that create and status use', async () => {
+    writeConfig({ migrationsDir: './db' });
+    const config = JSON.parse((await runCli(['config', '--json'], unset, project.dir)).stdout) as {
+      migrationsDir: string;
+    };
+    const created = JSON.parse(
+      (await runCli(['create', 'side by side', '--json'], unset, project.dir)).stdout,
+    ) as { path: string };
+    expect(path.dirname(created.path)).toBe(config.migrationsDir);
+
+    const status = await runCli(
+      ['--uri', mongo.uri, '--db', DB, 'status', '--json'],
+      unset,
+      project.dir,
+    );
+    expect(status.code).toBe(0);
+    const rows = JSON.parse(status.stdout) as Array<{ file: string }>;
+    expect(rows.map((row) => row.file)).toEqual([path.basename(created.path)]);
+  });
+
+  it('should print a table of settings and where each came from', async () => {
+    writeConfig({ namespace: 'billing-api' });
+    const result = await runCli(['config'], unset, project.dir);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('migrationsDir');
+    expect(result.stdout).toContain('billing-api');
+    expect(result.stdout).toContain('config file');
+    expect(result.stdout).toContain('(not set)');
+  });
+
+  it('should report an invalid setting as an error document, without connecting', async () => {
+    const result = await runCli(
+      ['config', '--json'],
+      { ...unset, MMK_LOCK_TTL: 'soon' },
+      project.dir,
+    );
+    expect(result.code).toBe(1);
+    const parsed = JSON.parse(result.stdout) as {
+      error: { code: string; details: { issues: Array<{ key: string }> } };
+    };
+    expect(parsed.error.code).toBe('CONFIG_INVALID');
+    expect(parsed.error.details.issues.map((issue) => issue.key)).toContain('lockTTLSeconds');
   });
 });
