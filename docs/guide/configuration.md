@@ -158,6 +158,9 @@ These work on every command and beat everything else:
 npx mmk up --uri "mongodb://localhost:27017" --db shop --dir ./db/migrations
 ```
 
+To see which layer won for each setting, run [`mmk config`](/commands/config). It prints every
+resolved value and where it came from, without connecting.
+
 ## When a setting is wrong
 
 mmk checks all settings before it connects, and reports every problem at once instead of one per

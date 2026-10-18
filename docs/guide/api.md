@@ -198,6 +198,11 @@ try {
 The message is written for people and says what to do next. `err.context` has the same details as
 data. The full list is in [Error codes](/reference/error-codes).
 
+When `up()`, `down()`, `redo()` or `runMigrations()` stops partway, `err.context.results` is the
+`RunResult[]` of the files that ran before it stopped. If a migration's own `up()` or `down()`
+threw, it comes last with `status: 'error'`. An error that isn't an `MmkError` (one your hook threw
+itself, for example) reaches you unchanged.
+
 ## Quiet output in tests
 
 Pass `logger: null` and mmk prints nothing:

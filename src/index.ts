@@ -27,6 +27,8 @@ export type { ConfigIssue } from './core/config.js';
 export type {
   AdoptResult,
   AdoptRow,
+  ConfigSource,
+  ConfigSummary,
   ImportChecksumSource,
   ImportResult,
   ImportRow,

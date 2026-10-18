@@ -2,7 +2,12 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { type ConfigIssue, DEFAULT_CONFIG, loadConfig } from '../../src/core/config.js';
+import {
+  type ConfigIssue,
+  DEFAULT_CONFIG,
+  loadConfig,
+  loadConfigWithSources,
+} from '../../src/core/config.js';
 import { ConfigInvalidError } from '../../src/errors/index.js';
 import type { MmkLogger } from '../../src/types/index.js';
 import { defaultConfigJs } from '../../src/utils/template.js';
@@ -907,5 +912,52 @@ describe('loadConfig with a generated config file', () => {
     expect(config.author).toBeUndefined();
     expect(config.templatePath).toBeUndefined();
     expect(config.hooks).toBeUndefined();
+  });
+});
+
+describe('loadConfigWithSources', () => {
+  it('should name the kind of layer each value came from, the highest layer winning', async () => {
+    const file = path.join(tmp, 'mmk.config.json');
+    writeFileSync(
+      file,
+      JSON.stringify({ migrationsDir: './db', dbName: 'from_file', lockTTLSeconds: 30 }),
+    );
+    process.env.MMK_DB = 'from_env';
+    const loaded = await loadConfigWithSources({
+      cwd: tmp,
+      flags: { uri: 'mongodb://localhost:27017', lockTTLSeconds: 90, logger: null },
+    });
+    expect(loaded.configFile).toBe(file);
+    expect(loaded.config).toMatchObject({ dbName: 'from_env', lockTTLSeconds: 90 });
+    expect(Object.fromEntries(loaded.sources)).toEqual({
+      migrationsDir: 'file',
+      migrationsCollection: 'default',
+      lockCollection: 'default',
+      lockTTLSeconds: 'flag',
+      strict: 'default',
+      useTransaction: 'default',
+      fileExtensions: 'default',
+      createExtension: 'default',
+      sequential: 'default',
+      requireAuthor: 'default',
+      dbName: 'env',
+      uri: 'flag',
+      logger: 'flag',
+    });
+  });
+
+  it('should report no config file when settings come only from the environment', async () => {
+    process.env.MMK_URI = 'mongodb://localhost:27017';
+    process.env.MMK_DB = 'app';
+    const loaded = await loadConfigWithSources({ cwd: tmp, flags: { logger: null } });
+    expect(loaded.configFile).toBeNull();
+    expect(loaded.sources.get('uri')).toBe('env');
+    expect(loaded.sources.has('namespace')).toBe(false);
+  });
+
+  it('should resolve exactly the config loadConfig resolves', async () => {
+    writeFileSync(path.join(tmp, 'mmk.config.json'), JSON.stringify({ namespace: 'billing' }));
+    const options = { cwd: tmp, flags: { uri: 'mongodb://h:27017', dbName: 'app', logger: null } };
+    expect((await loadConfigWithSources(options)).config).toEqual(await loadConfig(options));
   });
 });
