@@ -12,6 +12,18 @@ All notable changes to this project will be documented in this file.
   absolute. In code: `migrator.describeConfig()`, returning the new `ConfigSummary` type.
 - `loadConfigWithSources()` — `loadConfig()` plus the config file it loaded and the layer of each
   value. `loadConfig()` is unchanged.
+- **A failed run says what ran first.** When `up`, `down` or `redo` stops partway, the error's
+  context has `results`: the `RunResult[]` of the files that ran before it stopped, with the failed
+  file last (`status: 'error'`) when its own `up()` or `down()` threw. In `--json` output it's
+  `error.details.results`; in code, `err.context.results`. A failed `redo` includes the revert.
+  Errors that aren't an `MmkError` are passed on unchanged.
+
+### Fixed
+
+- **`--json` stdout holds only the JSON document.** A `console.log` (or `process.stdout.write`) in
+  a migration, a hook or a config function used to print to stdout before the document, which
+  broke `JSON.parse` and `jq`. In `--json` mode that output now goes to stderr. Without `--json`,
+  nothing changes.
 
 ## v1.5.0
 

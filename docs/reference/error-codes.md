@@ -9,6 +9,11 @@ Everything mmk throws is an `MmkError` with a `code`. The CLI prints the code at
 message (`✖ LOCK_ALREADY_HELD: …`). In `--json` mode you get
 `{ "error": { "code", "message", "details" } }` and exit code `1`.
 
+When `up`, `down` or `redo` stops partway, whatever the code, `details.results` (and
+`err.context.results` in code) lists the files that ran before it stopped, in the same shape as a
+successful run's results. If a migration's own `up()` or `down()` threw, it comes last with
+`status: 'error'`.
+
 In code, check the class or switch on `code`:
 
 ```ts

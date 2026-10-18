@@ -533,6 +533,85 @@ describe('mmk CLI (integration)', () => {
     expect(parsed.error.code).toBe('MIGRATION_EXECUTION_FAILED');
   });
 
+  it('should list the files that ran before a failure under details.results with --json', async () => {
+    project.write('0001-a.ts', insertMigration('things', 'a'));
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    project.write('0003-x.ts', failingMigration());
+    const result = await runCli(baseArgs(['up', '--json']));
+    expect(result.code).toBe(1);
+    const parsed = JSON.parse(result.stdout) as {
+      error: { code: string; details: Record<string, unknown> };
+    };
+    expect(parsed.error.code).toBe('MIGRATION_EXECUTION_FAILED');
+    expect(parsed.error.details).toMatchObject({ name: '0003-x.ts', direction: 'up' });
+    expect(parsed.error.details.results).toEqual([
+      { file: '0001-a.ts', status: 'applied', duration: expect.any(Number), batch: 1 },
+      { file: '0002-b.ts', status: 'applied', duration: expect.any(Number), batch: 1 },
+      { file: '0003-x.ts', status: 'error', error: expect.stringContaining('intentional failure') },
+    ]);
+  });
+
+  it('should keep stdout to the JSON document when the config, a hook and a migration print', async () => {
+    // Each of these is user code that runs inside the command. In --json mode what it prints
+    // must go to stderr, or JSON.parse(stdout) and jq break.
+    project.write(
+      '0001-a.ts',
+      [
+        'export async function up() {',
+        "  console.log('from up');",
+        "  process.stdout.write('raw write from up\\n');",
+        '}',
+        'export async function down() {}',
+        '',
+      ].join('\n'),
+    );
+    const cwdDir = path.join(project.dir, 'app');
+    mkdirSync(cwdDir);
+    const factory = [
+      'export default async () => {',
+      "  console.log('from config');",
+      '  return {',
+      `    uri: ${JSON.stringify(mongo.uri)},`,
+      `    dbName: ${JSON.stringify(DB)},`,
+      `    migrationsDir: ${JSON.stringify(project.dir)},`,
+      "    hooks: { beforeAll: async () => console.info('from beforeAll') },",
+      '  };',
+      '};',
+      '',
+    ].join('\n');
+    writeFileSync(path.join(cwdDir, 'mmk.config.js'), factory);
+    const result = await runCli(['up', '--json'], {}, cwdDir);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([
+      { file: '0001-a.ts', status: 'applied', duration: expect.any(Number), batch: 1 },
+    ]);
+    for (const line of ['from config', 'from beforeAll', 'from up', 'raw write from up']) {
+      expect(result.stderr).toContain(line);
+    }
+  });
+
+  it('should keep stdout to the error document when a migration that prints fails', async () => {
+    project.write(
+      '0001-x.ts',
+      "export async function up() {\n  console.log('about to fail');\n  throw new Error('intentional failure');\n}\nexport async function down() {}\n",
+    );
+    const result = await runCli(baseArgs(['up', '--json']));
+    expect(result.code).toBe(1);
+    const parsed = JSON.parse(result.stdout) as { error: { code?: string } };
+    expect(parsed.error.code).toBe('MIGRATION_EXECUTION_FAILED');
+    expect(result.stderr).toContain('about to fail');
+  });
+
+  it("should leave a migration's console output on stdout without --json", async () => {
+    project.write(
+      '0001-a.ts',
+      "export async function up() {\n  console.log('from up');\n}\nexport async function down() {}\n",
+    );
+    const result = await runCli(baseArgs(['up']));
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('from up');
+  });
+
   // ── status --check (feature 2) ───────────────────────────────────────────
   it('should exit 1 from status --check when migrations are pending', async () => {
     project.write('0001-a.ts', insertMigration('things', 'a'));
