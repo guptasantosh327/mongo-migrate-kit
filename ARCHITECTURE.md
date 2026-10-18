@@ -169,6 +169,11 @@ Key observations:
 - **Errors stop the batch.** `runUp`'s loop rethrows on the first failure; already-applied files in
   that run stay applied (changelog records them as they succeed), the failing one does not.
 - **`connect()` is idempotent** — both `withMigrator` and `up()` call it; the second is a no-op.
+- **Read commands connect read-only.** `status`/`list`/`dry-run`/`statusAllNamespaces`/`lockInfo`
+  (and the CLI's `withMigrator` for them, via `readOnly: true`) call `connect({ readOnly: true })`,
+  which opens the client and runs the read-only checks (server version, `SCHEMA_TOO_NEW`) but skips
+  `ensureIndexes` and the storage marker, so a `read`-role user can run them. A later plain
+  `connect()` on the same migrator does the write preparation then (`preparedForWrites`).
 - **`disconnect()` always runs** in `withMigrator`'s `finally`. The programmatic helpers do the same.
 
 ---
@@ -240,7 +245,7 @@ Each entry: **responsibility · key exports · nuances you must know.**
     sacred.
   - `coll()` pins the collection to `writeConcern:{w:'majority'}` so the audit trail survives failover
     (overridden by the transaction's WC when a session is in play).
-  - `ensureIndexes` creates the unique index on `name`; called on every `connect()`. It stays unique
+  - `ensureIndexes` creates the unique index on `name`; called on every non-read-only `connect()`. It stays unique
     across the **whole collection**, not per namespace — stricter than `(namespace, name)`, recreated
     by every pre-1.5 version anyway, and dropping it would need index privileges. A filename used by
     two namespaces is caught earlier by safety check 1, with a clear message.

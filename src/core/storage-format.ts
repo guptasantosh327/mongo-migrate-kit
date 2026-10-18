@@ -34,36 +34,23 @@ interface MetaDocument {
   updatedAt: Date;
 }
 
-/** Options for {@link checkStorageFormat} */
-export interface CheckStorageFormatOptions {
-  /**
-   * Record this version's format after the check. Pass true only when this run
-   * writes data in that format (for 1.5: records with a `namespace`), so a
-   * database that only holds data every version can read never gets a marker —
-   * or a `_mmk_meta` collection.
-   */
-  record: boolean;
+/** The marker collection, with the majority write concern every mmk metadata write uses */
+function metaCollection(db: Db): Collection<MetaDocument> {
+  return db.collection<MetaDocument>(META_COLLECTION, { writeConcern: { w: 'majority' } });
 }
 
 /**
- * Refuse to run against a database written in a newer storage format, and —
- * when `record` is set — record this version's format. Called on every connect.
+ * Refuse to run against a database written in a newer storage format. Called on
+ * every connect, including read-only ones: it only reads.
  *
  * Reading a collection that does not exist creates nothing, so repos that never
  * record a marker never see `_mmk_meta`. Pre-1.5 versions do not know the
- * collection exists. The marker is written with `$max`, so it never moves
- * backwards; if someone deletes it, the next recording run writes it again.
+ * collection exists.
  *
  * @throws {@link SchemaTooNewError} when the stored format is newer than this build understands
  */
-export async function checkStorageFormat(
-  db: Db,
-  options: CheckStorageFormatOptions,
-): Promise<void> {
-  const collection: Collection<MetaDocument> = db.collection<MetaDocument>(META_COLLECTION, {
-    writeConcern: { w: 'majority' },
-  });
-  const meta = await collection.findOne({ _id: META_ID });
+export async function checkStorageFormat(db: Db): Promise<void> {
+  const meta = await metaCollection(db).findOne({ _id: META_ID });
   if (meta && meta.schemaVersion > STORAGE_FORMAT_VERSION) {
     throw new SchemaTooNewError(
       explain(
@@ -77,10 +64,19 @@ export async function checkStorageFormat(
       { stored: meta.schemaVersion, supported: STORAGE_FORMAT_VERSION, writtenBy: meta.writtenBy },
     );
   }
-  if (!options.record) {
-    return;
-  }
-  await collection.updateOne(
+}
+
+/**
+ * Record this version's storage format. Call it only after
+ * {@link checkStorageFormat}, and only when the run writes data in that format
+ * (for 1.5: records with a `namespace`), so a database that only holds data
+ * every version can read never gets a marker — or a `_mmk_meta` collection.
+ *
+ * The marker is written with `$max`, so it never moves backwards; if someone
+ * deletes it, the next recording run writes it again.
+ */
+export async function recordStorageFormat(db: Db): Promise<void> {
+  await metaCollection(db).updateOne(
     { _id: META_ID },
     {
       $max: { schemaVersion: STORAGE_FORMAT_VERSION },

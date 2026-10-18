@@ -29,7 +29,7 @@ export function registerList(program: Command): void {
             createLogger().info(renderStatusTable(rows));
           }
         },
-        { spinner: true, ...(opts.json ? { json: true } : {}) },
+        { spinner: true, readOnly: true, ...(opts.json ? { json: true } : {}) },
       );
     });
 }
