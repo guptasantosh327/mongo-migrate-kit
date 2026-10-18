@@ -4,14 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-### Docs
-
-- **mmk for VS Code** (`/guide/vscode`): installing the extension, environments and read-only
-  database users, editing applied migrations, and which mongo-migrate-kit version each feature
-  needs.
-
 ### Added
 
+- **`mmk config [--json]`** — shows the settings mmk resolved and where each one came from (a CLI
+  flag, an `MMK_*` environment variable, the config file, or the default). It never connects, works
+  without a connection string, and always hides the connection string's credentials. Paths are
+  absolute. In code: `migrator.describeConfig()`, returning the new `ConfigSummary` type.
+- `loadConfigWithSources()` — `loadConfig()` plus the config file it loaded and the layer of each
+  value. `loadConfig()` is unchanged.
+- **A failed run says what ran first.** When `up`, `down` or `redo` stops partway, the error's
+  context has `results`: the `RunResult[]` of the files that ran before it stopped, with the failed
+  file last (`status: 'error'`) when its own `up()` or `down()` threw. In `--json` output it's
+  `error.details.results`; in code, `err.context.results`. A failed `redo` includes the revert.
+  Errors that aren't an `MmkError` are passed on unchanged.
 - **`StatusRow.checksum`**: the SHA-256 recorded when the migration was applied, on every applied
   row of `status`, `list` and `dry-run` (and their `--json` output). `checksumOk` already said
   whether the file still matches; now tools can see the value itself, e.g. to compare it with
@@ -31,26 +36,20 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- **A write command with a `namespace`, run by a user that can't write, now reports
-  `CONNECTION_FAILED`.** It used to fail with the driver's bare `not authorized` error, with no
-  error code (also none in `--json`), because recording the storage format wasn't handled like
-  creating the changelog index.
-- **`mmk config [--json]`** — shows the settings mmk resolved and where each one came from (a CLI
-  flag, an `MMK_*` environment variable, the config file, or the default). It never connects, works
-  without a connection string, and always hides the connection string's credentials. Paths are
-  absolute. In code: `migrator.describeConfig()`, returning the new `ConfigSummary` type.
-- `loadConfigWithSources()` — `loadConfig()` plus the config file it loaded and the layer of each
-  value. `loadConfig()` is unchanged.
-- **A failed run says what ran first.** When `up`, `down` or `redo` stops partway, the error's
-  context has `results`: the `RunResult[]` of the files that ran before it stopped, with the failed
-  file last (`status: 'error'`) when its own `up()` or `down()` threw. In `--json` output it's
-  `error.details.results`; in code, `err.context.results`. A failed `redo` includes the revert.
-  Errors that aren't an `MmkError` are passed on unchanged.
-
 - **`--json` stdout holds only the JSON document.** A `console.log` (or `process.stdout.write`) in
   a migration, a hook or a config function used to print to stdout before the document, which
   broke `JSON.parse` and `jq`. In `--json` mode that output now goes to stderr. Without `--json`,
   nothing changes.
+- **A write command with a `namespace`, run by a user that can't write, now reports
+  `CONNECTION_FAILED`.** It used to fail with the driver's bare `not authorized` error, with no
+  error code (also none in `--json`), because recording the storage format wasn't handled like
+  creating the changelog index.
+
+### Documentation
+
+- **A page for the VS Code extension** (`/guide/vscode`): installing the extension, environments
+  and read-only database users, editing applied migrations, and which mongo-migrate-kit version
+  each feature needs.
 
 ## v1.5.0
 
