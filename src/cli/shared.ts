@@ -17,9 +17,38 @@ export interface CliOptions {
   json?: boolean;
 }
 
+/**
+ * The real stdout's `write`, kept while {@link routeStdoutToStderr} is in effect so the JSON
+ * document still reaches stdout. Undefined otherwise.
+ */
+let jsonStdoutWrite: NodeJS.WriteStream['write'] | undefined;
+
 /** Write a value as pretty JSON to stdout, followed by a newline */
 export function emitJson(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+  const text = `${JSON.stringify(value, null, 2)}\n`;
+  if (jsonStdoutWrite) {
+    jsonStdoutWrite(text);
+  } else {
+    process.stdout.write(text);
+  }
+}
+
+/**
+ * Send everything written to stdout to stderr instead, until the returned function restores it.
+ * {@link emitJson} still writes to the real stdout.
+ *
+ * `--json` promises one JSON document on stdout, but a command runs the user's code: a config
+ * function, hooks, and the migrations themselves. A `console.log` (or `process.stdout.write`) in
+ * any of them would land on stdout before the document and break `JSON.parse` and `jq`.
+ */
+export function routeStdoutToStderr(): () => void {
+  const original = process.stdout.write;
+  jsonStdoutWrite = original.bind(process.stdout);
+  process.stdout.write = process.stderr.write.bind(process.stderr);
+  return () => {
+    process.stdout.write = original;
+    jsonStdoutWrite = undefined;
+  };
 }
 
 /** Build the partial config passed to MigratorKit from CLI flags */
@@ -93,10 +122,18 @@ export interface WithMigratorOptions {
   /**
    * Machine-readable mode. Routes all human log output (and the migrator's own
    * progress lines) to stderr and disables the spinner, so the command can emit
-   * a single clean JSON document on stdout via {@link emitJson}. On failure,
-   * withMigrator emits `{ error: { code?, message } }` to stdout and exits 1.
+   * a single clean JSON document on stdout via {@link emitJson}. Anything the
+   * user's code writes to stdout goes to stderr too ({@link routeStdoutToStderr}).
+   * On failure, withMigrator emits `{ error: { code?, message, details? } }` to
+   * stdout and exits 1.
    */
   json?: boolean;
+  /**
+   * The command only reads, so connect without preparing the database for
+   * writes (see `ConnectOptions.readOnly`): it then works with a user that has
+   * only the `read` role.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -110,7 +147,9 @@ export async function withMigrator(
 ): Promise<void> {
   const json = options.json ?? false;
   // In JSON mode the spinner is suppressed and all human output goes to stderr,
-  // so stdout carries exactly one JSON document.
+  // so stdout carries exactly one JSON document. Redirect before the config
+  // loads: a config function is user code too.
+  const restoreStdout = json ? routeStdoutToStderr() : undefined;
   const spinner = options.spinner && !json ? ora() : undefined;
 
   const partial = partialFromOpts(opts);
@@ -142,7 +181,7 @@ export async function withMigrator(
       await migrator.resolveConfig();
       spinner.start('Connecting to MongoDB…');
       try {
-        await migrator.connect();
+        await migrator.connect(options.readOnly ? { readOnly: true } : {});
         spinner.stop();
       } catch (error) {
         spinner.stop();
@@ -172,7 +211,11 @@ export async function withMigrator(
     process.exitCode = 1;
   } finally {
     spinner?.stop();
-    await migrator.disconnect();
+    try {
+      await migrator.disconnect();
+    } finally {
+      restoreStdout?.();
+    }
   }
 }
 

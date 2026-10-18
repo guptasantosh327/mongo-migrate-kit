@@ -1,6 +1,14 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
-import type { AdoptRow, ImportRow, NamespaceStatusRow, StatusRow } from '../types/index.js';
+import type {
+  AdoptRow,
+  ConfigSource,
+  ConfigSummary,
+  ImportRow,
+  MmkConfig,
+  NamespaceStatusRow,
+  StatusRow,
+} from '../types/index.js';
 import { formatDateTime } from '../utils/date.js';
 import { namespaceLabel } from '../utils/namespace.js';
 
@@ -113,6 +121,52 @@ export function renderAdoptTable(rows: AdoptRow[]): string {
       row.executedBy,
       row.service ?? '',
     ]);
+  }
+
+  return table.toString();
+}
+
+/** How each kind of config layer is named in the `mmk config` table */
+const SOURCE_LABELS: Record<ConfigSource, string> = {
+  flag: 'CLI flag',
+  env: 'environment variable',
+  file: 'config file',
+  default: 'default',
+};
+
+/** Render `mmk config` as a table: each setting, its value, and the layer it came from */
+export function renderConfigTable(summary: ConfigSummary): string {
+  const table = new Table({
+    head: ['Setting', 'Value', 'From'],
+    style: { head: ['cyan'] },
+  });
+
+  const notSet = chalk.dim('(not set)');
+  const from = (key: keyof MmkConfig): string => {
+    const source = summary.sources[key];
+    return source === undefined ? '' : SOURCE_LABELS[source];
+  };
+  const rows: Array<[keyof MmkConfig, unknown]> = [
+    ['uri', summary.uri],
+    ['dbName', summary.dbName],
+    ['namespace', summary.namespace],
+    ['migrationsDir', summary.migrationsDir],
+    ['fileExtensions', summary.fileExtensions.join(', ')],
+    ['createExtension', summary.createExtension],
+    ['sequential', summary.sequential],
+    ['migrationsCollection', summary.migrationsCollection],
+    ['lockCollection', summary.lockCollection],
+    ['lockTTLSeconds', summary.lockTTLSeconds],
+    ['strict', summary.strict],
+    ['useTransaction', summary.useTransaction],
+    ['requireAuthor', summary.requireAuthor],
+    ['author', summary.author],
+    ['templatePath', summary.templatePath],
+  ];
+
+  table.push(['config file', summary.configFile ?? notSet, '']);
+  for (const [key, value] of rows) {
+    table.push([key, value === undefined || value === null ? notSet : String(value), from(key)]);
   }
 
   return table.toString();

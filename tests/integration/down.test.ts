@@ -4,6 +4,7 @@ import type { MigratorKit } from '../../src/core/migrator.js';
 import {
   ChecksumMismatchError,
   InvalidArgumentError,
+  MigrationExecutionFailedError,
   MigrationInvalidNameError,
   NotAppliedError,
 } from '../../src/errors/index.js';
@@ -230,5 +231,25 @@ describe('MigratorKit.down (integration)', () => {
     const results = await migrator.down('0001-a.ts', { force: true });
     expect(results[0]?.status).toBe('reverted');
     expect(await mongo.db.collection('things').countDocuments()).toBe(0);
+  });
+
+  it('should list the files reverted before a failure in the error context', async () => {
+    setup();
+    project.write(
+      '0001-a.ts',
+      "export async function up() {}\nexport async function down() {\n  throw new Error('intentional down failure');\n}\n",
+    );
+    project.write('0002-b.ts', insertMigration('things', 'b'));
+    await migrator.up();
+    const error = await migrator.down().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(MigrationExecutionFailedError);
+    expect((error as MigrationExecutionFailedError).context?.results).toEqual([
+      { file: '0002-b.ts', status: 'reverted', duration: expect.any(Number) },
+      {
+        file: '0001-a.ts',
+        status: 'error',
+        error: expect.stringContaining('intentional down failure'),
+      },
+    ]);
   });
 });

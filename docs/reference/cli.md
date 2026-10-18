@@ -17,7 +17,7 @@ These work on every command and beat environment variables and the config file:
 | `--db <name>` | Database name |
 | `--dir <path>` | Migrations directory |
 | `--config <path>` | Path to a config file (overrides auto-discovery) |
-| `--json` | JSON output on stdout (on every command that reads or changes migrations; on `init` it means "make a JSON config") |
+| `--json` | One JSON document on stdout; everything else, including your own code's `console.log`, goes to stderr (on every command that reads or changes migrations; on `init` it means "make a JSON config") |
 
 ## Running migrations
 
@@ -49,6 +49,7 @@ These work on every command and beat environment variables and the config file:
 | [`mmk dry-run up`](/commands/dry-run) | Preview what would apply |
 | `mmk dry-run down` | Preview what would revert |
 | `mmk dry-run down --steps <n>` | Preview reverting the last N |
+| [`mmk config`](/commands/config) | The settings mmk resolved, and where each came from (never connects) |
 
 ## Creating files
 

@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import * as dotenv from 'dotenv';
 import { z } from 'zod';
 import { ConfigInvalidError } from '../errors/index.js';
-import type { MmkConfig, MmkConfigInput } from '../types/index.js';
+import type { ConfigSource, MmkConfig, MmkConfigInput } from '../types/index.js';
 import { explain, suggest } from '../utils/explain.js';
 import { isTypeScriptLoadFailure } from '../utils/loader.js';
 import { resolveLogger } from '../utils/logger.js';
@@ -222,20 +222,24 @@ function throwIssues(issues: ConfigIssue[]): never {
 
 /**
  * Copy the defined keys of `source` onto `target`, recording in `origins` which
- * layer supplied each key. Later layers overwrite earlier ones, so `origins`
- * always names the layer that actually won.
+ * layer supplied each key (for messages) and in `kinds` which kind of layer it
+ * was (for `mmk config`). Later layers overwrite earlier ones, so both always
+ * name the layer that actually won.
  */
 function applyLayer(
   target: Partial<MmkConfig>,
   source: Partial<MmkConfig>,
   origins: Map<string, string>,
   labelFor: (key: string) => string,
+  kinds: Map<keyof MmkConfig, ConfigSource>,
+  kind: ConfigSource,
 ): void {
   for (const key of Object.keys(source) as Array<keyof MmkConfig>) {
     const value = source[key];
     if (value !== undefined) {
       (target as Record<string, unknown>)[key] = value;
       origins.set(key, labelFor(key));
+      kinds.set(key, kind);
     }
   }
 }
@@ -734,6 +738,15 @@ function toConfigIssue(
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
+/** A resolved config together with where it came from, from {@link loadConfigWithSources} */
+export interface LoadedConfig {
+  config: MmkConfig;
+  /** Absolute path of the config file that was loaded, or null when there was none */
+  configFile: string | null;
+  /** The kind of layer that supplied each key that has a value */
+  sources: Map<keyof MmkConfig, ConfigSource>;
+}
+
 /**
  * Resolve the final {@link MmkConfig} by merging, in priority order:
  * CLI flags > environment variables > config file > defaults.
@@ -745,14 +758,26 @@ function toConfigIssue(
  * as {@link ConfigIssue}) for machine-readable output.
  */
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<MmkConfig> {
+  return (await loadConfigWithSources(options)).config;
+}
+
+/**
+ * {@link loadConfig}, also returning the config file that was loaded and the
+ * kind of layer each value came from — what `mmk config` reports.
+ */
+export async function loadConfigWithSources(
+  options: LoadConfigOptions = {},
+): Promise<LoadedConfig> {
   const cwd = options.cwd ?? process.cwd();
 
   dotenv.config({ path: path.join(cwd, '.env'), override: false });
 
   const merged: Partial<MmkConfig> = { ...DEFAULT_CONFIG };
   const origins = new Map<string, string>();
-  for (const key of Object.keys(DEFAULT_CONFIG)) {
+  const kinds = new Map<keyof MmkConfig, ConfigSource>();
+  for (const key of Object.keys(DEFAULT_CONFIG) as Array<keyof MmkConfig>) {
     origins.set(key, 'the built-in default');
+    kinds.set(key, 'default');
   }
 
   const configFilePath = options.configPath
@@ -780,7 +805,14 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<MmkCo
     }
     const fileConfig = await loadConfigFile(configFilePath);
     assertKnownFileKeys(fileConfig, configFileLabel);
-    applyLayer(merged, fileConfig, origins, () => `the config file ${configFileLabel}`);
+    applyLayer(
+      merged,
+      fileConfig,
+      origins,
+      () => `the config file ${configFileLabel}`,
+      kinds,
+      'file',
+    );
   }
 
   const env = readEnvConfig(configFileLabel);
@@ -790,10 +822,12 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<MmkCo
     origins,
     (key) =>
       `the ${ENV_ENTRIES.find((entry) => entry.key === key)?.env ?? 'MMK_*'} environment variable`,
+    kinds,
+    'env',
   );
 
   if (options.flags) {
-    applyLayer(merged, options.flags, origins, () => FLAG_SOURCE);
+    applyLayer(merged, options.flags, origins, () => FLAG_SOURCE, kinds, 'flag');
   }
 
   const requireDb = options.requireDb ?? true;
@@ -835,5 +869,5 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<MmkCo
     );
   }
 
-  return config;
+  return { config, configFile: configFilePath, sources: kinds };
 }

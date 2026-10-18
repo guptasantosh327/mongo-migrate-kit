@@ -45,6 +45,9 @@ to go ahead until they've run, use `status --check`. It exits `1` when anything 
 npx mmk status --check || { echo "Run the migrations first"; exit 1; }
 ```
 
+This check doesn't need write access: `status`, `list` and `dry-run` work with a MongoDB user that
+has only the `read` role. See [With a read-only database user](/commands/status#with-a-read-only-database-user).
+
 ## GitHub Actions
 
 A deploy job that runs migrations on every push to `main`:
@@ -156,7 +159,8 @@ that happens to be called `mmk`, with your database credentials in the environme
 ## Reading the output in scripts
 
 Add `--json` to any command that reads or changes migrations and you get one JSON document on
-stdout. Progress lines and the spinner move to stderr, so stdout is safe to pipe:
+stdout. Progress lines and the spinner move to stderr, and so does anything your own code prints
+(a `console.log` in a migration, a hook or a config function), so stdout is safe to pipe:
 
 ```bash
 npx mmk up --json
@@ -191,6 +195,14 @@ sha256sum`) gives a value you can compare with it.
 
 When a command fails in JSON mode, it prints `{ "error": { "code": "...", "message": "..." } }` and
 exits `1`. The `code` values are listed in [Error codes](/reference/error-codes).
+
+When `up`, `down` or `redo` fails partway, `error.details.results` says what ran before it stopped,
+in the same shape as a successful run. The file that failed comes last, with `"status": "error"`:
+
+```bash
+# which files did the failed run apply?
+npx mmk up --json | jq -r '.error?.details.results[]? | select(.status == "applied") | .file'
+```
 
 ## Tips
 
