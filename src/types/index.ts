@@ -428,6 +428,18 @@ export interface LockInfo {
   expiresAt?: Date;
 }
 
+/** Who holds the migration lock right now (`mmk lock`, `MigratorKit.lockStatus()`) */
+export interface LockStatus {
+  /** The holder recorded on the lock, or null when no lock is held */
+  holder: LockInfo | null;
+  /**
+   * True when a holder is recorded but its lock has gone stale by the database
+   * server's clock (the holder stopped renewing it, e.g. it crashed), so the
+   * next run takes it over. Always false without a holder
+   */
+  stale: boolean;
+}
+
 // ─── Error Codes ──────────────────────────────────────────────────────────────
 
 export type MmkErrorCode =

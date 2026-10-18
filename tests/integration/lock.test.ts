@@ -188,3 +188,64 @@ describe('MigrationLock across repos (integration)', () => {
     expect(after?.acquiredAt.getTime()).toBe(before?.acquiredAt.getTime());
   });
 });
+
+describe('MigrationLock.status (integration)', () => {
+  const locks = () => mongo.db.collection<{ _id: string }>(COLLECTION);
+
+  it('should return null when no lock is held, and create nothing', async () => {
+    await mongo.db
+      .collection(COLLECTION)
+      .drop()
+      .catch(() => undefined);
+    const lock = new MigrationLock(mongo.db, COLLECTION, 60);
+    expect(await lock.status()).toBeNull();
+    const collections = await mongo.db.listCollections({ name: COLLECTION }).toArray();
+    expect(collections).toHaveLength(0);
+  });
+
+  it('should report a held lock as not stale, and leave it exactly as it was', async () => {
+    const holder = new MigrationLock(mongo.db, COLLECTION, 60, 'billing-api');
+    await holder.acquire();
+    const before = await locks().findOne({ _id: LOCK_ID });
+
+    const status = await new MigrationLock(mongo.db, COLLECTION, 60).status();
+
+    expect(status?.stale).toBe(false);
+    expect(status?.holder).toEqual(before);
+    expect(await locks().findOne({ _id: LOCK_ID })).toEqual(before);
+  });
+
+  it('should report a lock whose expiresAt has passed as stale', async () => {
+    await locks().insertOne({
+      _id: LOCK_ID,
+      lockedAt: new Date(Date.now() - 120_000),
+      expiresAt: new Date(Date.now() - 60_000),
+      pid: 1,
+      host: 'crashed-host',
+      executedBy: 'old-user',
+      owner: 'stale',
+    });
+    const status = await new MigrationLock(mongo.db, COLLECTION, 60).status();
+    expect(status?.stale).toBe(true);
+    expect(status?.holder.host).toBe('crashed-host');
+  });
+
+  it("should judge a lock without expiresAt (a pre-1.5 holder) by this run's TTL", async () => {
+    await locks().insertOne({
+      _id: LOCK_ID,
+      lockedAt: new Date(Date.now() - 10_000),
+      pid: 1,
+      host: 'old-host',
+      executedBy: 'old-user',
+    });
+    expect((await new MigrationLock(mongo.db, COLLECTION, 1).status())?.stale).toBe(true);
+    expect((await new MigrationLock(mongo.db, COLLECTION, 60).status())?.stale).toBe(false);
+  });
+
+  it("should keep judging by the holder's TTL: a short-TTL reader sees a fresh lock", async () => {
+    const holder = new MigrationLock(mongo.db, COLLECTION, 600, 'billing-api');
+    await holder.acquire();
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    expect((await new MigrationLock(mongo.db, COLLECTION, 1).status())?.stale).toBe(false);
+  });
+});

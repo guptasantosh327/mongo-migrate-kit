@@ -26,6 +26,7 @@ import type {
   ImportResult,
   ImportRow,
   LockInfo,
+  LockStatus,
   MigrateMongoDoc,
   MigrationRecord,
   MmkConfig,
@@ -665,6 +666,21 @@ export class MigratorKit {
     await this.ensureConfig();
     await this.connect({ readOnly: true });
     return this.toLockInfo(await this.buildLock().inspect());
+  }
+
+  /**
+   * Who holds the migration lock and whether it has gone stale (the holder
+   * stopped renewing it, so the next run takes it over) — what `mmk lock`
+   * shows. Only reads: it connects read-only and never takes, renews or
+   * releases the lock, so it works with a user that has only the `read` role.
+   */
+  async lockStatus(): Promise<LockStatus> {
+    await this.ensureConfig();
+    await this.connect({ readOnly: true });
+    const state = await this.buildLock().status();
+    return state
+      ? { holder: this.toLockInfo(state.holder), stale: state.stale }
+      : { holder: null, stale: false };
   }
 
   /**

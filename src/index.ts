@@ -33,6 +33,7 @@ export type {
   ImportResult,
   ImportRow,
   LockInfo,
+  LockStatus,
   MigrateMongoDoc,
   MigrationContext,
   MigrationExtension,

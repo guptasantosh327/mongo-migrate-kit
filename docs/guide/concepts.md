@@ -111,6 +111,8 @@ A few details that matter in production:
   `lockTTLSeconds` (60 by default) and the next run can take it.
 - **Long migrations keep it.** While a migration runs, mmk renews the lock every half TTL, so a
   20-minute backfill doesn't lose its lock halfway through.
+- **You can see who holds it.** [`mmk lock`](/commands/lock) shows the holder and whether its lock
+  has gone stale, and changes nothing.
 - **You can clear it by hand.** [`mmk unlock`](/commands/unlock) shows who holds it and asks before
   removing it.
 - **Read-only commands don't take it.** `status`, `list` and `dry-run` never wait for the lock.

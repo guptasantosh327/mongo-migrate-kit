@@ -169,7 +169,7 @@ Key observations:
 - **Errors stop the batch.** `runUp`'s loop rethrows on the first failure; already-applied files in
   that run stay applied (changelog records them as they succeed), the failing one does not.
 - **`connect()` is idempotent** — both `withMigrator` and `up()` call it; the second is a no-op.
-- **Read commands connect read-only.** `status`/`list`/`dry-run`/`statusAllNamespaces`/`lockInfo`
+- **Read commands connect read-only.** `status`/`list`/`dry-run`/`statusAllNamespaces`/`lockStatus`/`lockInfo`
   (and the CLI's `withMigrator` for them, via `readOnly: true`) call `connect({ readOnly: true })`,
   which opens the client and runs the read-only checks (server version, `SCHEMA_TOO_NEW`) but skips
   `ensureIndexes` and the storage marker, so a `read`-role user can run them. A later plain
@@ -277,7 +277,7 @@ Each entry: **responsibility · key exports · nuances you must know.**
 
 ### `src/core/migrator.ts` — the orchestrator (the heart)
 - **Responsibility:** every command's flow. `up`/`down`/`redo`/`dryRun`/`status`/`list`/`create`/
-  `init`/`import`/`lockInfo`/`forceUnlock`, plus connection lifecycle.
+  `init`/`import`/`lockStatus`/`lockInfo`/`forceUnlock`, plus connection lifecycle.
 - **Shape:** public method validates + connects + wraps the *private* `runX` worker in `runWithLock`.
   The `runX` worker is where the actual sequencing lives. This split keeps lock handling in one place.
 - **Nuances:** `filepath(name)` centralizes **path-traversal defense** — every user-supplied name
@@ -424,7 +424,9 @@ forward (`$$NOW`) — `lockedAt` because pre-1.5 versions judge staleness from i
 the process alive, and is `clearInterval`-ed in `finally` ([lock.ts:170-195](src/core/lock.ts#L170-L195)).
 
 **Release** — `deleteOne({_id, owner})`, owner-scoped so we never delete a lock since reclaimed by
-someone else. `forceRelease()` (for `mmk unlock`) deletes unconditionally by `_id`.
+someone else. `forceRelease()` (for `mmk unlock`) deletes unconditionally by `_id`. `status()` (for
+`mmk lock`) only reads: the document, and whether `staleFilter` (acquire's own rule, on the server's
+clock) matches it.
 
 **(d) Majority durability** — every lock op goes through `coll()`, which pins
 `writeConcern:{w:'majority'}` + `readConcern:{level:'majority'}`. A lock write that isn't majority-acked

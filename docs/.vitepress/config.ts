@@ -452,6 +452,7 @@ export default defineConfig({
           items: [
             { text: 'mmk status / list', link: '/commands/status' },
             { text: 'mmk dry-run', link: '/commands/dry-run' },
+            { text: 'mmk lock', link: '/commands/lock' },
             { text: 'mmk config', link: '/commands/config' },
           ],
         },

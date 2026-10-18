@@ -135,6 +135,7 @@ try {
 | `init(options?)` | path of the new file | `mmk init` |
 | `import(options?)` | `ImportResult` | `mmk import` |
 | `adopt(options?)` | `AdoptResult` | `mmk namespace adopt` |
+| `lockStatus()` | `LockStatus` (`{ holder, stale }`) | `mmk lock` |
 | `lockInfo()` | `LockInfo \| null` | `mmk unlock` (looking only) |
 | `forceUnlock()` | `LockInfo \| null` | `mmk unlock --yes` |
 
@@ -145,8 +146,8 @@ Most methods connect for you if you forget, but always pair that with `disconnec
 
 `connect()` creates the changelog collection's index, which needs write access. To only read, use
 `connect({ readOnly: true })`: it writes nothing, so it works with a user that has only the `read`
-role. `status()`, `list()`, `dryRun()`, `statusAllNamespaces()`, `lockInfo()` and
-`pendingMigrations()` connect this way on their own. A later write method on the same migrator
+role. `status()`, `list()`, `dryRun()`, `statusAllNamespaces()`, `lockStatus()`, `lockInfo()`
+and `pendingMigrations()` connect this way on their own. A later write method on the same migrator
 creates the index then.
 
 ## The result types

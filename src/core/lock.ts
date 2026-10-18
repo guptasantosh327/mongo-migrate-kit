@@ -234,6 +234,22 @@ export class MigrationLock {
     return result.matchedCount === 1;
   }
 
+  /**
+   * The current lock document and whether it has gone stale by the server's
+   * clock — judged by the same filter {@link acquire} uses to take a lock over,
+   * so the answer matches what the next run will do. Only reads (`mmk lock`).
+   * Returns null when no lock is held.
+   */
+  async status(): Promise<{ holder: LockDocument; stale: boolean } | null> {
+    const collection = this.coll();
+    const holder = await collection.findOne({ _id: LOCK_ID });
+    if (!holder) {
+      return null;
+    }
+    const stale = (await collection.findOne(this.staleFilter(await this.serverNow()))) !== null;
+    return { holder, stale };
+  }
+
   /** Read the current lock document, or null when no lock is held */
   async inspect(): Promise<LockDocument | null> {
     return this.coll().findOne({ _id: LOCK_ID });

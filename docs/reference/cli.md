@@ -49,6 +49,7 @@ These work on every command and beat environment variables and the config file:
 | [`mmk dry-run up`](/commands/dry-run) | Preview what would apply |
 | `mmk dry-run down` | Preview what would revert |
 | `mmk dry-run down --steps <n>` | Preview reverting the last N |
+| [`mmk lock`](/commands/lock) | Who holds the migration lock, and whether it has gone stale (changes nothing) |
 | [`mmk config`](/commands/config) | The settings mmk resolved, and where each came from (never connects) |
 
 ## Creating files

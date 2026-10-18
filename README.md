@@ -184,6 +184,7 @@ Imported migrations are forward-only, because migrate-mongo calls `up(db, client
 | [`mmk list`](https://mongo-migrate-kit.vercel.app/commands/status#mmk-list) | `--pending` or `--applied` only |
 | [`mmk dry-run <up\|down>`](https://mongo-migrate-kit.vercel.app/commands/dry-run) | Show what would run, change nothing |
 | [`mmk import`](https://mongo-migrate-kit.vercel.app/commands/import) | Copy a migrate-mongo history into mmk |
+| [`mmk lock`](https://mongo-migrate-kit.vercel.app/commands/lock) | Show who holds the migration lock, change nothing |
 | [`mmk unlock`](https://mongo-migrate-kit.vercel.app/commands/unlock) | Remove a lock left by a crashed run |
 | [`mmk namespace adopt`](https://mongo-migrate-kit.vercel.app/commands/namespace) | For repos sharing a database: move older records into this repo's namespace |
 
