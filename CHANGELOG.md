@@ -23,6 +23,11 @@ All notable changes to this project will be documented in this file.
   unsaved editor text or to find the commit whose version of the file ran. Absent on pending rows,
   and on an `mmk import` record that has no checksum.
 - **`connect({ readOnly: true })`** (`ConnectOptions`, exported): connects without writing anything.
+- **`mmk lock [--json]`** — shows who holds the migration lock (host, pid, user, namespace, since
+  when, when it frees itself) and whether it has gone stale, so the next run takes it over. It never
+  takes, renews or releases the lock and connects read-only, so a `read`-role user can run it.
+  `--json` prints `{ "holder": LockInfo | null, "stale": boolean }`. In code:
+  `migrator.lockStatus()`, returning the new `LockStatus` type.
 
 ### Changed
 

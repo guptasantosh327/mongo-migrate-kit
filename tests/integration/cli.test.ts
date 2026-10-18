@@ -689,6 +689,80 @@ describe('mmk CLI (integration)', () => {
     expect(await mongo.db.collection('_mmk_locks').countDocuments()).toBe(0);
   });
 
+  // ── mmk lock (request R11 from the VS Code extension) ────────────────────
+  it('should report no lock with lock --json, and create nothing', async () => {
+    const result = await runCli(baseArgs(['lock', '--json']));
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ holder: null, stale: false });
+    expect(await mongo.db.listCollections({ name: '_mmk_locks' }).toArray()).toHaveLength(0);
+
+    const human = await runCli(baseArgs(['lock']));
+    expect(human.code).toBe(0);
+    expect(human.stdout).toContain('No migration lock is currently held');
+  });
+
+  it('should print the holder with lock --json and leave the lock in place', async () => {
+    const lockedAt = new Date(Date.now() - 5_000);
+    const expiresAt = new Date(Date.now() + 600_000);
+    await mongo.db.collection<{ _id: string }>('_mmk_locks').insertOne({
+      _id: 'mmk_lock',
+      lockedAt,
+      acquiredAt: lockedAt,
+      expiresAt,
+      pid: 4242,
+      host: 'deploy-runner-7',
+      executedBy: 'ci',
+      owner: 'live-token',
+    });
+
+    const result = await runCli(baseArgs(['lock', '--json']));
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      holder: {
+        lockedAt: lockedAt.toISOString(),
+        pid: 4242,
+        host: 'deploy-runner-7',
+        executedBy: 'ci',
+        acquiredAt: lockedAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+      },
+      stale: false,
+    });
+    const doc = await mongo.db
+      .collection<{ _id: string }>('_mmk_locks')
+      .findOne({ _id: 'mmk_lock' });
+    expect(doc?.owner).toBe('live-token');
+
+    const human = await runCli(baseArgs(['lock']));
+    expect(human.code).toBe(0);
+    expect(human.stdout).toContain(
+      'Lock held by namespace "(default)": pid 4242 on deploy-runner-7 (ci)',
+    );
+    expect(human.stdout).toContain('`mmk unlock` releases it now');
+  });
+
+  it('should say a lock left by a crashed run is stale', async () => {
+    await mongo.db.collection<{ _id: string }>('_mmk_locks').insertOne({
+      _id: 'mmk_lock',
+      lockedAt: new Date(Date.now() - 120_000),
+      expiresAt: new Date(Date.now() - 60_000),
+      pid: 4242,
+      host: 'crashed-host',
+      executedBy: 'ghost',
+      owner: 'stale-token',
+    });
+
+    const result = await runCli(baseArgs(['lock', '--json']));
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ holder: { pid: 4242 }, stale: true });
+
+    const human = await runCli(baseArgs(['lock']));
+    expect(human.stdout).toContain('Lock left by namespace "(default)": pid 4242 on crashed-host');
+    expect(human.stdout).toContain('so the next run takes it over');
+    expect(await mongo.db.collection('_mmk_locks').countDocuments()).toBe(1);
+  });
+
   it('should let --ts override a js createExtension from config', async () => {
     writeFileSync(
       path.join(project.dir, 'mmk.config.json'),
@@ -849,6 +923,25 @@ describe('mmk CLI namespaces (integration)', () => {
     });
     const result = await runCli(baseArgs(['unlock', '--yes']), ns('orders-api'));
     expect(result.code).toBe(0);
+    expect(result.stderr).toContain(
+      'This lock belongs to "billing-api", not this repo ("orders-api")',
+    );
+  });
+
+  it('should say when the lock belongs to another repo, with lock', async () => {
+    await mongo.db.collection<{ _id: string }>('_mmk_locks').insertOne({
+      _id: 'mmk_lock',
+      lockedAt: new Date(),
+      expiresAt: new Date(Date.now() + 600_000),
+      pid: 4242,
+      host: 'billing-host',
+      executedBy: 'deploy',
+      owner: 'token',
+      namespace: 'billing-api',
+    });
+    const result = await runCli(baseArgs(['lock']), ns('orders-api'));
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('Lock held by namespace "billing-api"');
     expect(result.stderr).toContain(
       'This lock belongs to "billing-api", not this repo ("orders-api")',
     );

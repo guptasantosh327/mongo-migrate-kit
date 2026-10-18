@@ -120,6 +120,7 @@ describe('read commands with a read-only user', () => {
       expect((await reader.dryRun('down')).map((row) => row.file)).toEqual(['0001-a.js']);
       expect((await reader.statusAllNamespaces()).map((row) => row.file)).toEqual(['0001-a.js']);
       expect(await reader.lockInfo()).toBeNull();
+      expect(await reader.lockStatus()).toEqual({ holder: null, stale: false });
     } finally {
       await reader.disconnect();
     }
@@ -208,6 +209,10 @@ describe('read commands with a read-only user', () => {
     const all = await runCli(['status', '--all-namespaces', '--json', ...base]);
     expect(all.code, all.stderr).toBe(0);
     expect(JSON.parse(all.stdout)).toHaveLength(1);
+
+    const lock = await runCli(['lock', '--json', ...base]);
+    expect(lock.code, lock.stderr).toBe(0);
+    expect(JSON.parse(lock.stdout)).toEqual({ holder: null, stale: false });
   }, 60_000);
 });
 
@@ -219,6 +224,7 @@ describe('what connecting writes', () => {
       await migrator.list('pending');
       await migrator.dryRun('up');
       await migrator.statusAllNamespaces();
+      await migrator.lockStatus();
     } finally {
       await migrator.disconnect();
     }

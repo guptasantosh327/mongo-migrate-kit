@@ -38,7 +38,8 @@ crashed without letting go of the lock.
 
 - If the holder is a real deploy that's still going, wait and run again. The lock is doing its job.
 - If the holder crashed (a cancelled CI job, a killed pod), the lock frees itself at the time shown.
-  To clear it sooner, run `npx mmk unlock`. It shows the holder and asks before removing it.
+  `npx mmk lock` shows the holder at any time, and says when its lock has gone stale. To clear it
+  sooner, run `npx mmk unlock`. It shows the holder and asks before removing it.
 - If your app runs migrations on start-up and several instances boot together, use
   `runMigrations({ onLockHeld: 'wait' })` so the others wait instead of failing. See
   [Running from your code](/guide/api#several-instances-starting-at-once).

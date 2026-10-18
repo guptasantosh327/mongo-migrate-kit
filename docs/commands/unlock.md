@@ -18,7 +18,9 @@ overlap. Normally the lock is released when the run ends, even if it fails. But 
 killed outright (a cancelled CI job, an out-of-memory pod), it never gets the chance.
 
 The lock frees itself after `lockTTLSeconds` (60 by default), so often you can just wait a minute.
-`mmk unlock` is for when you can't wait.
+`mmk unlock` is for when you can't wait. To only look, without releasing anything, use
+[`mmk lock`](/commands/lock): it also says when a crashed run's lock has gone stale, so the next run
+takes it over by itself.
 
 ## What it looks like
 
@@ -61,7 +63,7 @@ for exactly that).
 ## From code
 
 ```ts
-const holder = await migrator.lockInfo();   // LockInfo | null, changes nothing
+const holder = await migrator.lockInfo();   // LockInfo | null, changes nothing (lockStatus() adds `stale`)
 if (holder) {
   await migrator.forceUnlock();
 }
