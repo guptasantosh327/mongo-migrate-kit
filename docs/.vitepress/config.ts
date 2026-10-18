@@ -304,6 +304,7 @@ export default defineConfig({
             { text: 'Writing migrations', link: '/guide/writing-migrations' },
             { text: 'TypeScript', link: '/guide/typescript' },
             { text: 'A normal day with mmk', link: '/guide/workflow' },
+            { text: 'In VS Code', link: '/guide/vscode' },
           ],
         },
         {

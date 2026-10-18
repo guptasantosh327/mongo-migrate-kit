@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Docs
+
+- **mmk for VS Code** (`/guide/vscode`): installing the extension, environments and read-only
+  database users, editing applied migrations, and which mongo-migrate-kit version each feature
+  needs.
+
 ### Added
 
 - **`StatusRow.checksum`**: the SHA-256 recorded when the migration was applied, on every applied
