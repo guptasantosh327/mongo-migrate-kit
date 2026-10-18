@@ -165,6 +165,19 @@ describe('read commands with a read-only user', () => {
     expect((await admin.db(DB).collection('items').find().toArray()).length).toBe(1);
   });
 
+  it('should refuse a write command with a namespace as CONNECTION_FAILED', async () => {
+    // With a namespace the first write on connect is the storage marker, not the index.
+    const reader = makeMigrator(readerUri(), DB, project.dir, { namespace: 'orders-api' });
+    try {
+      const error = await reader.up().catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(ConnectionFailedError);
+      expect((error as Error).message).toContain('not authorized');
+    } finally {
+      await reader.disconnect();
+    }
+    expect((await admin.db(DB).collection('items').find().toArray()).length).toBe(1);
+  });
+
   it('should run the read commands from the CLI, with and without --json', async () => {
     const base = ['--uri', readerUri(), '--db', DB, '--dir', project.dir];
 

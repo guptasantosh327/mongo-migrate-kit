@@ -249,24 +249,21 @@ export class MigratorKit {
     if (options.readOnly || this.preparedForWrites) {
       return;
     }
-    // The changelog index is the first write. On failure the client is closed
-    // so a later connect() starts clean.
+    // The first writes. Either one fails the same way (a user without write
+    // access gets `not authorized` in the reason), and the client is closed so a
+    // later connect() starts clean.
     try {
       // Only a namespaced run writes data older versions would misread, so only
       // it records the marker; every run still refuses a newer format (in open()).
       if (config.namespace !== undefined) {
         await recordStorageFormat(this.requireDb());
       }
-      try {
-        await this.requireChangelog().ensureIndexes(this.requireDb());
-      } catch (error) {
-        throw this.connectionFailedError(config, error);
-      }
-      this.preparedForWrites = true;
+      await this.requireChangelog().ensureIndexes(this.requireDb());
     } catch (error) {
       await this.disconnect();
-      throw error;
+      throw this.connectionFailedError(config, error);
     }
+    this.preparedForWrites = true;
   }
 
   /**
@@ -312,7 +309,7 @@ export class MigratorKit {
 
   /**
    * The `CONNECTION_FAILED` error for a driver failure while connecting (or
-   * creating the changelog index). Driver errors frequently embed the
+   * preparing the database for writes). Driver errors frequently embed the
    * connection string verbatim, so credentials are redacted before they reach a
    * log, JSON output, or error context. The redacted driver message is the only
    * clue to WHY it failed (bad host, auth, TLS, timeout, permissions), so it

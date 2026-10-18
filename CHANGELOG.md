@@ -18,6 +18,13 @@ All notable changes to this project will be documented in this file.
   that changes something create the index as before, so the first write command on a new database
   creates the collection instead of the first `status`.
 
+### Fixed
+
+- **A write command with a `namespace`, run by a user that can't write, now reports
+  `CONNECTION_FAILED`.** It used to fail with the driver's bare `not authorized` error, with no
+  error code (also none in `--json`), because recording the storage format wasn't handled like
+  creating the changelog index.
+
 ## v1.5.0
 
 Several repos, one database: give each repo a `namespace`.

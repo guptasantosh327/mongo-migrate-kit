@@ -81,13 +81,17 @@ use orders_prod
 db.createUser({ user: 'mmk-reader', pwd: passwordPrompt(), roles: [{ role: 'read', db: 'orders_prod' }] })
 ```
 
+The user lives in `orders_prod`, so the URI names it with `authSource`. Without it, MongoDB looks
+for the user in `admin` and the login fails:
+
 ```bash
-MMK_URI='mongodb://mmk-reader:<password>@db.example.com' MMK_DB=orders_prod npx mmk status --check
+MMK_URI='mongodb://mmk-reader:<password>@db.example.com/?authSource=orders_prod' MMK_DB=orders_prod npx mmk status --check
 ```
 
 The commands that change something (`up`, `down`, `redo`, `import`, `namespace adopt`, `unlock`)
-still need a user that can write. They create the changelog collection's index when they connect,
-so a read-only user gets `CONNECTION_FAILED` with `not authorized` in the reason.
+still need a user that can write. They create the changelog collection's index when they connect
+(and, with a `namespace`, record the storage format), so a read-only user gets `CONNECTION_FAILED`
+with `not authorized` in the reason.
 
 ## mmk list
 
