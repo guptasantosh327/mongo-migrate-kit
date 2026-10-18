@@ -871,3 +871,111 @@ describe('mmk CLI output ordering (integration)', () => {
     expect(connecting).toBeGreaterThan(loaded);
   });
 });
+
+describe('mmk config (integration)', () => {
+  // Empty values are treated as unset, which hides MMK_* variables the parent may carry.
+  const unset = { MMK_URI: '', MMK_DB: '' };
+
+  function writeConfig(contents: Record<string, unknown>): string {
+    const file = path.join(project.dir, 'mmk.config.json');
+    writeFileSync(file, JSON.stringify(contents));
+    return file;
+  }
+
+  it('should print the resolved config as JSON without a database', async () => {
+    const file = writeConfig({ migrationsDir: './db', namespace: 'billing-api' });
+    const result = await runCli(['config', '--json'], unset, project.dir);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      configFile: file,
+      migrationsDir: path.join(project.dir, 'db'),
+      fileExtensions: ['.ts', '.js'],
+      createExtension: 'js',
+      sequential: false,
+      migrationsCollection: '_mmk_migrations',
+      lockCollection: '_mmk_locks',
+      lockTTLSeconds: 60,
+      strict: false,
+      useTransaction: false,
+      requireAuthor: false,
+      namespace: 'billing-api',
+      dbName: null,
+      uri: null,
+      sources: {
+        migrationsDir: 'file',
+        migrationsCollection: 'default',
+        lockCollection: 'default',
+        lockTTLSeconds: 'default',
+        strict: 'default',
+        useTransaction: 'default',
+        fileExtensions: 'default',
+        createExtension: 'default',
+        sequential: 'default',
+        requireAuthor: 'default',
+        namespace: 'file',
+      },
+    });
+    expect(result.stderr).toContain('Loaded config from mmk.config.json');
+  });
+
+  it('should hide the password and name the layer of each connection setting', async () => {
+    const result = await runCli(
+      ['config', '--json', '--db', 'orders_dev'],
+      { MMK_URI: 'mongodb://alice:s3cret@db.example.com:27017', MMK_DB: '' },
+      project.dir,
+    );
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(parsed).toMatchObject({
+      configFile: null,
+      uri: 'mongodb://***:***@db.example.com:27017',
+      dbName: 'orders_dev',
+      sources: { uri: 'env', dbName: 'flag' },
+    });
+    expect(result.stdout + result.stderr).not.toContain('s3cret');
+  });
+
+  it('should report the migrations directory that create and status use', async () => {
+    writeConfig({ migrationsDir: './db' });
+    const config = JSON.parse((await runCli(['config', '--json'], unset, project.dir)).stdout) as {
+      migrationsDir: string;
+    };
+    const created = JSON.parse(
+      (await runCli(['create', 'side by side', '--json'], unset, project.dir)).stdout,
+    ) as { path: string };
+    expect(path.dirname(created.path)).toBe(config.migrationsDir);
+
+    const status = await runCli(
+      ['--uri', mongo.uri, '--db', DB, 'status', '--json'],
+      unset,
+      project.dir,
+    );
+    expect(status.code).toBe(0);
+    const rows = JSON.parse(status.stdout) as Array<{ file: string }>;
+    expect(rows.map((row) => row.file)).toEqual([path.basename(created.path)]);
+  });
+
+  it('should print a table of settings and where each came from', async () => {
+    writeConfig({ namespace: 'billing-api' });
+    const result = await runCli(['config'], unset, project.dir);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('migrationsDir');
+    expect(result.stdout).toContain('billing-api');
+    expect(result.stdout).toContain('config file');
+    expect(result.stdout).toContain('(not set)');
+  });
+
+  it('should report an invalid setting as an error document, without connecting', async () => {
+    const result = await runCli(
+      ['config', '--json'],
+      { ...unset, MMK_LOCK_TTL: 'soon' },
+      project.dir,
+    );
+    expect(result.code).toBe(1);
+    const parsed = JSON.parse(result.stdout) as {
+      error: { code: string; details: { issues: Array<{ key: string }> } };
+    };
+    expect(parsed.error.code).toBe('CONFIG_INVALID');
+    expect(parsed.error.details.issues.map((issue) => issue.key)).toContain('lockTTLSeconds');
+  });
+});

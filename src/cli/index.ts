@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { registerConfig } from './commands/config.js';
 import { registerCreate } from './commands/create.js';
 import { registerDown } from './commands/down.js';
 import { registerDryRun } from './commands/dry-run.js';
@@ -41,6 +42,7 @@ export function buildProgram(): Command {
   registerCreate(program);
   registerUnlock(program);
   registerNamespace(program);
+  registerConfig(program);
 
   return program;
 }
