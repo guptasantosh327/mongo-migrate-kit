@@ -63,6 +63,25 @@ features:
 
 <Cast name="hero" alt="Terminal: mmk dry-run up lists three pending migrations, mmk up applies them, mmk down rolls back one file by name, and mmk status shows the result" />
 
+## Also in VS Code
+
+<p class="lead"><a href="/guide/vscode">Mongo Migrate Kit for VS Code</a> gives you a migration console, a sidebar and run links in your files. It runs your project's own <code>mmk</code>, so the editor and the terminal always agree.</p>
+
+<figure class="mmk-figure mmk-screen">
+  <img src="/vscode/console.gif" alt="The Mongo Migrate Kit console in VS Code: every migration on local, staging and prod; a plan of three pending migrations, applying them with mmk's output as it comes, the result, rolling the batch back, then prod (read-only) while a CI deploy holds its lock, and the form that edits an environment" width="1280" height="800" loading="lazy" />
+</figure>
+
+| You want to | In a terminal | In VS Code |
+| --- | --- | --- |
+| See what would run, then run it | `mmk dry-run up`, then `mmk up` | *Plan*, then *Apply*, with mmk's output as it comes |
+| Run or roll back one file | `mmk up <file>`, `mmk down <file>` | The links above `up()` and `down()` |
+| Roll back a batch | `mmk down --batch <n>` | *Roll back batch n…* in the console |
+| Compare local, staging and prod | `mmk status` once per database | One table in the console |
+| See who holds the lock | `mmk lock` | A line in the console and the sidebar |
+| Notice an edit to a migration that already ran | `mmk status`, after you save | A warning while you type |
+
+[Install it and see what it does →](/guide/vscode)
+
 ## Learn it in four steps
 
 <p class="lead">Start at the top. Each step takes you a bit further, and you can stop whenever you have what you need.</p>

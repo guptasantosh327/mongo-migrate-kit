@@ -169,6 +169,20 @@
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 
+/* Recordings of the VS Code extension (docs/public/vscode/*.gif, copied from the mmk-vscode repo,
+   which records them with scripts/media/record.mjs). They fill the column and shrink on phones. */
+.mmk-screen img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+.dark .mmk-screen img {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
 .mmk-figure figcaption {
   margin-top: 0.6rem;
   font-size: 0.85rem;
@@ -331,7 +345,7 @@ ol.path,
     width: 620px;
   }
 
-  .mmk-figure figcaption::before {
+  .mmk-figure:not(.mmk-screen) figcaption::before {
     content: 'Scroll sideways to see all of it. ';
   }
 }

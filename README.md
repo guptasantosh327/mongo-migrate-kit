@@ -16,11 +16,12 @@ _Run a single file, roll back anything, and preview every change before it touch
 
 Single-file runs · rollback by batch, step or file · dry-run previews · transactions ·
 lifecycle hooks · SHA-256 tamper detection · MongoDB-native locking · a history that's never
-deleted. All in one small `mmk` CLI with a fully typed API.
+deleted. All in one small `mmk` CLI with a fully typed API, plus a GUI for VS Code.
 
 **[📖 Documentation](https://mongo-migrate-kit.vercel.app/guide/)** ·
 **[Quick start](https://mongo-migrate-kit.vercel.app/guide/getting-started)** ·
-**[Why another migration tool?](https://mongo-migrate-kit.vercel.app/guide/why)**
+**[Why another migration tool?](https://mongo-migrate-kit.vercel.app/guide/why)** ·
+**[VS Code extension](https://mongo-migrate-kit.vercel.app/guide/vscode)**
 
 <br>
 
@@ -44,6 +45,8 @@ Built for teams who outgrew the basics. You keep `up`, `down`, `create` and `sta
 - **Run a single migration** — `mmk up <file>`, not just "all pending".
 - **Roll back anything** — a batch (`--batch 3`), the last N (`--steps 2`), one file, or `redo`.
 - **Preview before you run** — `mmk dry-run up` prints the exact plan without touching the database.
+- **A GUI in VS Code** — a migration console to plan, apply and roll back, with local, staging and
+  prod side by side ([see it](#also-in-vs-code)).
 - **No race conditions** — an atomic MongoDB lock stops two deploys running migrations at once.
 - **Tamper detection** — SHA-256 checksums catch a migration edited after it was applied.
 - **Audit trail kept** — a rollback updates the record, it never deletes it.
@@ -120,6 +123,26 @@ ES modules or CommonJS: the generated files match your `package.json` (`export` 
 **Next:** the [tutorial](https://mongo-migrate-kit.vercel.app/guide/tutorial) walks through a
 realistic example in about 15 minutes.
 
+## Also in VS Code
+
+<img src="https://mongo-migrate-kit.vercel.app/vscode/console.gif" alt="The Mongo Migrate Kit console in VS Code: every migration on local, staging and prod; a plan of three pending migrations, applying them with mmk's output as it comes, the result, rolling the batch back, then prod (read-only) while a CI deploy holds its lock, and the form that edits an environment" width="860" />
+
+[Mongo Migrate Kit for VS Code](https://marketplace.visualstudio.com/items?itemName=guptasantosh327.mongo-migrate-kit)
+gives you a migration console, a sidebar and run links in your files. It runs your project's own
+`mmk`, so the editor and the terminal always agree.
+
+| You want to | In a terminal | In VS Code |
+| --- | --- | --- |
+| See what would run, then run it | `mmk dry-run up`, then `mmk up` | *Plan*, then *Apply*, with mmk's output as it comes |
+| Run or roll back one file | `mmk up <file>`, `mmk down <file>` | The links above `up()` and `down()` |
+| Roll back a batch | `mmk down --batch <n>` | *Roll back batch n…* in the console |
+| Compare local, staging and prod | `mmk status` once per database | One table in the console |
+| See who holds the lock | `mmk lock` | A line in the console and the sidebar |
+| Notice an edit to a migration that already ran | `mmk status`, after you save | A warning while you type |
+
+Also on [Open VSX](https://open-vsx.org/extension/guptasantosh327/mongo-migrate-kit) for Cursor,
+Windsurf and VSCodium. [What it does →](https://mongo-migrate-kit.vercel.app/guide/vscode)
+
 ## Learn it step by step
 
 The docs are laid out as a path. Each step builds on the one before, and you can stop when you have
@@ -140,6 +163,7 @@ Looking something up instead? [CLI cheatsheet](https://mongo-migrate-kit.vercel.
 
 | Capability                                      | `migrate-mongo` | `mongo-migrate-kit` |
 | ----------------------------------------------- | :-------------: | :-----------------: |
+| GUI ([VS Code extension](#also-in-vs-code))     |        ❌        |          ✅          |
 | Run a single migration file                     |        ❌        |          ✅          |
 | Roll back a specific batch (not just the last)  |        ❌        |          ✅          |
 | Roll back a single migration file               |        ❌        |          ✅          |
@@ -151,8 +175,9 @@ Looking something up instead? [CLI cheatsheet](https://mongo-migrate-kit.vercel.
 | History kept on rollback (never deleted)        |        ❌        |          ✅          |
 | Adopt an existing `migrate-mongo` changelog     |        —        |          ✅          |
 
-<sub>Reflects `migrate-mongo`'s documented CLI as of mid-2026. It also gives migrations transaction access
-via a `client` argument; `mmk` exposes the same plus a declarative per-file `useTransaction` flag.</sub>
+<sub>Reflects `migrate-mongo`'s documented CLI as of mid-2026, and the VS Code Marketplace and Open VSX
+for the GUI row as of October 2026. It also gives migrations transaction access via a `client`
+argument; `mmk` exposes the same plus a declarative per-file `useTransaction` flag.</sub>
 
 ## Coming from migrate-mongo?
 
