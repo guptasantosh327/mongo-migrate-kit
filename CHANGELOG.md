@@ -52,9 +52,10 @@ All notable changes to this project will be documented in this file.
 
 ### Documentation
 
-- **A page for the VS Code extension** (`/guide/vscode`): installing the extension, environments
-  and read-only database users, editing applied migrations, and which mongo-migrate-kit version
-  each feature needs.
+- **A page for the VS Code extension, Mongo Migrate Kit** (`/guide/vscode`), with recordings:
+  installing it, the local workflow, staging and prod with read-only database users and the
+  migration console, editing applied migrations, and which mongo-migrate-kit version each feature
+  needs. The README and the docs home page show it in a short section.
 
 ## v1.5.0
 

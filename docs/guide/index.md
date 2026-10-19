@@ -37,7 +37,8 @@ fine too. The pages below are written so you can read them in order.
     <a class="step-link" href="/guide/concepts">How it works →</a><br>
     <a class="step-link" href="/guide/writing-migrations">Writing migrations →</a><br>
     <a class="step-link" href="/guide/typescript">TypeScript →</a><br>
-    <a class="step-link" href="/guide/workflow">A normal day with mmk →</a>
+    <a class="step-link" href="/guide/workflow">A normal day with mmk →</a><br>
+    <a class="step-link" href="/guide/vscode">In VS Code →</a>
   </li>
   <li>
     <span class="step-title">Use it in production</span>

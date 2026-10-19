@@ -25,6 +25,7 @@ Key facts:
 - [Writing migrations](https://mongo-migrate-kit.vercel.app/guide/writing-migrations): The file format, ES modules or CommonJS, the migration context and good habits
 - [TypeScript](https://mongo-migrate-kit.vercel.app/guide/typescript): Which Node runs .ts files, the syntax that works, the exported types, a tsconfig for migrations, and production setups
 - [A normal day with mmk](https://mongo-migrate-kit.vercel.app/guide/workflow): The everyday workflow from writing a migration to rolling back a bad release
+- [In VS Code](https://mongo-migrate-kit.vercel.app/guide/vscode): Mongo Migrate Kit for VS Code, a GUI that runs the project's own mmk: a migration console (plan, apply, roll back a batch, every environment side by side, who holds the lock), a sidebar, run links above up() and down(), and a warning when you edit a migration that already ran
 - [Configuration](https://mongo-migrate-kit.vercel.app/guide/configuration): Config files, environment variables, flags, secret managers and config errors
 - [Deploying and CI](https://mongo-migrate-kit.vercel.app/guide/ci-cd): GitHub Actions, testing migrations on pull requests, Docker, Kubernetes and JSON output
 - [Running from your code](https://mongo-migrate-kit.vercel.app/guide/api): runMigrations(), pendingMigrations() and the MigratorKit class

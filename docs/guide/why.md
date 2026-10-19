@@ -12,6 +12,8 @@ mean, and the tool should stop you before it does something you didn't expect.
 - **Run a single migration** — `mmk up <file>`, not just "all pending".
 - **Roll back anything** — a batch (`--batch 3`), the last N (`--steps 2`), one file, or `redo`.
 - **Preview before you run** — `mmk dry-run up` prints the exact plan without touching the database.
+- **A GUI in VS Code** — a migration console to plan, apply and roll back, with local, staging and
+  prod side by side ([see it](/guide/vscode)).
 - **No race conditions** — an atomic MongoDB lock stops two deploys running migrations at once.
 - **Tamper detection** — SHA-256 checksums catch a migration edited after it was applied.
 - **Audit trail kept** — a rollback updates the record, it never deletes it.
@@ -27,6 +29,7 @@ the features where they differ.
 
 | Capability                                      | `migrate-mongo` | `mongo-migrate-kit` |
 | ----------------------------------------------- | :-------------: | :-----------------: |
+| GUI ([VS Code extension](/guide/vscode))        |        ❌        |          ✅          |
 | Run a single migration file                     |        ❌        |          ✅          |
 | Roll back a specific batch (not just the last)  |        ❌        |          ✅          |
 | Roll back a single migration file               |        ❌        |          ✅          |
@@ -38,7 +41,7 @@ the features where they differ.
 | History kept on rollback (never deleted)        |        ❌        |          ✅          |
 | Adopt an existing `migrate-mongo` changelog     |        —        |          ✅          |
 
-<p style="font-size:.85rem;color:var(--vp-c-text-2)">Reflects <code>migrate-mongo</code>'s documented CLI as of mid-2026. It also gives migrations transaction access through a <code>client</code> argument; <code>mmk</code> exposes the same plus a declarative per-file <code>useTransaction</code> flag.</p>
+<p style="font-size:.85rem;color:var(--vp-c-text-2)">Reflects <code>migrate-mongo</code>'s documented CLI as of mid-2026, and the VS Code Marketplace and Open VSX for the GUI row as of October 2026. It also gives migrations transaction access through a <code>client</code> argument; <code>mmk</code> exposes the same plus a declarative per-file <code>useTransaction</code> flag.</p>
 
 If you already use migrate-mongo, you don't have to start over. `mmk import` copies your existing
 history, so nothing runs twice. See [Moving from migrate-mongo](/guide/migrate-mongo).

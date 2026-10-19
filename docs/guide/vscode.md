@@ -1,82 +1,101 @@
 ---
-title: mmk for VS Code
-description: Create, run and roll back mongo-migrate-kit migrations from VS Code, compare your branch with staging and prod, and get a warning while you edit a migration that already ran.
+title: VS Code extension
+description: Mongo Migrate Kit for VS Code runs your project's own mmk from the editor. Create, run and roll back migrations, compare local, staging and prod side by side, and get a warning when you edit a migration that already ran.
 ---
 
-# mmk for VS Code
+# Mongo Migrate Kit for VS Code
 
-**mmk for VS Code** puts your migrations in the editor: a sidebar of what's pending and applied,
-run links above `up()` and `down()`, a comparison of your branch with staging and prod, and a
-warning while you edit a migration that already ran.
+Mongo Migrate Kit for VS Code is a GUI for the `mmk` command. It has a migration console for all
+your databases, a sidebar, run links above `up()` and `down()`, and a warning when you edit a
+migration that already ran.
 
-It's a window onto the `mmk` command, not a second implementation. It runs **your project's own**
-mongo-migrate-kit from `node_modules`, with your config file, your `.env` and your Node.js, and
-shows what `mmk ... --json` returns. Whatever it shows, `npx mmk` says the same in a terminal.
+It has no migration logic of its own. It runs **your project's own** mongo-migrate-kit from
+`node_modules`, with your config file, your `.env` and your Node.js, and shows what
+`mmk ... --json` returns. So the editor and `npx mmk` in a terminal always agree, and anything you
+do here you can also do from the command line.
+
+<figure class="mmk-figure mmk-screen">
+  <img src="/vscode/console.gif" alt="The Mongo Migrate Kit console in VS Code: every migration on local, staging and prod; a plan of three pending migrations, applying them with mmk's output as it comes, the result, rolling the batch back, then prod (read-only) while a CI deploy holds its lock, and the form that edits an environment" width="1280" height="800" loading="lazy" />
+  <figcaption>The migration console: plan, apply and roll back on local, then prod (read-only) while a deploy holds its lock.</figcaption>
+</figure>
 
 ## Install
 
-Search for **mmk** in the Extensions view, or install it from the
-[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=guptasantosh327.mmk-vscode).
+Search for **Mongo Migrate Kit** in the Extensions view, or install it from the
+[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=guptasantosh327.mongo-migrate-kit).
 Cursor, Windsurf and VSCodium install it from
-[Open VSX](https://open-vsx.org/extension/guptasantosh327/mmk-vscode).
+[Open VSX](https://open-vsx.org/extension/guptasantosh327/mongo-migrate-kit).
 
-It starts in any folder with an `mmk.config.js`, `.ts` or `.json`, or a `package.json` that depends
-on `mongo-migrate-kit`. Monorepos and multi-root workspaces work: each project gets its own entry.
-mongo-migrate-kit has to be installed in the project:
+You also need:
 
-```bash
-npm install mongo-migrate-kit mongodb
-```
+- mongo-migrate-kit 1.5.0 or later in the project: `npm install mongo-migrate-kit mongodb`
+- Node.js on your `PATH` (or set `mmk.nodePath`)
+- A trusted workspace, because running mmk runs your project's config and migrations
 
-The extension only runs in trusted folders, because running mmk runs your project's config and
-migrations.
+It starts in any folder with an `mmk.config.js`, `.ts` or `.json`, or a `package.json` that
+depends on `mongo-migrate-kit`. Monorepos, multi-root workspaces, Remote SSH, WSL and Dev
+Containers all work.
 
-## Working on your local database
+::: tip Installed "mmk for VS Code" before?
+That was this extension's first name (`guptasantosh327.mmk-vscode`), and it no longer gets
+updates. Uninstall it and install Mongo Migrate Kit. Your `mmk.*` settings carry over, but add your
+environments' connection strings again: the keychain keeps them per extension.
+:::
 
-`local` is your project's own setup: the connection your config file and `.env` give mmk, exactly as
-in a terminal. On local you can:
+## The migration console
 
-- **Create a migration** with the `+` in the sidebar. It shows the file name mmk will create, and
-  lets you pick JavaScript or TypeScript.
-- **Run it** from the links above `up()` and `down()`: *Run up*, *Dry run*, *Redo*, *Run down*.
-  Rolling back and redoing ask first.
-- **See where you are** in the sidebar (pending, applied by batch, edited after it ran) and in the
-  status bar.
-- **Copy the CLI command** for any of these, to run it in a terminal instead.
+Open it with **mmk: Open migration console**, or the table icon in the mmk view. It shows every
+migration against every environment in one editor tab.
 
-Nothing runs on its own: every run is a click.
+- **Plan**, then **Apply**: *Plan* shows what `up` would run, in order (mmk's dry run). *Apply* runs
+  it and shows mmk's output as it comes. The result lists each migration, where the environment
+  stands now, and the next step: open the file that failed, or roll the batch back.
+- **Roll back a batch**: the confirmation names every migration in it.
+- Filters for *Pending*, *Needs attention* and *Only differences*, with notes like "On staging, not
+  prod". You can also compare with the files on `origin/main` instead of your branch.
+- When another run holds an environment's migration lock, a line under the tabs says who (what
+  [`mmk lock`](/commands/lock) shows), and runs wait until it lets go.
+- The `+` next to the tabs adds an environment, and *Edit…* changes or removes one.
 
-## Environments: staging and prod
+## On your local database
 
-Add the databases you deploy to with **mmk: Add environment…**. It asks for a name, the connection
-string (typed into a masked box) and the database, tests the connection with `mmk status`, and
-makes the environment **read-only** unless you say otherwise.
+<figure class="mmk-figure mmk-screen">
+  <img src="/vscode/local-workflow.gif" alt="VS Code with the Mongo Migrate Kit sidebar: creating a migration from the + button, running it on local from the link above up(), and seeing it applied in batch 3" width="1280" height="800" loading="lazy" />
+  <figcaption>Creating a migration, running it on local, and seeing it applied.</figcaption>
+</figure>
 
-- The connection string is kept in your operating system's keychain. It reaches mmk as the `MMK_URI`
-  and `MMK_DB` environment variables, which take priority over your config file and `.env`. It is
-  never written to settings, logs or the command line.
-- Your settings only hold the names, the read-only flags and the colors:
+`local` is the connection your config file and `.env` give mmk, exactly as in a terminal.
 
-  ```json
-  "mmk.environments": [
-    { "name": "staging" },
-    { "name": "prod" }
-  ]
-  ```
+- The sidebar lists what's pending, what was edited after it ran, and what's applied, grouped by
+  batch. *Apply all* and *Dry run* sit next to the pending list.
+- The `+` creates a migration. It shows the file name mmk will create and lets you pick JavaScript
+  or TypeScript.
+- Links above `up()` and `down()` run that one file: *Run up*, *Dry run*, *Redo*, *Run down*. Once
+  it has run, they show its batch and how long it took.
+- The status bar says where you are (`mmk: local · 3 pending`). Pending files get a `●` badge in
+  the Explorer, edited ones a `!`.
 
-- On a read-only environment the extension only runs `status`, `list` and `dry-run`. That's
-  enforced where commands run, not only hidden in the UI: deploys stay with your pipeline.
-- The status bar turns amber on staging and red on anything named like prod.
+Nothing runs on its own. Every run is a click, and rolling back or redoing asks first. *Copy CLI
+command* gives you the same command to paste into a terminal.
 
-**Compare all environments** shows every migration against every environment: applied (and when),
-pending, edited after it ran, or applied but missing from your branch, with notes like
-"On staging, not prod". It can compare the files on `origin/main` instead of your branch, which it
-copies from git without touching your checkout.
+## Staging and prod
+
+Add the databases you deploy to with **mmk: Add environment…** (or the `+` in the console). One
+form asks for a name, the database, the connection string (in a masked box) and a colour, and tests
+the connection with `mmk status` before adding it.
+
+- The connection string is kept in your operating system's keychain. It reaches mmk as `MMK_URI`
+  and `MMK_DB`, and is never written to settings, logs or the command line.
+- New environments are **read-only** unless you say otherwise. There the extension only runs
+  `status`, `list` and `dry-run`, and refuses write commands in code, not only in the UI. Deploys
+  stay with your pipeline.
+- Each environment has its own colour in the sidebar, the console and the status bar. Local is
+  green and prod is red.
 
 ### A read-only database user
 
-For staging and prod, give the extension a user that can only read. From mongo-migrate-kit 1.6.0,
-`status`, `list` and `dry-run` write nothing when they connect, so the `read` role is enough:
+From mongo-migrate-kit 1.6.0, `status`, `list` and `dry-run` write nothing when they connect, so a
+user with only the `read` role is enough for staging and prod:
 
 ```js
 // In the mongo shell, as an admin
@@ -84,29 +103,33 @@ use orders_prod
 db.createUser({ user: 'mmk-reader', pwd: passwordPrompt(), roles: [{ role: 'read', db: 'orders_prod' }] })
 ```
 
-With 1.5, every command creates the changelog index when it connects, so a read-only user gets
-`CONNECTION_FAILED` with `not authorized` in the reason.
+With 1.5, every command creates the changelog index when it connects, so the user needs permission
+to write (for example `readWrite`).
 
 ## Editing a migration that already ran
 
-Changing a migration after it ran is the classic way to end up with databases that disagree. As
-soon as you type in such a file, before you save, the extension warns on the changed lines and says
-where it ran and what saving would do: `mmk down` will refuse to roll it back, `mmk status` will
-mark it as changed, and nothing runs it again.
+<figure class="mmk-figure mmk-screen">
+  <img src="/vscode/applied-edit.gif" alt="Typing in a migration that already ran on local, staging and prod: a warning on the changed line and in Problems, then the version that ran opened next to the edited file" width="1280" height="800" loading="lazy" />
+  <figcaption>Editing a migration that already ran, then opening the version that ran.</figcaption>
+</figure>
 
-**Show applied version** finds the commit whose version of the file has the checksum mmk recorded
-when it ran, and opens it next to your file. **Restore applied version** puts it back. Then write
-the change as a new migration.
+Changing a migration after it ran leaves databases that disagree: they keep what the old `up()`
+did, and a rollback would run the new `down()`. The extension warns on the changed lines while you
+type, before you save, and says where the migration ran.
 
-This needs mongo-migrate-kit 1.6.0 or later, whose `mmk status` reports the recorded checksum.
+**Show applied version** finds the commit whose copy of the file matches the checksum mmk recorded,
+and opens it next to yours. **Restore applied version** puts it back. Then write the change as a
+new migration.
+
+This needs mongo-migrate-kit 1.6.0 or later.
 
 ## Which mongo-migrate-kit version
 
 | mongo-migrate-kit | What works |
 | --- | --- |
-| older than 1.5.0 | Nothing: the extension asks you to update. |
-| 1.5.x | Local workflow, environments and the comparison (with a database user that can write). |
-| 1.6.0 or later | Everything: also read-only database users and warnings while editing applied migrations. |
+| older than 1.5.0 | Nothing. The extension asks you to update. |
+| 1.5.x | The local workflow, environments and the console. The database user needs permission to write. |
+| 1.6.0 or later | Everything, including read-only database users, the warning on edited migrations, and who holds the lock. |
 
 Update with `npm install --save-dev mongo-migrate-kit@latest`.
 
@@ -114,10 +137,10 @@ Update with `npm install --save-dev mongo-migrate-kit@latest`.
 
 | Setting | What it does |
 | --- | --- |
-| `mmk.environments` | Names, read-only flags and colors of your environments. Connection strings stay in the keychain. |
+| `mmk.environments` | Your environments besides `local`: names, read-only flags and colours. Connection strings stay in the keychain. |
 | `mmk.nodePath` | The Node.js that runs mmk. Empty means `node` from `PATH`, like your terminal. |
 
 ## Privacy
 
-The extension sends no telemetry. It reaches your databases only through your own mmk, and sends
-nothing anywhere else.
+No telemetry. The extension reaches your databases only through your own mmk, and sends nothing
+anywhere else. The source is on [GitHub](https://github.com/guptasantosh327/mmk-vscode).
